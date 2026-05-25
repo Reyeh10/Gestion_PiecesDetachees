@@ -230,6 +230,28 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
+    | EXPORT EXCEL
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/products/export/excel',
+        [ProductController::class, 'exportExcel']
+    )->name('products.export.excel');
+
+    /*
+    |--------------------------------------------------------------------------
+    | EXPORT PDF
+    |--------------------------------------------------------------------------
+    */
+
+   /* Route::get(
+        '/products/export/pdf',
+        [ProductController::class, 'exportPdf']
+    )->name('products.export.pdf');*/
+
+    /*
+    |--------------------------------------------------------------------------
     | CRUD
     |--------------------------------------------------------------------------
     */
@@ -613,6 +635,41 @@ Route::delete(
 |--------------------------------------------------------------------------
 */
 
+/*Route::middleware([
+    'auth',
+    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+])->group(function () {
+
+
+
+    Route::get(
+        '/transfers',
+        [DepotTransferController::class, 'index']
+    )->name('transfers.index');
+
+
+
+    Route::get(
+        '/depot-transfers',
+        [DepotTransferController::class, 'index']
+    )->name('depot-transfers.index');
+
+
+
+    Route::get(
+        '/depot-transfers/{transfer}',
+        [DepotTransferController::class, 'show']
+    )->name('depot-transfers.show');
+
+});*/
+
+
+/*
+|--------------------------------------------------------------------------
+| TOUS PEUVENT VOIR
+|--------------------------------------------------------------------------
+*/
+
 Route::middleware([
     'auth',
     'role:admin,chef_magasinier,magasinier,vendeur,caissier'
@@ -640,19 +697,7 @@ Route::middleware([
         [DepotTransferController::class, 'index']
     )->name('depot-transfers.index');
 
-    /*
-    |--------------------------------------------------------------------------
-    | SHOW
-    |--------------------------------------------------------------------------
-    */
-
-    Route::get(
-        '/depot-transfers/{transfer}',
-        [DepotTransferController::class, 'show']
-    )->name('depot-transfers.show');
-
 });
-
 
 /*
 |--------------------------------------------------------------------------
@@ -710,6 +755,24 @@ Route::middleware([
         [DepotTransferController::class, 'store']
     )->name('depot-transfers.store');
 
+
+});
+
+    /*
+|--------------------------------------------------------------------------
+| SHOW
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware([
+    'auth',
+    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+])->group(function () {
+
+    Route::get(
+        '/depot-transfers/{transfer}',
+        [DepotTransferController::class, 'show']
+    )->name('depot-transfers.show');
 
 });
 /*
@@ -927,10 +990,16 @@ Route::get(
 |--------------------------------------------------------------------------
 */
 
-Route::post(
-    '/sales/{sale}/payment',
-    [SaleController::class, 'addPayment']
-)->name('sales.payment');
+    Route::post(
+        '/sales/{sale}/payment',
+        [SaleController::class, 'addPayment']
+    )->name('sales.payment');
+
+    Route::put(
+        '/sales/{sale}/cancel',
+        [SaleController::class, 'cancel']
+    )->name('sales.cancel');
+
     Route::delete(
         '/sales/{sale}',
         [SaleController::class, 'destroy']

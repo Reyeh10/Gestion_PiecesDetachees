@@ -792,6 +792,99 @@ use Illuminate\Support\Facades\DB;
         }
 
         /*
+    |--------------------------------------------------------------------------
+    | CANCEL SALE
+    |--------------------------------------------------------------------------
+    */
+
+    public function cancel(Sale $sale)
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | DEJA ANNULEE
+        |--------------------------------------------------------------------------
+        */
+
+        if ($sale->status === 'cancelled') {
+
+            return back()->with(
+                'error',
+                'Cette facture est déjà annulée.'
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | RETOUR STOCK
+        |--------------------------------------------------------------------------
+        */
+
+        foreach ($sale->items as $item) {
+
+            $product = $item->product;
+
+            if ($product) {
+
+                /*
+                |--------------------------------------------------------------------------
+                | RETOUR QUANTITE
+                |--------------------------------------------------------------------------
+                */
+
+                $product->quantity += $item->quantity;
+
+                /*
+                |--------------------------------------------------------------------------
+                | STATUS DISPONIBLE
+                |--------------------------------------------------------------------------
+                */
+
+                $product->status = 'disponible';
+
+                $product->save();
+
+                /*
+                |--------------------------------------------------------------------------
+                | MOUVEMENT STOCK
+                |--------------------------------------------------------------------------
+                */
+
+                StockMovement::create([
+
+                    'product_id' => $product->id,
+
+                    'type' => 'in',
+
+                    'quantity' => $item->quantity,
+
+                    'source' => 'Annulation facture',
+
+                    'reference' => $sale->invoice_number,
+
+                    'user_id' => auth()->id(),
+                ]);
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | STATUS FACTURE
+        |--------------------------------------------------------------------------
+        */
+
+        $sale->status = 'cancelled';
+
+        $sale->save();
+
+        return redirect()
+            ->route('sales.show', $sale)
+            ->with(
+                'success',
+                'Facture annulée avec succès.'
+            );
+    }
+
+        /*
         |--------------------------------------------------------------------------
         | ADD PAYMENT
         |--------------------------------------------------------------------------
@@ -801,6 +894,14 @@ use Illuminate\Support\Facades\DB;
             Request $request,
             Sale $sale
         ) {
+            if ($sale->status === 'cancelled') {
+
+                return back()->with(
+                    'error',
+                    'Impossible de payer une facture annulée.'
+                );
+            }
+            
             $request->validate([
 
                 'amount' =>

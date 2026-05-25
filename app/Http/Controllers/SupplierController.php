@@ -21,6 +21,7 @@ class SupplierController extends Controller
     public function store(Request $request)
     {
         $request->validate([
+            'code' => 'required|string|max:50|unique:suppliers,code',
             'name' => 'required|string|max:255',
             'phone' => 'nullable|string|max:50',
             'email' => 'nullable|email|max:255',
@@ -29,6 +30,7 @@ class SupplierController extends Controller
         ]);
 
         Supplier::create([
+            'code' => $request->code,
             'name' => $request->name,
             'phone' => $request->phone,
             'email' => $request->email,
@@ -65,6 +67,7 @@ class SupplierController extends Controller
     public function update(Request $request, Supplier $supplier)
     {
         $request->validate([
+            'code' => 'required|string|max:50|unique:suppliers,code,' . $supplier->id,
             'name' => 'required|string|max:255',
             'phone' => 'nullable|string|max:50',
             'email' => 'nullable|email|max:255',
@@ -73,6 +76,7 @@ class SupplierController extends Controller
         ]);
 
         $supplier->update([
+            'code' => $request->code,
             'name' => $request->name,
             'phone' => $request->phone,
             'email' => $request->email,

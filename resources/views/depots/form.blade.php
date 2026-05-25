@@ -22,6 +22,27 @@
 
 <div class="row">
 
+     {{-- CODE --}}
+    <div class="col-md-6 mb-4">
+
+        <label class="form-label fw-semibold">
+
+            Code
+
+        </label>
+
+        <input type="text"
+               name="code"
+               class="form-control form-control-lg"
+               placeholder="Ex: DP001"
+
+               value="{{ old(
+                    'code',
+                    isset($depot) ? $depot->code : ''
+               ) }}">
+
+    </div>
+
     {{-- NOM --}}
     <div class="col-md-6 mb-4">
 
@@ -45,26 +66,7 @@
 
     </div>
 
-    {{-- CODE --}}
-    <div class="col-md-6 mb-4">
 
-        <label class="form-label fw-semibold">
-
-            Code
-
-        </label>
-
-        <input type="text"
-               name="code"
-               class="form-control form-control-lg"
-               placeholder="Ex: DP001"
-
-               value="{{ old(
-                    'code',
-                    isset($depot) ? $depot->code : ''
-               ) }}">
-
-    </div>
 
     {{-- ADRESSE --}}
     <div class="col-md-12 mb-4">

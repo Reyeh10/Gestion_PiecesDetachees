@@ -480,11 +480,51 @@
                                             {{ $sale->created_at->format('d/m/Y') }}
                                         </div>
 
-                                        <div>
+                                        <!--div>
                                             <strong>
                                                 Status :
                                             </strong>
-                                            {{ ucfirst($sale->status) }}
+                                            { { ucfirst($sale->status) }}
+                                        </div-->
+
+                                        <div>
+
+                                            <strong>
+                                                Status :
+                                            </strong>
+
+                                            @if($sale->status == 'paid')
+
+                                                <span class="badge bg-success">
+                                                    PAYÉ
+                                                </span>
+
+                                            @elseif($sale->status == 'partial')
+
+                                                <span class="badge bg-warning">
+                                                    PARTIEL
+                                                </span>
+
+                                            @elseif($sale->status == 'vendu')
+
+                                                <span class="badge bg-primary">
+                                                    VENDU
+                                                </span>
+
+                                            @elseif($sale->status == 'cancelled')
+
+                                                <span class="badge bg-danger">
+                                                    ANNULÉE
+                                                </span>
+
+                                            @else
+
+                                                <span class="badge bg-secondary">
+                                                    {{ ucfirst($sale->status) }}
+                                                </span>
+
+                                            @endif
+
                                         </div>
 
                                         <div>
@@ -505,6 +545,18 @@
 
                 </table>
 
+                @if($sale->status == 'cancelled')
+                    <div class="alert alert-danger mb-4">
+                        <strong>
+                            Cette facture a été annulée.
+                        </strong>
+
+                        <br>
+
+                        Tous les produits ont été retournés au stock.
+
+                    </div>
+                @endif
                 {{-- TABLE PRODUITS --}}
                 <div class="table-responsive">
 
@@ -782,7 +834,7 @@
                 </div>
 
                 {{-- FORMULAIRE --}}
-                @if($remaining > 0)
+              @if($remaining > 0 && $sale->status !== 'cancelled')
 
                 <form action="{{ route('sales.payment', $sale) }}"
                     method="POST"
@@ -839,6 +891,28 @@
 
                 {{-- ACTIONS --}}
                 <div class="text-end mt-5 print-hide">
+
+                    @if($sale->status !== 'cancelled')
+
+                        <form action="{{ route('sales.cancel', $sale) }}"
+                            method="POST"
+                            class="d-inline">
+
+                            @csrf
+
+                            @method('PUT')
+
+                            <button type="submit"
+                                    class="btn btn-warning btn-lg"
+                                    onclick="return confirm('Annuler cette facture ?')">
+
+                                ❌ Annuler la facture
+
+                            </button>
+
+                        </form>
+
+                    @endif
 
                     <a href="{{ route('sales.invoice', $sale) }}"
                     class="btn btn-danger btn-lg">

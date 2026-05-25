@@ -45,6 +45,10 @@
                     <tr>
 
                         <th>
+                            Code
+                        </th>
+
+                        <th>
                             Nom
                         </th>
 
@@ -69,7 +73,10 @@
                     @forelse($customers as $customer)
 
                         <tr>
-
+                            <td>
+                                {{ $customer->code }}
+                            </td>
+                            
                             {{-- NOM --}}
                             <td>
                                 {{ $customer->name }}

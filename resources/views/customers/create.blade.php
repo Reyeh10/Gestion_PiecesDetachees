@@ -26,6 +26,18 @@
             <div class="row">
 
                 <div class="col-md-6 mb-3">
+
+                    <label>Code client *</label>
+
+                    <input type="text"
+                        name="code"
+                        class="form-control"
+                        value="{{ old('code') }}"
+                        placeholder="Ex: CLI001"
+                        required>
+
+                </div>
+                <div class="col-md-6 mb-3">
                     <label>Nom *</label>
 
                     <input type="text"

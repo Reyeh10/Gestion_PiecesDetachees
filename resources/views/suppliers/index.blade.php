@@ -21,7 +21,7 @@
 
             </a>
         @endif
-        
+
     </div>
 
     <div class="card-body">
@@ -41,6 +41,7 @@
                 <thead>
 
                     <tr>
+                        <th>Code</th>
                         <th>Nom</th>
                         <th>Téléphone</th>
                         <th>Email</th>
@@ -56,7 +57,9 @@
                     @forelse($suppliers as $supplier)
 
                         <tr>
-
+                            <td>
+                                {{ $supplier->code }}
+                            </td>
                             <td>
                                 {{ $supplier->name }}
                             </td>
@@ -130,7 +133,7 @@
 
                         <tr>
 
-                            <td colspan="6" class="text-center">
+                           <td colspan="7" class="text-center">
 
                                 Aucun fournisseur trouvé
 

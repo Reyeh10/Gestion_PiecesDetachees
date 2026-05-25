@@ -24,8 +24,15 @@ class DashboardController extends Controller
             Product::sum('quantity');
 
         // TOTAL PIECES VENDUES
-        $soldProducts =
-            SaleItem::sum('quantity');
+       $soldProducts =
+        SaleItem::whereHas('sale', function ($q) {
+
+            $q->whereNotIn(
+                'status',
+                ['cancelled']
+            );
+
+        })->sum('quantity');
 
         // TOTAL GENERAL
         $totalProducts =
@@ -96,12 +103,19 @@ class DashboardController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        $totalSoldAmount =
-            SaleItem::sum(
-                DB::raw(
-                    'quantity * price'
-                )
+      $totalSoldAmount =
+        SaleItem::whereHas('sale', function ($q) {
+
+            $q->whereNotIn(
+                'status',
+                ['cancelled']
             );
+
+        })->sum(
+            DB::raw(
+                'quantity * price'
+            )
+        );
 
         /*
         |--------------------------------------------------------------------------
@@ -146,8 +160,12 @@ class DashboardController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        $salesThisMonth =
-            Sale::whereMonth(
+      $salesThisMonth =
+            Sale::whereNotIn(
+                    'status',
+                    ['cancelled']
+                )
+                ->whereMonth(
                     'created_at',
                     now()->month
                 )
@@ -159,8 +177,12 @@ class DashboardController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        $salesCountThisMonth =
-            Sale::whereMonth(
+       $salesCountThisMonth =
+            Sale::whereNotIn(
+                    'status',
+                    ['cancelled']
+                )
+                ->whereMonth(
                     'created_at',
                     now()->month
                 )
@@ -172,19 +194,32 @@ class DashboardController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        $topProducts =
-            SaleItem::select(
-                    'product_id',
-                    DB::raw(
-                        'SUM(quantity) as total_qty'
-                    )
-                )
-                ->with('product')
-                ->groupBy('product_id')
-                ->orderByDesc('total_qty')
-                ->take(5)
-                ->get();
+     $topProducts =
+    SaleItem::whereHas('sale', function ($q) {
 
+            $q->whereNotIn(
+                'status',
+                ['cancelled']
+            );
+
+        })
+
+        ->select(
+            'product_id',
+            DB::raw(
+                'SUM(quantity) as total_qty'
+            )
+        )
+
+        ->with('product')
+
+        ->groupBy('product_id')
+
+        ->orderByDesc('total_qty')
+
+        ->take(5)
+
+        ->get();
         /*
         |--------------------------------------------------------------------------
         | DERNIERS MOUVEMENTS
@@ -203,11 +238,19 @@ class DashboardController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        $latestSales =
-            Sale::with('customer')
-                ->latest()
-                ->take(5)
-                ->get();
+      $latestSales =
+        Sale::with('customer')
+
+            ->whereNotIn(
+                'status',
+                ['cancelled']
+            )
+
+            ->latest()
+
+            ->take(5)
+
+            ->get();
 
         /*
         |--------------------------------------------------------------------------
@@ -249,22 +292,34 @@ class DashboardController extends Controller
         for ($i = 1; $i <= 12; $i++) {
 
             // MONTANT VENTES
-            $monthlySales[] =
+          $monthlySales[] =
 
-                Sale::whereMonth(
-                        'created_at',
-                        $i
-                    )
-                    ->sum('total');
+            Sale::whereNotIn(
+                    'status',
+                    ['cancelled']
+                )
+
+                ->whereMonth(
+                    'created_at',
+                    $i
+                )
+
+                ->sum('total');
 
             // QUANTITES VENDUES
-            $monthlySold[] =
+           $monthlySold[] =
 
-                SaleItem::whereMonth(
-                        'created_at',
-                        $i
-                    )
-                    ->sum('quantity');
+            SaleItem::whereHas('sale', function ($q) {
+                    $q->whereNotIn(
+                        'status',
+                        ['cancelled']
+                    );
+                })
+                ->whereMonth(
+                    'created_at',
+                    $i
+                )
+                ->sum('quantity');
         }
 
 

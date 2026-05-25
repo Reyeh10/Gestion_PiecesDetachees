@@ -19,6 +19,22 @@
 
 <div class="row">
 
+    {{-- CODE --}}
+    <div class="col-md-6 mb-3">
+
+        <label class="form-label">
+            Code fournisseur
+        </label>
+
+        <input type="text"
+            name="code"
+            class="form-control"
+            placeholder="Ex: FR001"
+            value="{{ old('code', $supplier->code ?? '') }}"
+            required>
+
+    </div>
+
     {{-- NOM --}}
     <div class="col-md-6 mb-3">
 
@@ -31,7 +47,6 @@
                class="form-control"
                value="{{ old('name', $supplier->name ?? '') }}"
                required>
-
     </div>
 
 

@@ -131,7 +131,7 @@
 
                 logout,
 
-                2 * 60 * 1000
+                10 * 60 * 1000
 
             );
         }
@@ -156,7 +156,7 @@
 
                         Pour des raisons de sécurité,
                         votre session a expiré après
-                        <b>2 minutes d’inactivité</b>.
+                        <b>10 minutes d’inactivité</b>.
 
                     </div>
 

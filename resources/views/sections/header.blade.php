@@ -59,7 +59,7 @@
     <ul class="navbar-nav flex-row align-items-center ms-auto">
 
         {{-- NOTIFICATIONS --}}
-        <li class="nav-item dropdown-notifications navbar-dropdown dropdown me-3">
+        <!--li class="nav-item dropdown-notifications navbar-dropdown dropdown me-3">
 
             <a class="nav-link dropdown-toggle hide-arrow position-relative"
                href="#"
@@ -101,7 +101,7 @@
 
             </ul>
 
-        </li>
+        </li-->
 
         {{-- USER --}}
         <li class="nav-item navbar-dropdown dropdown-user dropdown">

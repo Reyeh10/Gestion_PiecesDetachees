@@ -236,6 +236,11 @@
                                         PAYÉ
 
                                     </span>
+                                @elseif($sale->status == 'cancelled')
+
+                                    <span class="badge bg-dark">
+                                        ANNULÉE
+                                    </span>
 
                                 @else
 

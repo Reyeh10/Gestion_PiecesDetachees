@@ -28,6 +28,15 @@
 
             <div class="row">
 
+                <div class="col-md-6 mb-3">
+
+                    <label>Code client *</label>
+                    <input type="text"
+                        name="code"
+                        class="form-control"
+                        value="{{ old('code', $customer->code) }}"
+                        required>
+                </div>
                 {{-- NOM --}}
                 <div class="col-md-6 mb-3">
                     <label>Nom *</label>

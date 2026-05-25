@@ -62,7 +62,7 @@
 
                 @csrf
 
-                <div class="row g-3 align-items-end">
+             <div class="row g-3 align-items-end justify-content-between">
 
                     {{-- FOURNISSEUR --}}
                     <div class="col-md-3">
@@ -134,30 +134,55 @@
                     </div>
 
                     {{-- IMPORT --}}
-                    <div class="col-md-2">
+                    <div class="col-md-3">
 
-                        <button type="submit"
-                                class="btn btn-success w-100">
+                        <div class="d-flex gap-2 w-100">
 
-                            <i class="bx bx-upload"></i>
+                            {{-- IMPORT --}}
+                            <button type="submit"
+                                    class="btn btn-success flex-fill">
 
-                            Importer
+                                <i class="bx bx-upload"></i>
+                                Importer
 
-                        </button>
+                            </button>
+
+                            {{-- EXPORT EXCEL --}}
+                            <a href="{{ route('products.export.excel') }}"
+                            class="btn btn-info flex-fill">
+
+                                <i class="bx bx-download"></i>
+                                Excel
+
+                            </a>
+
+                            {{-- EXPORT PDF --}}
+                            <!--a href="{ { route('products.export.pdf') }}"
+                                class="btn btn-danger flex-fill">
+
+                                    <i class="bx bx-file"></i>
+                                    PDF
+                            </a-->
+
+                            {{-- AJOUT --}}
+                            <a href="{{ route('products.create') }}"
+                            class="btn btn-primary">
+
+                                <i class="bx bx-plus"></i>
+
+                            </a>
+
+                        </div>
 
                     </div>
+                    <!--div class="col-md-1">
 
-                    {{-- AJOUT --}}
-                    <div class="col-md-1">
-
-                        <a href="{{ route('products.create') }}"
+                        <a href="{ { route('products.create') }}"
                            class="btn btn-primary w-100">
-
                             <i class="bx bx-plus"></i>
-
                         </a>
 
-                    </div>
+                    </div-->
 
                 </div>
 

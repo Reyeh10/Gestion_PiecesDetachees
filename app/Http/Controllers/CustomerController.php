@@ -28,6 +28,7 @@ class CustomerController extends Controller
         if ($request->search) {
 
             $query->where('name', 'like', '%' . $request->search . '%')
+                 ->orWhere('code', 'like', '%' . $request->search . '%')
                 ->orWhere('phone', 'like', '%' . $request->search . '%')
                 ->orWhere('email', 'like', '%' . $request->search . '%');
         }
@@ -72,6 +73,7 @@ class CustomerController extends Controller
 
         $customer = Customer::create([
 
+            'code' => $request->code,
             'name' => $request->name,
             'phone' => $request->phone,
             'email' => $request->email,
@@ -153,7 +155,9 @@ class CustomerController extends Controller
         Customer $customer
     ) {
         $request->validate([
-
+            'code' =>
+                'required|string|max:50|unique:customers,code,' .
+                $customer->id,
             'name' => 'required|string|max:255',
             'phone' => 'nullable|string|max:50',
             'email' =>
@@ -166,7 +170,7 @@ class CustomerController extends Controller
         ]);
 
         $customer->update([
-
+            'code' => $request->code,
             'name' => $request->name,
             'phone' => $request->phone,
             'email' => $request->email,

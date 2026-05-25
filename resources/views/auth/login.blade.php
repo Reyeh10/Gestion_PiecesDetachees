@@ -209,7 +209,8 @@ body{
     border-radius:16px;
 
     padding-left:58px;
-    padding-right:20px;
+
+    padding-right:55px;
 
     font-size:16px;
 
@@ -361,11 +362,21 @@ body{
 }
 
  /* SHOW PASSWORD */
-    .toggle-password{
+   .toggle-password{
 
-        position:absolute;
+    position:absolute;
 
-        right:18px;
+    right:20px;
+
+    width:24px;
+
+    height:24px;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
         top:50%;
 
         transform:translateY(-50%);

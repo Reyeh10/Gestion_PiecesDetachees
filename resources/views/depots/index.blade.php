@@ -344,9 +344,9 @@
 
                     <tr>
 
-                        <th>Nom</th>
+                        <th>Code</th>
 
-                        <!--th>Code</th-->
+                        <th>Nom</th>
 
                         <th>Adresse</th>
 
@@ -364,6 +364,12 @@
 
                         <tr>
 
+                            {{-- CODE --}}
+                            
+                            <td>
+                                {{ $depot->code }}
+                            </td>
+
                             {{-- NOM --}}
                             <td>
 
@@ -375,12 +381,6 @@
 
                             </td>
 
-                            {{-- CODE --}}
-                            <!--td>
-
-                                { { $depot->code }}
-
-                            </td-->
 
                             {{-- ADRESSE --}}
                             <td>

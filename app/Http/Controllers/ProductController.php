@@ -15,6 +15,8 @@ use App\Models\Supplier;
 use App\Models\Depot;
 use App\Models\ProductDepotStock;
 
+use App\Exports\ProductsExport;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -914,10 +916,16 @@ class ProductController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        ->withSum(
-            'saleItems as sold_quantity',
-            'quantity'
-        )
+       ->withSum([
+            'saleItems as sold_quantity' => function ($query) {
+                $query->whereHas('sale', function ($q) {
+                    $q->whereNotIn(
+                        'status',
+                        ['cancelled']
+                    );
+                });
+            }
+        ], 'quantity')
 
         /*
         |--------------------------------------------------------------------------
@@ -1053,6 +1061,146 @@ public function show(Product $product)
         )
     );
 }
+ /*
+|--------------------------------------------------------------------------
+| Create
+|--------------------------------------------------------------------------
+*/
+
+public function create()
+{
+    $brands = Brand::orderBy('name')->get();
+    $models = CarModel::orderBy('name')->get();
+    $families = FamilyModel::orderBy('name')->get();
+    $subfamilies = Subfamily::orderBy('name')->get();
+    $rayons = Rayon::orderBy('name')->get();
+    $locations = Location::orderBy('name')->get();
+
+    return view(
+        'products.create',
+        compact(
+            'brands',
+            'models',
+            'families',
+            'subfamilies',
+            'rayons',
+            'locations'
+        )
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| Store
+|--------------------------------------------------------------------------
+*/
+public function store(Request $request)
+{
+    $request->validate([
+        'reference' => 'required|string|max:255|unique:products,reference',
+        'designation' => 'required|string|max:255',
+
+        'brand_id' => 'nullable|exists:brands,id',
+        'model_id' => 'nullable|exists:models,id',
+
+        'family_id' => 'nullable|exists:families,id',
+        'subfamily_id' => 'nullable|exists:subfamilies,id',
+
+        'rayon_id' => 'nullable|exists:rayons,id',
+        'location_id' => 'nullable|exists:locations,id',
+
+        'quantity' => 'required|numeric|min:0',
+
+        'min_stock' => 'nullable|numeric|min:0',
+        'max_stock' => 'nullable|numeric|min:0',
+
+        'purchase_price' => 'required|numeric|min:0',
+        'coef_purchase' => 'nullable|numeric|min:0',
+
+        'cost_price' => 'nullable|numeric|min:0',
+
+        'coef_sale' => 'nullable|numeric|min:0',
+        'sale_price' => 'required|numeric|min:0',
+
+        'status' => 'nullable|string',
+
+        'unit_type' => 'nullable|string',
+        'unit_label' => 'nullable|string|max:50',
+    ]);
+
+    Product::create([
+
+        'reference' => $request->reference,
+        'designation' => $request->designation,
+
+        'brand_id' => $request->brand_id,
+        'model_id' => $request->model_id,
+
+        'family_id' => $request->family_id,
+        'subfamily_id' => $request->subfamily_id,
+
+        'rayon_id' => $request->rayon_id,
+        'location_id' => $request->location_id,
+
+        'quantity' => $request->quantity,
+
+        'min_stock' => $request->min_stock ?? 0,
+        'max_stock' => $request->max_stock ?? 0,
+
+        'purchase_price' => $request->purchase_price,
+        'coef_purchase' => $request->coef_purchase ?? 1,
+
+        'cost_price' => $request->cost_price,
+
+        'coef_sale' => $request->coef_sale ?? 1,
+        'sale_price' => $request->sale_price,
+
+        'status' => $request->status ?? 'disponible',
+
+        'unit_type' => $request->unit_type ?? 'piece',
+        'unit_label' => $request->unit_label ?? 'Pièce',
+    ]);
+
+    return redirect()
+        ->route('products.index')
+        ->with(
+            'success',
+            'Produit créé avec succès.'
+        );
+}
+
+/*
+|--------------------------------------------------------------------------
+| EXPORT EXCEL
+|--------------------------------------------------------------------------
+*/
+
+public function exportExcel()
+{
+    return Excel::download(
+        new ProductsExport,
+        'stock.xlsx'
+    );
+}
+
+/*
+|--------------------------------------------------------------------------
+| EXPORT PDF
+|--------------------------------------------------------------------------
+*/
+
+/*public function exportPdf()
+{
+    $products = Product::with('depot')->get();
+
+    $pdf = Pdf::loadView(
+        'products.export_pdf',
+        compact('products')
+    );
+
+    return $pdf->download('stock.pdf');
+}*/
+
     /*
 |--------------------------------------------------------------------------
 | EDIT
