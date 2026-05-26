@@ -908,15 +908,7 @@ class ProductController extends Controller
             'rayon',
             'location',
 
-        ])
-
-        /*
-        |--------------------------------------------------------------------------
-        | QUANTITE VENDUE DEPUIS sale_items
-        |--------------------------------------------------------------------------
-        */
-
-       ->withSum([
+        ])->withSum([
             'saleItems as sold_quantity' => function ($query) {
                 $query->whereHas('sale', function ($q) {
                     $q->whereNotIn(
@@ -925,15 +917,7 @@ class ProductController extends Controller
                     );
                 });
             }
-        ], 'quantity')
-
-        /*
-        |--------------------------------------------------------------------------
-        | PRODUITS AYANT DES VENTES
-        |--------------------------------------------------------------------------
-        */
-
-        ->having('sold_quantity', '>', 0);
+        ], 'quantity') ->having('sold_quantity', '>', 0);
 
         /*
         |--------------------------------------------------------------------------
