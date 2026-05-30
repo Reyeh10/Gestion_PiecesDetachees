@@ -427,8 +427,12 @@ class ProductController extends Controller
         | RECUPERATION DONNEES
         |--------------------------------------------------------------------------
         */
+        //dd($request->all());
 
+        //dd($request->products);
         $products = $request->products;
+
+
 
         /*
         |--------------------------------------------------------------------------
@@ -459,28 +463,52 @@ class ProductController extends Controller
                 );
         }
 
-         /*
-    |--------------------------------------------------------------------------
-    | VERIFICATION CHAMPS OBLIGATOIRES
-    |--------------------------------------------------------------------------
-    */
+        /*
+        |--------------------------------------------------------------------------
+        | VERIFICATION CHAMPS OBLIGATOIRES
+        |--------------------------------------------------------------------------
+        */
 
-    foreach ($products as $product) {
+        foreach ($products as $index => $product) {
 
-        if (
-            empty($product['reference']) ||
-            empty($product['designation'])
-        ) {
+            $requiredFields = [
+                'reference',
+                'designation',
+                'brand_name',
+                'model_name',
+                'family_name',
+                'subfamily_name',
+                'rayon_name',
+                'location_name',
+            ];
 
-            return redirect()
-            ->route('products.index')
-            ->with(
-                'error',
-                'Impossible d’importer. Certains produits ont des champs obligatoires manquants.'
-            );
+           /*8 foreach ($requiredFields as $field) {
+
+                if (!array_key_exists($field, $product)) {
+
+                    dd(
+                        'Champ manquant',
+                        $field,
+                        'Produit index',
+                        $index,
+                        $product
+                    );
                 }
-    }
+            }*/
 
+            if (
+                empty($product['reference']) ||
+                empty($product['designation'])
+            ) {
+
+                return redirect()
+                    ->route('products.index')
+                    ->with(
+                        'error',
+                        'Impossible d’importer. Certains produits ont des champs obligatoires manquants.'
+                    );
+            }
+        }
 
         /*
         |--------------------------------------------------------------------------
@@ -529,6 +557,7 @@ class ProductController extends Controller
                     $family->id,
 
             ]);
+
 
             $rayon = Rayon::firstOrCreate([
 

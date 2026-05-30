@@ -558,10 +558,8 @@
         {{-- PAGINATION --}}
         @if(method_exists($products, 'links'))
 
-            <div class="mt-4">
-
+           <div class="d-flex justify-content-center mt-4">
                 {{ $products->withQueryString()->links() }}
-
             </div>
 
         @endif
