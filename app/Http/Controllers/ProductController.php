@@ -16,7 +16,7 @@ use App\Models\Depot;
 use App\Models\ProductDepotStock;
 
 use App\Exports\ProductsExport;
-use Barryvdh\DomPDF\Facade\Pdf;
+// use Barryvdh\DomPDF\Facade\Pdf;
 
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -559,19 +559,32 @@ class ProductController extends Controller
             ]);
 
 
-            $rayon = Rayon::firstOrCreate([
+           /* $rayon = Rayon::firstOrCreate([
 
                 'name' =>
                     $product['rayon_name']
 
-            ]);
+            ]);*/
 
-            $location = Location::firstOrCreate([
+            $rayonName = $product['rayon_name'] ?? 'Non défini';
+
+                $rayon = Rayon::firstOrCreate([
+                    'name' => $rayonName,
+                ]);
+
+           /* $location = Location::firstOrCreate([
 
                 'name' =>
                     $product['location_name']
 
-            ]);
+            ]);*/
+
+            $locationName = $product['location_name'] ?? 'Non défini';
+
+                $location = Location::firstOrCreate([
+                    'name' => $locationName ?: 'Non défini',
+                    'rayon_id' => $rayon->id,
+                ]);
 
             /*
             |--------------------------------------------------------------------------

@@ -233,7 +233,7 @@
 
                 <h1 class="text-primary">
 
-                    {{ number_format($totalValue, 2) }} $
+                    {{ number_format($totalValue, 2) }} FDJ
 
                 </h1>
 
@@ -336,7 +336,7 @@
 
                             <td>
 
-                                {{ number_format($stock->product->sale_price, 2) }} $
+                                {{ number_format($stock->product->sale_price, 2) }} FDJ
 
                             </td>
 

@@ -13,47 +13,38 @@
     </title>
 
     {{-- STYLES --}}
+
     @include('sections.styles')
+
+    {{-- SELECT2 CSS --}}
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+        rel="stylesheet" />
 
     @stack('styles')
 
-    {{-- SWEETALERT STYLE --}}
     <style>
 
-        .swal2-popup{
-
-            border-radius:20px !important;
-
-            padding:30px !important;
+        .select2-container {
+            width: 100% !important;
         }
 
-        .swal2-title{
+        .select2-container .select2-selection--single {
 
-            font-size:28px !important;
+            height: 38px !important;
 
-            font-weight:700 !important;
+            border: 1px solid #d9dee3 !important;
 
-            color:#566a7f !important;
+            border-radius: 0.375rem !important;
         }
 
-        .swal2-html-container{
+        .select2-selection__rendered {
 
-            font-size:15px !important;
-
-            color:#6c757d !important;
-
-            line-height:1.8 !important;
+            line-height: 38px !important;
         }
 
-        .swal2-confirm{
+        .select2-selection__arrow {
 
-            border-radius:12px !important;
-
-            font-size:16px !important;
-
-            font-weight:600 !important;
-
-            padding:10px 25px !important;
+            height: 38px !important;
         }
 
     </style>
@@ -97,9 +88,18 @@
 {{-- SCRIPTS --}}
 @include('sections.scripts')
 
+{{-- JQUERY --}}
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+{{-- SELECT2 --}}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+{{-- SWEETALERT --}}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 @stack('scripts')
 
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 
 {{-- FORM AUTO LOGOUT --}}
 <!--form id="auto-logout-form"

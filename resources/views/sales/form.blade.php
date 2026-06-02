@@ -388,35 +388,20 @@ function addRow()
 
                     @foreach($products as $product)
 
-                     <option value="{{ $product->id }}"
+                <option value="{{ $product->id }}"
+                    data-price="{{ $product->sale_price }}"
+                    data-stock="{{ $product->quantity }}"
+                    data-unit="{{ $product->unit_label }}">
 
-                        data-price="{{ $product->sale_price }}"
+                    {{ $product->reference }}
+                    |
+                    {{ $product->designation }}
+                    |
+                    {{ $product->brand->name ?? '' }}
+                    |
+                    {{ $product->model->name ?? '' }}
 
-                        data-stock="{{ $product->quantity }}"
-
-                        data-reference="{{ $product->reference }}"
-
-                        data-unit="{{ $product->unit_label }}">
-
-                        {{ $product->reference }}
-                        -
-                        {{ $product->designation }}
-
-                        @if($product->brand)
-                            | {{ $product->brand->name }}
-                        @endif
-
-                        @if($product->model)
-                            {{ $product->model->name }}
-                        @endif
-
-                        |
-
-                        Stock disponible :
-                        {{ number_format($product->quantity, 2) }}
-                        {{ $product->unit_label }}
-
-                    </option>
+                </option>
 
                     @endforeach
 
@@ -502,6 +487,20 @@ function addRow()
     `;
 
     table.insertAdjacentHTML('beforeend', row);
+
+            const newSelect =
+            table.querySelector('tr:last-child .product-select');
+
+        $(newSelect).select2({
+
+            width: '100%',
+
+            placeholder:
+                'Rechercher par référence, désignation, marque ou modèle',
+
+            allowClear: true
+
+        });
 
     rowIndex++;
 }
