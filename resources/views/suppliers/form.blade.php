@@ -100,9 +100,9 @@
                 USD
             </option>
 
-            <option value="CAD"
-                {{ old('currency', $supplier->currency ?? '') == 'CAD' ? 'selected' : '' }}>
-                CAD
+            <option value="FDJ"
+                {{ old('currency', $supplier->currency ?? '') == 'FDJ' ? 'selected' : '' }}>
+                FDJ
             </option>
 
             <option value="EUR"

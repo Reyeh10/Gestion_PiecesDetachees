@@ -403,6 +403,8 @@ class ProductController extends Controller
             $request->depot_id
         );
 
+       // dd($data);
+
         return view(
             'products.import_preview',
             compact(
@@ -613,120 +615,78 @@ class ProductController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            $createdProduct = Product::create([
+           $existingProduct = Product::where('reference', $product['reference'])->first();
 
-                /*
-                |--------------------------------------------------------------------------
-                | INFORMATIONS
-                |--------------------------------------------------------------------------
-                */
+            if ($existingProduct) {
 
-                'reference' =>
-                    $product['reference'] ?? '',
+                $newQuantity = (float) ($product['quantity'] ?? 0);
 
-                'designation' =>
-                    $product['designation'] ?? '',
+                $highestPurchasePrice = max(
+                    (float) $existingProduct->purchase_price,
+                    (float) $purchasePrice
+                );
 
-                /*
-                |--------------------------------------------------------------------------
-                | UNITES
-                |--------------------------------------------------------------------------
-                */
+                $costPrice = $highestPurchasePrice * $coefPurchase;
+                $salePrice = $costPrice * $coefSale;
 
-                'unit_type' =>
-                    $product['unit_type'] ?? 'piece',
+                $existingProduct->update([
+                    'quantity' => $existingProduct->quantity + $newQuantity,
+                    'purchase_price' => $highestPurchasePrice,
+                    'coef_purchase' => $coefPurchase,
+                    'cost_price' => $costPrice,
+                    'coef_sale' => $coefSale,
+                    'sale_price' => $salePrice,
+                    'status' => 'disponible',
+                ]);
 
-                'unit_label' =>
-                    $product['unit_label'] ?? 'Pièce',
+                $createdProduct = $existingProduct;
 
-                /*
-                |--------------------------------------------------------------------------
-                | RELATIONS
-                |--------------------------------------------------------------------------
-                */
+            } else {
 
-                'brand_id' =>
-                    $brand->id,
-
-                'model_id' =>
-                    $model->id,
-
-                'family_id' =>
-                    $family->id,
-
-                'subfamily_id' =>
-                    $subfamily->id,
-
-                'rayon_id' =>
-                    $rayon->id,
-
-                'location_id' =>
-                    $location->id,
-
-                /*
-                |--------------------------------------------------------------------------
-                | STOCK
-                |--------------------------------------------------------------------------
-                */
-
-                'quantity' =>
-                    (float) ($product['quantity'] ?? 0),
-
-                'min_stock' =>
-                    (float) ($product['min_stock'] ?? 0),
-
-                'max_stock' =>
-                    (float) ($product['max_stock'] ?? 0),
-
-                /*
-                |--------------------------------------------------------------------------
-                | PRIX
-                |--------------------------------------------------------------------------
-                */
-
-                'purchase_price' =>
-                    $purchasePrice,
-
-                'coef_purchase' =>
-                    $coefPurchase,
-
-                'cost_price' =>
-                    $costPrice,
-
-                'coef_sale' =>
-                    $coefSale,
-
-                'sale_price' =>
-                    $salePrice,
-
-                /*
-                |--------------------------------------------------------------------------
-                | STATUS
-                |--------------------------------------------------------------------------
-                */
-
-                'status' =>
-                    'disponible',
-            ]);
-
+                $createdProduct = Product::create([
+                    'reference' => $product['reference'] ?? '',
+                    'designation' => $product['designation'] ?? '',
+                    'unit_type' => $product['unit_type'] ?? 'piece',
+                    'unit_label' => $product['unit_label'] ?? 'Pièce',
+                    'brand_id' => $brand->id,
+                    'model_id' => $model->id,
+                    'family_id' => $family->id,
+                    'subfamily_id' => $subfamily->id,
+                    'rayon_id' => $rayon->id,
+                    'location_id' => $location->id,
+                    'quantity' => (float) ($product['quantity'] ?? 0),
+                    'min_stock' => (float) ($product['min_stock'] ?? 0),
+                    'max_stock' => (float) ($product['max_stock'] ?? 0),
+                    'purchase_price' => $purchasePrice,
+                    'coef_purchase' => $coefPurchase,
+                    'cost_price' => $costPrice,
+                    'coef_sale' => $coefSale,
+                    'sale_price' => $salePrice,
+                    'status' => 'disponible',
+                ]);
+            }
             /*
-            |--------------------------------------------------------------------------
-            | STOCK DEPOT
-            |--------------------------------------------------------------------------
-            */
+                |--------------------------------------------------------------------------
+                | STOCK DEPOT
+                |--------------------------------------------------------------------------
+                */
 
-            ProductDepotStock::create([
+                $depotStock = ProductDepotStock::firstOrCreate(
 
-                'product_id' =>
-                    $createdProduct->id,
+                    [
+                        'product_id' => $createdProduct->id,
+                        'depot_id'   => $depot->id,
+                    ],
 
-                'depot_id' =>
-                    $depot->id,
+                    [
+                        'quantity' => 0,
+                    ]
+                );
 
-                'quantity' =>
-                    (float) ($product['quantity'] ?? 0),
+                $depotStock->quantity +=
+                    (float) ($product['quantity'] ?? 0);
 
-            ]);
+                $depotStock->save();
 
             /*
             |--------------------------------------------------------------------------
