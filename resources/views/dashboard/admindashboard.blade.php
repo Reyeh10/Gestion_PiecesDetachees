@@ -97,7 +97,7 @@
                     <h3 class="fw-bold mb-0">
                         {{ number_format($stockValue, 2) }}
                     </h3>
-                    <small class="text-muted">Valeur basée sur prix achat</small>
+                    <small class="text-muted">Valeur basée sur prix de revient</small>
                 </div>
             </div>
         </div>

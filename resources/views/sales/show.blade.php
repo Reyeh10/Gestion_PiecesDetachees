@@ -163,6 +163,32 @@
                     page-break-inside:avoid !important;
                 }
 
+                @media print {
+
+                    nav.layout-navbar {
+                        display: none !important;
+                    }
+
+                }
+
+                @media print {
+
+                    nav.layout-navbar{
+                        display:none !important;
+                    }
+
+                    .layout-page{
+                        margin-top:0 !important;
+                        padding-top:0 !important;
+                    }
+
+                    .content-wrapper{
+                        margin-top:0 !important;
+                        padding-top:0 !important;
+                    }
+
+                }
+
             }
             /* =========================================
                 CORRECTION IMPRESSION FACTURE

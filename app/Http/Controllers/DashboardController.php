@@ -59,12 +59,19 @@ class DashboardController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        $stockValue =
+       /* $stockValue =
             Product::sum(
                 DB::raw(
                     'quantity * purchase_price'
                 )
-            );
+            );*/
+
+            $stockValue =
+                Product::sum(
+                    DB::raw(
+                        'quantity * cost_price'
+                    )
+                );
 
             /*
     |--------------------------------------------------------------------------
