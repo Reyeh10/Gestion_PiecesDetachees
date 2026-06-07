@@ -526,14 +526,33 @@ class ProductController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            $brand = Brand::firstOrCreate([
+            $brandName = trim($product['brand_name'] ?? '');
+            $modelName = trim($product['model_name'] ?? '');
+            $familyName = trim($product['family_name'] ?? '');
+            $subfamilyName = trim($product['subfamily_name'] ?? '');
+            $rayonName = trim($product['rayon_name'] ?? '');
+            $locationName = trim($product['location_name'] ?? '');
+
+            $brandName = $brandName !== '' ? $brandName : 'Non défini';
+            $modelName = $modelName !== '' ? $modelName : 'Non défini';
+            $familyName = $familyName !== '' ? $familyName : 'Non défini';
+            $subfamilyName = $subfamilyName !== '' ? $subfamilyName : 'Non défini';
+            $rayonName = $rayonName !== '' ? $rayonName : 'Non défini';
+            $locationName = $locationName !== '' ? $locationName : 'Non défini';
+
+           /* $brand = Brand::firstOrCreate([
 
                 'name' =>
                     $product['brand_name']
 
+            ]);*/
+
+           // dd($product);
+            $brand = Brand::firstOrCreate([
+                'name' => $brandName
             ]);
 
-            $model = CarModel::firstOrCreate([
+            /*$model = CarModel::firstOrCreate([
 
                 'name' =>
                     $product['model_name'],
@@ -541,16 +560,26 @@ class ProductController extends Controller
                 'brand_id' =>
                     $brand->id,
 
+            ]);*/
+
+            $model = CarModel::firstOrCreate([
+                'name' => $modelName,
+                'brand_id' => $brand->id,
             ]);
 
-            $family = FamilyModel::firstOrCreate([
+
+            /*$family = FamilyModel::firstOrCreate([
 
                 'name' =>
                     $product['family_name']
 
+            ]);*/
+
+            $family = FamilyModel::firstOrCreate([
+                'name' => $familyName
             ]);
 
-            $subfamily = Subfamily::firstOrCreate([
+            /*$subfamily = Subfamily::firstOrCreate([
 
                 'name' =>
                     $product['subfamily_name'],
@@ -558,8 +587,12 @@ class ProductController extends Controller
                 'family_id' =>
                     $family->id,
 
-            ]);
+            ]);*/
 
+            $subfamily = Subfamily::firstOrCreate([
+                'name' => $subfamilyName,
+                'family_id' => $family->id,
+            ]);
 
            /* $rayon = Rayon::firstOrCreate([
 
@@ -568,7 +601,7 @@ class ProductController extends Controller
 
             ]);*/
 
-            $rayonName = $product['rayon_name'] ?? 'Non défini';
+           //$rayonName = $product['rayon_name'] ?? 'Non défini';
 
                 $rayon = Rayon::firstOrCreate([
                     'name' => $rayonName,
@@ -581,10 +614,11 @@ class ProductController extends Controller
 
             ]);*/
 
-            $locationName = $product['location_name'] ?? 'Non défini';
+            //$locationName = $product['location_name'] ?? 'Non défini';
 
                 $location = Location::firstOrCreate([
-                    'name' => $locationName ?: 'Non défini',
+                    //'name' => $locationName ?: 'Non défini',
+                    'name' => $locationName,
                     'rayon_id' => $rayon->id,
                 ]);
 
