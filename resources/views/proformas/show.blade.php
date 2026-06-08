@@ -252,6 +252,14 @@
                     }
 
                 }
+
+                @media print {
+
+            .layout-navbar {
+                display: none !important;
+            }
+
+}
         </style>
 
         <div class="card shadow-sm">

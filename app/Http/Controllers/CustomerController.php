@@ -64,10 +64,16 @@ class CustomerController extends Controller
     {
         $request->validate([
 
+            'code' => 'required|string|max:50|unique:customers,code',
+
             'name' => 'required|string|max:255',
+
             'phone' => 'nullable|string|max:50',
+
             'email' => 'nullable|email|max:255|unique:customers,email',
+
             'credit_limit' => 'nullable|numeric|min:0',
+
             'payment_terms' => 'nullable|string|max:255',
         ]);
 
@@ -87,21 +93,13 @@ class CustomerController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        if ($request->ajax()) {
+        if ($request->expectsJson()) {
 
             return response()->json([
-
                 'success' => true,
                 'customer' => $customer
-
             ]);
         }
-
-        /*
-        |--------------------------------------------------------------------------
-        | NORMAL REQUEST
-        |--------------------------------------------------------------------------
-        */
 
         return redirect()
             ->route('customers.index')

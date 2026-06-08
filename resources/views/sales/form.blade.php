@@ -293,13 +293,22 @@
                 <div class="mb-3">
 
                     <label class="form-label">
+                        Code *
+                    </label>
+
+                    <input type="text"
+                        id="customer_code"
+                        class="form-control">
+
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">
                         Nom *
                     </label>
 
                     <input type="text"
                            id="customer_name"
                            class="form-control">
-
                 </div>
 
                 <div class="mb-3">
@@ -702,6 +711,15 @@ document.getElementById(
     'saveCustomerBtn'
 ).addEventListener('click', function () {
 
+    const code =
+    document.getElementById(
+        'customer_code'
+    ).value.trim();
+
+    document.getElementById(
+            'customer_code'
+        ).value = '';
+
     const name =
         document.getElementById(
             'customer_name'
@@ -732,10 +750,10 @@ document.getElementById(
     |--------------------------------------------------------------------------
     */
 
-    if (!name) {
+   if (!code || !name) {
 
         errorBox.innerHTML =
-            'Le nom du client est obligatoire.';
+            'Le code et le nom du client sont obligatoires.';
 
         errorBox.classList.remove('d-none');
 
@@ -763,7 +781,9 @@ document.getElementById(
                 "application/json"
         },
 
-        body: JSON.stringify({
+       body: JSON.stringify({
+
+            code: code,
 
             name: name,
 
@@ -864,10 +884,11 @@ document.getElementById(
 
     })
 
-    .catch(error => {
+        .catch(error => {
 
-        let message =
-            'Erreur lors de la création du client.';
+        let message = JSON.stringify(error);
+
+        console.log(error);
 
         if (error.errors) {
 
@@ -883,8 +904,6 @@ document.getElementById(
     });
 
 });
-
-
 
 </script>
 
