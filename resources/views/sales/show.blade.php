@@ -689,7 +689,7 @@
                             <tr>
 
                                 <td class="fw-bold">
-                                    Sous-total :
+                                   Sous-total HT :
                                 </td>
 
                                 <td class="text-end">
@@ -726,7 +726,7 @@
                             <tr class="total-box">
 
                                 <td>
-                                    TOTAL :
+                                    Total TTC  :
                                 </td>
 
                                 <td class="text-end text-primary">
