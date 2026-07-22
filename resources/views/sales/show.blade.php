@@ -605,6 +605,10 @@
                                 </th>
 
                                 <th class="text-center">
+                                    Immatriculation
+                                </th>
+
+                                <th class="text-center">
                                     Quantité
                                 </th>
 
@@ -645,6 +649,24 @@
 
                                     <td>
                                         {{ $item->product->designation ?? '-' }}
+                                    </td>
+
+                                    <td class="text-center fw-bold">
+
+                                        @if($item->vehicle)
+
+                                            <span class="badge bg-label-primary">
+                                                {{ $item->vehicle->plate_number }}
+                                            </span>
+
+                                        @else
+
+                                            <span class="text-muted">
+                                                -
+                                            </span>
+
+                                        @endif
+
                                     </td>
 
                                    <td class="text-center">

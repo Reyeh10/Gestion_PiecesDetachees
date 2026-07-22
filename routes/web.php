@@ -20,6 +20,8 @@ use App\Http\Controllers\SaleController;
 use App\Http\Controllers\ProformaController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\DepotTransferController;
+use App\Http\Controllers\VehicleHistoryController;
+use App\Http\Controllers\VehicleController;
 
 //use Illuminate\Http\Request;
 //use Illuminate\Support\Facades\Auth;
@@ -948,6 +950,83 @@ Route::middleware([
         '/stock-movements/{stockMovement}',
         [StockMovementController::class, 'destroy']
     )->name('stock-movements.destroy');
+
+});
+/*
+|--------------------------------------------------------------------------
+| VÉHICULES
+|--------------------------------------------------------------------------
+*/
+
+/*
+|--------------------------------------------------------------------------
+| VOIR, AJOUTER ET MODIFIER
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware([
+    'auth',
+    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+])->group(function () {
+
+    Route::get(
+        '/vehicles',
+        [VehicleController::class, 'index']
+    )->name('vehicles.index');
+
+    Route::get(
+        '/vehicles/create',
+        [VehicleController::class, 'create']
+    )->name('vehicles.create');
+
+    Route::post(
+        '/vehicles',
+        [VehicleController::class, 'store']
+    )->name('vehicles.store');
+
+    Route::get(
+        '/vehicles/{vehicle}',
+        [VehicleController::class, 'show']
+    )->name('vehicles.show');
+
+    Route::get(
+        '/vehicles/{vehicle}/edit',
+        [VehicleController::class, 'edit']
+    )->name('vehicles.edit');
+
+    Route::put(
+        '/vehicles/{vehicle}',
+        [VehicleController::class, 'update']
+    )->name('vehicles.update');
+
+    /*
+    |--------------------------------------------------------------------------
+    | HISTORIQUE PAR IMMATRICULATION
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/vehicle-history',
+        [VehicleHistoryController::class, 'index']
+    )->name('vehicles.history');
+
+});
+
+/*
+|--------------------------------------------------------------------------
+| SUPPRESSION : ADMIN UNIQUEMENT
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware([
+    'auth',
+    'role:admin'
+])->group(function () {
+
+    Route::delete(
+        '/vehicles/{vehicle}',
+        [VehicleController::class, 'destroy']
+    )->name('vehicles.destroy');
 
 });
 /*
