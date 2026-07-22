@@ -198,6 +198,91 @@
 
         </li>
 
+        {{-- VÉHICULES --}}
+        @if($user && in_array($user->role, [
+            'admin',
+            'chef_magasinier',
+            'magasinier',
+            'vendeur',
+            'caissier'
+        ]))
+
+            <li class="menu-item
+                {{
+                    request()->routeIs('vehicles.*')
+                        ? 'active open'
+                        : ''
+                }}">
+
+                <a href="javascript:void(0);"
+                   class="menu-link menu-toggle">
+
+                    <i class="menu-icon tf-icons bx bx-car"></i>
+
+                    <div>Véhicules</div>
+
+                </a>
+
+                <ul class="menu-sub">
+
+                    <li class="menu-item
+                        {{
+                            request()->routeIs(
+                                'vehicles.index',
+                                'vehicles.show',
+                                'vehicles.edit'
+                            )
+                                ? 'active'
+                                : ''
+                        }}">
+
+                        <a href="{{ route('vehicles.index') }}"
+                           class="menu-link">
+
+                            <div>Liste des véhicules</div>
+
+                        </a>
+
+                    </li>
+
+                    <li class="menu-item
+                        {{
+                            request()->routeIs('vehicles.create')
+                                ? 'active'
+                                : ''
+                        }}">
+
+                        <a href="{{ route('vehicles.create') }}"
+                           class="menu-link">
+
+                            <div>Nouveau véhicule</div>
+
+                        </a>
+
+                    </li>
+
+                    <li class="menu-item
+                        {{
+                            request()->routeIs('vehicles.history')
+                                ? 'active'
+                                : ''
+                        }}">
+
+                        <a href="{{ route('vehicles.history') }}"
+                           class="menu-link">
+
+                            <div>Traçabilité véhicule</div>
+                        </a>
+
+                    </li>
+
+                </ul>
+
+            </li>
+
+        @endif
+
+
         {{-- ===================================================== --}}
         {{-- GESTION DU STOCK --}}
         {{-- ===================================================== --}}
