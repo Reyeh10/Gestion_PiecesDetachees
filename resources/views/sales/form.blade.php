@@ -116,38 +116,40 @@
             <table class="table table-bordered align-middle"
                    id="itemsTable">
 
-               <thead class="table-light">
+                <thead class="table-light">
+
                     <tr>
-                        <th style="min-width: 360px;">
+
+                        <th width="55%">
                             Référence / Produit
                         </th>
 
-                        <th style="min-width: 260px;">
-                            Immatriculation
-                        </th>
-
-                        <th style="min-width: 100px;"
+                        <th width="10%"
                             class="text-center">
+
                             Stock
                         </th>
 
-                        <th style="min-width: 160px;">
+                        <th width="15%">
                             Prix unitaire
                         </th>
 
-                        <th style="min-width: 100px;">
+                        <th width="10%">
                             Qté
                         </th>
 
-                        <th style="min-width: 130px;">
+                        <th width="15%">
                             Total
                         </th>
 
-                        <th style="min-width: 90px;"
+                        <th width="10%"
                             class="text-center">
+
                             Action
                         </th>
+
                     </tr>
+
                 </thead>
 
                 <tbody></tbody>
@@ -416,63 +418,6 @@ function addRow()
 
             </td>
 
-            {{-- VÉHICULE --}}
-            <td>
-                <select
-                    name="items[${rowIndex}][vehicle_id]"
-                    class="form-control vehicle-select"
-                    id="vehicle_${rowIndex}"
-                    onchange="toggleNewPlateField(${rowIndex})"
-                >
-                    <option value="">
-                        Sélectionner un véhicule
-                    </option>
-
-                    @foreach($vehicles as $vehicle)
-                        <option
-                            value="{{ $vehicle->id }}"
-                            data-customer-id="{{ $vehicle->customer_id }}"
-                        >
-                            {{ $vehicle->plate_number }}
-
-                            @if($vehicle->brand || $vehicle->model)
-                                -
-                                {{ $vehicle->brand }}
-                                {{ $vehicle->model }}
-                            @endif
-
-                            @if($vehicle->customer)
-                                -
-                                {{ $vehicle->customer->name }}
-                            @endif
-                        </option>
-                    @endforeach
-
-                    <option value="new">
-                        + Nouvelle immatriculation
-                    </option>
-                </select>
-
-                <div
-                    id="new_plate_container_${rowIndex}"
-                    class="mt-2 d-none"
-                >
-                    <input
-                        type="text"
-                        name="items[${rowIndex}][plate_number]"
-                        id="plate_number_${rowIndex}"
-                        class="form-control text-uppercase"
-                        placeholder="Exemple : 336D106"
-                        maxlength="50"
-                        oninput="formatPlateNumber(this)"
-                    >
-
-                    <small class="text-muted">
-                        Saisissez l'immatriculation sans espace.
-                    </small>
-                </div>
-            </td>
-
             {{-- STOCK --}}
             <td class="text-center fw-bold">
 
@@ -564,18 +509,6 @@ function addRow()
 
             allowClear: true
 
-        });
-
-        const newVehicleSelect =
-            table.querySelector(
-                'tr:last-child .vehicle-select'
-            );
-
-        $(newVehicleSelect).select2({
-            width: '100%',
-            placeholder:
-                'Rechercher une immatriculation',
-            allowClear: true
         });
 
     rowIndex++;
@@ -755,85 +688,7 @@ function removeRow(button)
 
     calculateGrandTotal();
 }
-/*
-|--------------------------------------------------------------------------
-| AFFICHER LE CHAMP NOUVELLE IMMATRICULATION
-|--------------------------------------------------------------------------
-*/
 
-function toggleNewPlateField(index)
-{
-    const vehicleSelect =
-        document.getElementById(
-            `vehicle_${index}`
-        );
-
-    const container =
-        document.getElementById(
-            `new_plate_container_${index}`
-        );
-
-    const plateInput =
-        document.getElementById(
-            `plate_number_${index}`
-        );
-
-    if (!vehicleSelect || !container || !plateInput) {
-        return;
-    }
-
-    if (vehicleSelect.value === 'new') {
-        /*
-        |--------------------------------------------------------------------------
-        | L'UTILISATEUR VEUT CRÉER UN NOUVEAU VÉHICULE
-        |--------------------------------------------------------------------------
-        */
-
-        container.classList.remove('d-none');
-
-        plateInput.required = true;
-
-        /*
-        |--------------------------------------------------------------------------
-        | NE PAS ENVOYER "new" COMME vehicle_id
-        |--------------------------------------------------------------------------
-        */
-
-        vehicleSelect.removeAttribute('name');
-
-        plateInput.focus();
-    } else {
-        /*
-        |--------------------------------------------------------------------------
-        | VÉHICULE EXISTANT OU AUCUN VÉHICULE
-        |--------------------------------------------------------------------------
-        */
-
-        container.classList.add('d-none');
-
-        plateInput.required = false;
-
-        plateInput.value = '';
-
-        vehicleSelect.setAttribute(
-            'name',
-            `items[${index}][vehicle_id]`
-        );
-    }
-}
-
-/*
-|--------------------------------------------------------------------------
-| FORMATAGE DE L'IMMATRICULATION
-|--------------------------------------------------------------------------
-*/
-
-function formatVehiclePlate(input)
-{
-    input.value = input.value
-        .toUpperCase()
-        .replace(/[^A-Z0-9]/g, '');
-}
 /*
 |--------------------------------------------------------------------------
 | DEFAULT ROW

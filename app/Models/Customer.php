@@ -24,15 +24,4 @@ class Customer extends Model
     {
         return $this->hasMany(Sale::class);
     }
-
-    /**
-     * Véhicules appartenant au client.
-     */
-    public function vehicles()
-    {
-        return $this->hasMany(
-            Vehicle::class,
-            'customer_id'
-        );
-    }
 }

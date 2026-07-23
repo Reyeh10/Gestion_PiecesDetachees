@@ -9,7 +9,6 @@ use App\Models\Payment;
 use App\Models\StockMovement;
 use App\Models\Customer;
 use App\Models\ProductDepotStock;
-use App\Models\Vehicle;
 
 use Barryvdh\DomPDF\Facade\Pdf;
 use NumberToWords\NumberToWords;
@@ -182,55 +181,37 @@ use Illuminate\Support\Facades\DB;
         |--------------------------------------------------------------------------
         */
 
-        /**
-     * Afficher le formulaire de création d'une vente.
-     */
-    public function create()
-    {
-        /*
-        |--------------------------------------------------------------------------
-        | PRODUITS DISPONIBLES
-        |--------------------------------------------------------------------------
-        */
+        public function create()
+        {
+            /*
+            |--------------------------------------------------------------------------
+            | PRODUITS DISPONIBLES
+            |--------------------------------------------------------------------------
+            */
 
-        $products = Product::with([
-                'brand',
-                'model',
-                'depotStocks.depot',
-            ])
-            ->where('quantity', '>', 0)
-            ->where('status', '!=', 'vendu')
-            ->orderBy('designation')
-            ->get();
+            $products = Product::with([
+                    'brand',
+                    'model',
+                    'depotStocks.depot'
+                ])
+                ->where('quantity', '>', 0)
+                ->where('status', '!=', 'vendu')
+                ->orderBy('designation')
+                ->get();
 
-        /*
-        |--------------------------------------------------------------------------
-        | CLIENTS
-        |--------------------------------------------------------------------------
-        */
+            /*
+            |--------------------------------------------------------------------------
+            | CLIENTS
+            |--------------------------------------------------------------------------
+            */
 
-        $customers = Customer::orderBy('name')
-            ->get();
+            $customers = Customer::orderBy('name')->get();
 
-        /*
-        |--------------------------------------------------------------------------
-        | VÉHICULES
-        |--------------------------------------------------------------------------
-        */
-
-        $vehicles = Vehicle::with('customer')
-            ->orderBy('plate_number')
-            ->get();
-
-        return view(
-            'sales.create',
-            compact(
-                'products',
-                'customers',
-                'vehicles'
-            )
-        );
-    }
+            return view(
+                'sales.create',
+                compact('products', 'customers')
+            );
+        }
 
         /*
         |--------------------------------------------------------------------------
@@ -240,81 +221,20 @@ use Illuminate\Support\Facades\DB;
 
         public function store(Request $request)
         {
-           $request->validate(
-                [
-                    'customer_id' => [
-                        'nullable',
-                        'exists:customers,id',
-                    ],
+            $request->validate([
 
-                    'payment_type' => [
-                        'required',
-                        'string',
-                    ],
+                'customer_id' => 'nullable|exists:customers,id',
 
-                    'items' => [
-                        'required',
-                        'array',
-                        'min:1',
-                    ],
+                'payment_type' => 'required',
 
-                    'items.*.product_id' => [
-                        'required',
-                        'exists:products,id',
-                    ],
+                'items' => 'required|array|min:1',
 
-                    'items.*.quantity' => [
-                        'required',
-                        'numeric',
-                        'min:0.01',
-                    ],
+                'items.*.product_id' =>
+                    'required|exists:products,id',
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | VÉHICULE EXISTANT
-                    |--------------------------------------------------------------------------
-                    */
-
-                    'items.*.vehicle_id' => [
-                        'nullable',
-                        'exists:vehicles,id',
-                    ],
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | NOUVELLE IMMATRICULATION
-                    |--------------------------------------------------------------------------
-                    */
-
-                    'items.*.plate_number' => [
-                        'nullable',
-                        'string',
-                        'max:50',
-                    ],
-                ],
-                [
-                    'items.required' =>
-                        'Vous devez ajouter au moins un produit.',
-
-                    'items.*.product_id.required' =>
-                        'Veuillez sélectionner un produit.',
-
-                    'items.*.product_id.exists' =>
-                        'Le produit sélectionné est invalide.',
-
-                    'items.*.quantity.required' =>
-                        'La quantité est obligatoire.',
-
-                    'items.*.quantity.min' =>
-                        'La quantité doit être supérieure à zéro.',
-
-                    'items.*.vehicle_id.exists' =>
-                        'Le véhicule sélectionné est invalide.',
-
-                    'items.*.plate_number.max' =>
-                        'L’immatriculation ne doit pas dépasser 50 caractères.',
-                ]
-            );
+                'items.*.quantity' =>
+                'required|numeric|min:0.01',
+            ]);
 
             DB::beginTransaction();
 
@@ -341,70 +261,6 @@ use Illuminate\Support\Facades\DB;
                     $product = Product::findOrFail(
                         $item['product_id']
                     );
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | RECHERCHE OU CRÉATION DU VÉHICULE
-                    |--------------------------------------------------------------------------
-                    */
-
-                    $vehicle = null;
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | CAS 1 : VÉHICULE DÉJÀ EXISTANT
-                    |--------------------------------------------------------------------------
-                    */
-
-                    if (!empty($item['vehicle_id'])) {
-                        $vehicle = Vehicle::findOrFail(
-                            $item['vehicle_id']
-                        );
-                    }
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | CAS 2 : NOUVELLE IMMATRICULATION
-                    |--------------------------------------------------------------------------
-                    */
-
-                    if (
-                        !$vehicle &&
-                        !empty($item['plate_number'])
-                    ) {
-                        $normalizedPlate = strtoupper(
-                            preg_replace(
-                                '/[\s\-]+/',
-                                '',
-                                trim($item['plate_number'])
-                            )
-                        );
-
-                        $vehicle = Vehicle::firstOrCreate(
-                            [
-                                'plate_number' => $normalizedPlate,
-                            ],
-                            [
-                                'customer_id' => $request->customer_id,
-                            ]
-                        );
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | METTRE À JOUR LE CLIENT DU VÉHICULE
-                        |--------------------------------------------------------------------------
-                        */
-
-                        if (
-                            $request->filled('customer_id') &&
-                            !$vehicle->customer_id
-                        ) {
-                            $vehicle->customer_id =
-                                $request->customer_id;
-
-                            $vehicle->save();
-                        }
-                    }
 
                     /*
                     |--------------------------------------------------------------------------
@@ -468,7 +324,6 @@ use Illuminate\Support\Facades\DB;
                     $validatedItems[] = [
 
                         'product' => $product,
-                        'vehicle' => $vehicle,
 
                         'quantity' => $item['quantity'],
 
@@ -611,9 +466,6 @@ use Illuminate\Support\Facades\DB;
 
                         'product_id' =>
                             $product->id,
-
-                        'vehicle_id' =>
-                             $item['vehicle']?->id,
 
                         'quantity' =>
                             $item['quantity'],
@@ -765,7 +617,6 @@ use Illuminate\Support\Facades\DB;
                 'items.product.brand',
 
                 'items.product.model',
-                'items.vehicle',
 
                 'payments'
             ]);
@@ -1050,7 +901,7 @@ use Illuminate\Support\Facades\DB;
                     'Impossible de payer une facture annulée.'
                 );
             }
-
+            
             $request->validate([
 
                 'amount' =>
@@ -1135,8 +986,6 @@ $paid = $sale->payments()->sum('amount');
                 'items.product.brand',
 
                 'items.product.model',
-
-                'items.vehicle',
 
                 'payments'
             ]);
