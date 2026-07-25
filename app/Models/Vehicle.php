@@ -60,6 +60,8 @@ class Vehicle extends Model
         );
     }
 
+    
+
     public function getDisplayNameAttribute(): string
     {
         $details = array_filter([

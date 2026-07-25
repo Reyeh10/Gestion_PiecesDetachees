@@ -1040,6 +1040,27 @@ Route::middleware([
     'role:admin,chef_magasinier,magasinier,vendeur,caissier'
 ])->group(function () {
 
+    /*
+    |--------------------------------------------------------------------------
+    | VÉHICULES ASSOCIÉS À UN CLIENT (AJAX)
+    |--------------------------------------------------------------------------
+    |
+    | Cette route doit rester avant Route::resource('sales', ...)
+    | afin que Laravel ne considère pas "customers" comme la valeur de {sale}.
+    |
+    */
+
+    Route::get(
+        '/sales/customers/{customer}/vehicles',
+        [SaleController::class, 'vehiclesByCustomer']
+    )->name('sales.customers.vehicles');
+
+    /*
+    |--------------------------------------------------------------------------
+    | CRUD DES VENTES
+    |--------------------------------------------------------------------------
+    */
+
     Route::resource(
         'sales',
         SaleController::class
@@ -1047,37 +1068,44 @@ Route::middleware([
         'destroy'
     ]);
 
-Route::get(
-    '/sales/{sale}/invoice',
-    [SaleController::class, 'invoice']
-)->name('sales.invoice');
+    /*
+    |--------------------------------------------------------------------------
+    | FACTURE
+    |--------------------------------------------------------------------------
+    */
 
-/*
-|--------------------------------------------------------------------------
-| FACTURE PDF
-|--------------------------------------------------------------------------
-*/
+    Route::get(
+        '/sales/{sale}/invoice',
+        [SaleController::class, 'invoice']
+    )->name('sales.invoice');
 
-Route::get(
-    '/sales/{sale}/invoice',
-    [SaleController::class, 'invoice']
-)->name('sales.invoice');
-
-/*
-|--------------------------------------------------------------------------
-| AJOUT PAIEMENT
-|--------------------------------------------------------------------------
-*/
+    /*
+    |--------------------------------------------------------------------------
+    | AJOUT D'UN PAIEMENT
+    |--------------------------------------------------------------------------
+    */
 
     Route::post(
         '/sales/{sale}/payment',
         [SaleController::class, 'addPayment']
     )->name('sales.payment');
 
+    /*
+    |--------------------------------------------------------------------------
+    | ANNULATION D'UNE VENTE
+    |--------------------------------------------------------------------------
+    */
+
     Route::put(
         '/sales/{sale}/cancel',
         [SaleController::class, 'cancel']
     )->name('sales.cancel');
+
+    /*
+    |--------------------------------------------------------------------------
+    | SUPPRESSION D'UNE VENTE
+    |--------------------------------------------------------------------------
+    */
 
     Route::delete(
         '/sales/{sale}',
@@ -1085,8 +1113,8 @@ Route::get(
     )->middleware(
         'role:admin,chef_magasinier'
     )->name('sales.destroy');
-
 });
+
 
 /*
 |--------------------------------------------------------------------------

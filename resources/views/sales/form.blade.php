@@ -94,37 +94,21 @@
                         Numéro d’immatriculation
                     </label>
 
-                    <select
+                   <select
                         name="vehicle_id"
                         id="vehicle_id"
-                        class="form-control vehicle-select"
+                        class="form-select"
+                        data-selected="{{ old('vehicle_id') }}"
+                        disabled
                         required
                     >
                         <option value="">
-                            Sélectionner une immatriculation
+                            Sélectionnez d’abord un client
                         </option>
-
-                        @foreach($vehicles as $vehicle)
-                            <option
-                                value="{{ $vehicle->id }}"
-                                data-customer-id="{{ $vehicle->customer_id }}"
-                                {{ old('vehicle_id') == $vehicle->id ? 'selected' : '' }}
-                            >
-                                {{ $vehicle->plate_number }}
-
-                                @if(!empty($vehicle->brand) || !empty($vehicle->model))
-                                    - {{ $vehicle->brand }} {{ $vehicle->model }}
-                                @endif
-
-                                @if($vehicle->customer)
-                                    - Client : {{ $vehicle->customer->name }}
-                                @endif
-                            </option>
-                        @endforeach
                     </select>
 
                     @error('vehicle_id')
-                        <div class="text-danger small mt-1">
+                        <div class="text-danger mt-1">
                             {{ $message }}
                         </div>
                     @enderror
@@ -996,5 +980,137 @@ document.addEventListener('DOMContentLoaded', function () {
     calculateGrandTotal();
 });
 </script>
+
+@push('scripts')
+<script>
+$(document).ready(function () {
+    const customerSelect = $('#customer_id');
+    const vehicleSelect = $('#vehicle_id');
+
+    if (!customerSelect.hasClass('select2-hidden-accessible')) {
+        customerSelect.select2({
+            width: '100%',
+            placeholder: 'Rechercher un client',
+            allowClear: true
+        });
+    }
+
+    if (!vehicleSelect.hasClass('select2-hidden-accessible')) {
+        vehicleSelect.select2({
+            width: '100%',
+            placeholder: 'Sélectionnez d’abord un client',
+            allowClear: true
+        });
+    }
+
+    function resetVehicleSelect(message) {
+        vehicleSelect.empty();
+
+        vehicleSelect.append(
+            new Option(
+                message || 'Sélectionnez d’abord un client',
+                '',
+                true,
+                true
+            )
+        );
+
+        vehicleSelect
+            .prop('disabled', true)
+            .trigger('change');
+    }
+
+    function loadVehicles(customerId, selectedVehicleId = null) {
+        if (!customerId) {
+            resetVehicleSelect();
+            return;
+        }
+
+        resetVehicleSelect('Chargement des véhicules...');
+
+        const url = "{{ route('sales.customers.vehicles', ['customer' => '__CUSTOMER_ID__']) }}"
+            .replace('__CUSTOMER_ID__', customerId);
+
+        $.ajax({
+            url: url,
+            type: 'GET',
+            dataType: 'json',
+
+            success: function (response) {
+                vehicleSelect.empty();
+
+                vehicleSelect.append(
+                    new Option(
+                        'Sélectionner une immatriculation',
+                        '',
+                        false,
+                        false
+                    )
+                );
+
+                if (
+                    response.success &&
+                    Array.isArray(response.vehicles) &&
+                    response.vehicles.length > 0
+                ) {
+                    response.vehicles.forEach(function (vehicle) {
+                        const selected =
+                            String(vehicle.id) === String(selectedVehicleId);
+
+                        vehicleSelect.append(
+                            new Option(
+                                vehicle.label,
+                                vehicle.id,
+                                false,
+                                selected
+                            )
+                        );
+                    });
+
+                    vehicleSelect.prop('disabled', false);
+
+                    if (selectedVehicleId) {
+                        vehicleSelect
+                            .val(String(selectedVehicleId))
+                            .trigger('change');
+                    } else {
+                        vehicleSelect
+                            .val('')
+                            .trigger('change');
+                    }
+                } else {
+                    resetVehicleSelect(
+                        'Aucun véhicule associé à ce client'
+                    );
+                }
+            },
+
+            error: function (xhr) {
+                console.error(xhr.responseText);
+
+                resetVehicleSelect(
+                    'Erreur lors du chargement des véhicules'
+                );
+            }
+        });
+    }
+
+    customerSelect.on('change', function () {
+        const customerId = $(this).val();
+
+        loadVehicles(customerId);
+    });
+
+    const initialCustomerId = customerSelect.val();
+    const oldVehicleId = vehicleSelect.data('selected');
+
+    if (initialCustomerId) {
+        loadVehicles(initialCustomerId, oldVehicleId);
+    } else {
+        resetVehicleSelect();
+    }
+});
+</script>
+@endpush
 
 @endsection

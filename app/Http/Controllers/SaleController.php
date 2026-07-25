@@ -10,6 +10,8 @@ use App\Models\StockMovement;
 use App\Models\Customer;
 use App\Models\ProductDepotStock;
 use App\Models\Vehicle;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\Rule;
 
 use Barryvdh\DomPDF\Facade\Pdf;
 use NumberToWords\NumberToWords;
@@ -234,6 +236,49 @@ use Illuminate\Support\Facades\DB;
 
         /*
         |--------------------------------------------------------------------------
+        | VÉHICULES ASSOCIÉS AU CLIENT — AJAX
+        |--------------------------------------------------------------------------
+        */
+
+        public function vehiclesByCustomer(Customer $customer): JsonResponse
+        {
+            $vehicles = Vehicle::query()
+                ->where('customer_id', $customer->id)
+                ->orderBy('plate_number')
+                ->get([
+                    'id',
+                    'customer_id',
+                    'plate_number',
+                    'brand',
+                    'model',
+                ])
+                ->map(function (Vehicle $vehicle): array {
+                    $description = trim(
+                        implode(' ', array_filter([
+                            $vehicle->brand,
+                            $vehicle->model,
+                        ]))
+                    );
+
+                    return [
+                        'id' => $vehicle->id,
+                        'customer_id' => $vehicle->customer_id,
+                        'plate_number' => $vehicle->plate_number,
+
+                        'label' => $description !== ''
+                            ? $vehicle->plate_number . ' - ' . $description
+                            : $vehicle->plate_number,
+                    ];
+                })
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'vehicles' => $vehicles,
+            ]);
+        }
+        /*
+        |--------------------------------------------------------------------------
         | STORE
         |--------------------------------------------------------------------------
         */
@@ -247,9 +292,17 @@ use Illuminate\Support\Facades\DB;
                         'exists:customers,id',
                     ],
 
-                      'vehicle_id' => [
+                     'vehicle_id' => [
                         'required',
-                        'exists:vehicles,id',
+                        'integer',
+
+                        Rule::exists('vehicles', 'id')
+                            ->where(
+                                fn ($query) => $query->where(
+                                    'customer_id',
+                                    $request->input('customer_id')
+                                )
+                            ),
                     ],
 
                     'payment_type' => [
