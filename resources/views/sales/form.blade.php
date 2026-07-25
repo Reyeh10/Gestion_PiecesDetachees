@@ -2,1054 +2,999 @@
 
 @section('content')
 
-<form action="{{ route('sales.store') }}" method="POST">
+<form action="{{ route('sales.store') }}" method="POST" id="saleForm">
+    @csrf
 
-@csrf
+    {{-- ALERTES --}}
+    @if(session('success'))
+        <div class="alert alert-success">
+            {{ session('success') }}
+        </div>
+    @endif
 
-{{-- ALERTS --}}
-@if(session('success'))
-    <div class="alert alert-success">
-        {{ session('success') }}
-    </div>
-@endif
+    @if(session('error'))
+        <div class="alert alert-danger">
+            {{ session('error') }}
+        </div>
+    @endif
 
-@if(session('error'))
-    <div class="alert alert-danger">
-        {{ session('error') }}
-    </div>
-@endif
+    @if($errors->any())
+        <div class="alert alert-danger">
+            <ul class="mb-0">
+                @foreach($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
 
-@if($errors->any())
-    <div class="alert alert-danger">
-        <ul class="mb-0">
-            @foreach($errors->all() as $e)
-                <li>{{ $e }}</li>
-            @endforeach
-        </ul>
-    </div>
-@endif
+    <div class="card shadow-sm border-0">
 
-<div class="card shadow-sm border-0">
+        <div class="card-header border-0 pb-0">
+            <h3 class="mb-0 fw-bold">
+                Nouvelle vente
+            </h3>
+        </div>
 
-    {{-- HEADER --}}
-    <div class="card-header border-0 pb-0">
-        <h3 class="mb-0 fw-bold">
-            Nouvelle vente
-        </h3>
-    </div>
+        <div class="card-body">
 
-    {{-- BODY --}}
-    <div class="card-body">
+            {{-- CLIENT, VÉHICULE ET PAIEMENT --}}
+            <div class="row align-items-end">
 
-        <div class="row align-items-end">
+                {{-- CLIENT --}}
+                <div class="col-lg-4 col-md-6 mb-3">
 
-            {{-- CLIENT --}}
-            <div class="col-md-6 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label for="customer_id" class="form-label fw-semibold mb-0">
+                            Client
+                        </label>
 
-                <div class="d-flex justify-content-between align-items-center mb-2">
-
-                    <label class="form-label fw-semibold mb-0">
-                        Client
-                    </label>
-
-                    <button type="button"
+                        <button
+                            type="button"
                             class="btn btn-primary btn-sm"
                             data-bs-toggle="modal"
-                            data-bs-target="#customerModal">
+                            data-bs-target="#customerModal"
+                        >
+                            <i class="bx bx-plus"></i>
+                            Nouveau client
+                        </button>
+                    </div>
 
-                        <i class="bx bx-plus"></i>
-                        Nouveau client
-                    </button>
-
-                </div>
-
-                <select name="customer_id"
-                        class="form-control select2">
-
-                    <option value="">
-                        Vente comptoir
-                    </option>
-
-                    @foreach($customers as $c)
-
-                        <option value="{{ $c->id }}"
-                            {{ old('customer_id') == $c->id ? 'selected' : '' }}>
-
-                            {{ $c->name }}
-
+                    <select
+                        name="customer_id"
+                        id="customer_id"
+                        class="form-control select2"
+                        required
+                    >
+                        <option value="">
+                            Sélectionner un client
                         </option>
 
-                    @endforeach
+                        @foreach($customers as $customer)
+                            <option
+                                value="{{ $customer->id }}"
+                                {{ old('customer_id') == $customer->id ? 'selected' : '' }}
+                            >
+                                {{ $customer->name }}
+                            </option>
+                        @endforeach
+                    </select>
 
-                </select>
-
-            </div>
-
-            {{-- PAIEMENT --}}
-            <div class="col-md-3 mb-3">
-
-                <label class="form-label fw-semibold">
-                    Paiement
-                </label>
-
-                <select name="payment_type"
-                        class="form-control"
-                        required>
-
-                    <option value="cash">
-                        Cash
-                    </option>
-
-                    <option value="bon_commande">
-                        Bon de commande
-                    </option>
-
-                </select>
-
-            </div>
-
-        </div>
-
-        {{-- TABLE --}}
-        <div class="table-responsive mt-4">
-
-            <table class="table table-bordered align-middle"
-                   id="itemsTable">
-
-               <thead class="table-light">
-                    <tr>
-                        <th style="min-width: 360px;">
-                            Référence / Produit
-                        </th>
-
-                        <th style="min-width: 260px;">
-                            Immatriculation
-                        </th>
-
-                        <th style="min-width: 100px;"
-                            class="text-center">
-                            Stock
-                        </th>
-
-                        <th style="min-width: 160px;">
-                            Prix unitaire
-                        </th>
-
-                        <th style="min-width: 100px;">
-                            Qté
-                        </th>
-
-                        <th style="min-width: 130px;">
-                            Total
-                        </th>
-
-                        <th style="min-width: 90px;"
-                            class="text-center">
-                            Action
-                        </th>
-                    </tr>
-                </thead>
-
-                <tbody></tbody>
-
-            </table>
-
-        </div>
-
-        {{-- BTN AJOUT --}}
-        <button type="button"
-                class="btn btn-success mt-2"
-                onclick="addRow()">
-
-            <i class="bx bx-plus"></i>
-            Ajouter produit
-
-        </button>
-
-        <hr class="my-4">
-
-        {{-- TOTALS --}}
-        <div class="row justify-content-end">
-
-            <div class="col-md-4">
-
-                <div class="d-flex justify-content-between mb-2">
-
-                    <strong>
-                        Sous-total :
-                    </strong>
-
-                    <span id="subTotal">
-                        0.00
-                    </span>
-
+                    @error('customer_id')
+                        <div class="text-danger small mt-1">
+                            {{ $message }}
+                        </div>
+                    @enderror
                 </div>
 
-                {{-- REMISE --}}
-                <div class="mb-3">
+                {{-- VÉHICULE --}}
+                <div class="col-lg-4 col-md-6 mb-3">
 
-                    <label class="form-label">
-                        Remise
+                    <label for="vehicle_id" class="form-label fw-semibold">
+                        Numéro d’immatriculation
                     </label>
 
-                    <input type="number"
-                           step="0.01"
-                          min="0"
-                           name="discount"
-                           id="discount"
-                           value="0"
-                           class="form-control"
-                           oninput="calculateGrandTotal()">
+                    <select
+                        name="vehicle_id"
+                        id="vehicle_id"
+                        class="form-control vehicle-select"
+                        required
+                    >
+                        <option value="">
+                            Sélectionner une immatriculation
+                        </option>
 
+                        @foreach($vehicles as $vehicle)
+                            <option
+                                value="{{ $vehicle->id }}"
+                                data-customer-id="{{ $vehicle->customer_id }}"
+                                {{ old('vehicle_id') == $vehicle->id ? 'selected' : '' }}
+                            >
+                                {{ $vehicle->plate_number }}
+
+                                @if(!empty($vehicle->brand) || !empty($vehicle->model))
+                                    - {{ $vehicle->brand }} {{ $vehicle->model }}
+                                @endif
+
+                                @if($vehicle->customer)
+                                    - Client : {{ $vehicle->customer->name }}
+                                @endif
+                            </option>
+                        @endforeach
+                    </select>
+
+                    @error('vehicle_id')
+                        <div class="text-danger small mt-1">
+                            {{ $message }}
+                        </div>
+                    @enderror
+
+                    <!--small class="text-muted">
+                        Le véhicule sélectionné sera associé à toute la vente.
+                    </small-->
                 </div>
 
-                {{-- TVA --}}
-                <div class="d-flex justify-content-between mb-2">
+                {{-- PAIEMENT --}}
+                <div class="col-lg-4 col-md-6 mb-3">
 
-                    <strong>
-                        TVA (10%)
-                    </strong>
+                    <label for="payment_type" class="form-label fw-semibold">
+                        Paiement
+                    </label>
 
-                    <span id="tvaAmount">
-                        0.00
-                    </span>
+                    <select
+                        name="payment_type"
+                        id="payment_type"
+                        class="form-control"
+                        required
+                    >
+                        <option
+                            value="cash"
+                            {{ old('payment_type', 'cash') === 'cash' ? 'selected' : '' }}
+                        >
+                            Cash
+                        </option>
 
+                        <option
+                            value="bon_commande"
+                            {{ old('payment_type') === 'bon_commande' ? 'selected' : '' }}
+                        >
+                            Bon de commande
+                        </option>
+                    </select>
+
+                    @error('payment_type')
+                        <div class="text-danger small mt-1">
+                            {{ $message }}
+                        </div>
+                    @enderror
                 </div>
 
-                {{-- TOTAL --}}
-                <div class="d-flex justify-content-between align-items-center mt-4">
+            </div>
 
-                    <h4 class="mb-0 fw-bold">
-                        Total :
-                    </h4>
+            <hr class="my-4">
 
-                    <h2 class="text-primary fw-bold mb-0">
+            {{-- PRODUITS --}}
+            <div class="table-responsive">
 
-                        <span id="grandTotal">
-                            0.00
+                <table
+                    class="table table-bordered align-middle mb-0"
+                    id="itemsTable"
+                >
+                    <thead class="table-light">
+                        <tr>
+                            <th style="min-width: 360px;">
+                                Référence / Produit
+                            </th>
+
+                            <th
+                                style="min-width: 120px;"
+                                class="text-center"
+                            >
+                                Stock
+                            </th>
+
+                            <th style="min-width: 260px; width: 260px;">
+                                Prix unitaire
+                            </th>
+
+                            <th style="min-width: 120px;">
+                                Quantité
+                            </th>
+
+                            <th style="min-width: 150px;">
+                                Total
+                            </th>
+
+                            <th
+                                style="min-width: 90px;"
+                                class="text-center"
+                            >
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+
+                    <tbody></tbody>
+                </table>
+
+            </div>
+
+            <button
+                type="button"
+                class="btn btn-success mt-3"
+                id="addProductButton"
+            >
+                <i class="bx bx-plus"></i>
+                Ajouter produit
+            </button>
+
+            <hr class="my-4">
+
+            {{-- TOTAUX --}}
+            <div class="row justify-content-end">
+
+                <div class="col-lg-5 col-md-6">
+
+                    <div class="d-flex justify-content-between mb-3">
+                        <strong>Sous-total :</strong>
+
+                        <span>
+                            <span id="subTotal">0.00</span>
+                            FDJ
                         </span>
+                    </div>
 
-                    </h2>
+                    <div class="mb-3">
+                        <label for="discount" class="form-label fw-semibold">
+                            Remise (%)
+                        </label>
+
+                        <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            name="discount"
+                            id="discount"
+                            value="{{ old('discount', 0) }}"
+                            class="form-control"
+                        >
+
+                        @error('discount')
+                            <div class="text-danger small mt-1">
+                                {{ $message }}
+                            </div>
+                        @enderror
+                    </div>
+
+                    <div class="d-flex justify-content-between mb-3">
+                        <strong>Montant de la remise :</strong>
+
+                        <span class="text-danger">
+                            -
+                            <span id="discountAmount">0.00</span>
+                            FDJ
+                        </span>
+                    </div>
+
+                    <div class="d-flex justify-content-between mb-3">
+                        <strong>TVA (10 %) :</strong>
+
+                        <span>
+                            <span id="tvaAmount">0.00</span>
+                            FDJ
+                        </span>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mt-4">
+                        <h4 class="mb-0 fw-bold">
+                            Total :
+                        </h4>
+
+                        <h3 class="text-primary fw-bold mb-0">
+                            <span id="grandTotal">0.00</span>
+                            FDJ
+                        </h3>
+                    </div>
 
                 </div>
 
             </div>
 
+            <input
+                type="hidden"
+                name="final_total"
+                id="final_total_input"
+                value="0"
+            >
+
         </div>
 
-        <input type="hidden"
-               name="final_total"
-               id="final_total_input">
+        <div class="card-footer bg-white text-end border-0">
+
+            <button
+                type="submit"
+                class="btn btn-primary px-4"
+            >
+                <i class="bx bx-check-circle"></i>
+                Valider la vente
+            </button>
+
+        </div>
 
     </div>
-
-    {{-- FOOTER --}}
-    <div class="card-footer bg-white text-end border-0">
-
-        <button type="submit"
-                class="btn btn-primary px-4">
-
-            <i class="bx bx-check-circle"></i>
-            Valider vente
-
-        </button>
-
-    </div>
-
-</div>
-
 </form>
 
-{{-- ================= MODAL CLIENT ================= --}}
-<div class="modal fade"
-     id="customerModal"
-     tabindex="-1">
-
+{{-- MODAL NOUVEAU CLIENT --}}
+<div
+    class="modal fade"
+    id="customerModal"
+    tabindex="-1"
+    aria-hidden="true"
+>
     <div class="modal-dialog">
-
         <div class="modal-content">
 
             <div class="modal-header">
-
                 <h5 class="modal-title">
                     Nouveau client
                 </h5>
 
-                <button type="button"
-                        class="btn-close"
-                        data-bs-dismiss="modal">
-                </button>
-
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Fermer"
+                ></button>
             </div>
 
             <div class="modal-body">
 
-                <div id="customerModalError"
-                     class="alert alert-danger d-none">
-                </div>
+                <div
+                    id="customerModalError"
+                    class="alert alert-danger d-none"
+                ></div>
 
                 <div class="mb-3">
-
-                    <label class="form-label">
+                    <label for="customer_code" class="form-label">
                         Code *
                     </label>
 
-                    <input type="text"
+                    <input
+                        type="text"
                         id="customer_code"
-                        class="form-control">
-
+                        class="form-control"
+                    >
                 </div>
+
                 <div class="mb-3">
-                    <label class="form-label">
+                    <label for="customer_name" class="form-label">
                         Nom *
                     </label>
 
-                    <input type="text"
-                           id="customer_name"
-                           class="form-control">
+                    <input
+                        type="text"
+                        id="customer_name"
+                        class="form-control"
+                    >
                 </div>
 
                 <div class="mb-3">
-
-                    <label class="form-label">
+                    <label for="customer_phone" class="form-label">
                         Téléphone
                     </label>
 
-                    <input type="text"
-                           id="customer_phone"
-                           class="form-control">
-
+                    <input
+                        type="text"
+                        id="customer_phone"
+                        class="form-control"
+                    >
                 </div>
 
                 <div class="mb-3">
-
-                    <label class="form-label">
+                    <label for="customer_email" class="form-label">
                         Email
                     </label>
 
-                    <input type="email"
-                           id="customer_email"
-                           class="form-control">
-
+                    <input
+                        type="email"
+                        id="customer_email"
+                        class="form-control"
+                    >
                 </div>
 
             </div>
 
             <div class="modal-footer">
 
-                <button type="button"
-                        class="btn btn-secondary"
-                        data-bs-dismiss="modal">
-
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-bs-dismiss="modal"
+                >
                     Annuler
-
                 </button>
 
-                <button type="button"
-                        id="saveCustomerBtn"
-                        class="btn btn-primary">
-
+                <button
+                    type="button"
+                    id="saveCustomerBtn"
+                    class="btn btn-primary"
+                >
                     Enregistrer
-
                 </button>
 
             </div>
 
         </div>
-
     </div>
-
 </div>
 
-{{-- ================= SCRIPT ================= --}}
 <script>
+document.addEventListener('DOMContentLoaded', function () {
 
-let rowIndex = 0;
+    let rowIndex = 0;
 
-/*
-|--------------------------------------------------------------------------
-| ADD ROW
-|--------------------------------------------------------------------------
-*/
+    const itemsTableBody = document.querySelector('#itemsTable tbody');
+    const addProductButton = document.getElementById('addProductButton');
+    const discountInput = document.getElementById('discount');
+    const customerSelect = document.getElementById('customer_id');
+    const vehicleSelect = document.getElementById('vehicle_id');
+    const saleForm = document.getElementById('saleForm');
 
-function addRow()
-{
-    const table =
-        document.querySelector('#itemsTable tbody');
+    /*
+    |--------------------------------------------------------------------------
+    | SELECT2
+    |--------------------------------------------------------------------------
+    */
 
-    const row = `
+    $('#customer_id').select2({
+        width: '100%',
+        placeholder: 'Sélectionner un client',
+        allowClear: true
+    });
 
-        <tr>
+    $('#vehicle_id').select2({
+        width: '100%',
+        placeholder: 'Rechercher une immatriculation',
+        allowClear: true
+    });
 
-            {{-- PRODUIT --}}
+    /*
+    |--------------------------------------------------------------------------
+    | AJOUTER UNE LIGNE PRODUIT
+    |--------------------------------------------------------------------------
+    */
+
+    function addRow(oldItem = null) {
+
+        const currentIndex = rowIndex;
+
+        const row = document.createElement('tr');
+
+        row.innerHTML = `
             <td>
-
-                <select name="items[${rowIndex}][product_id]"
-                    class="form-control product-select product-large-select"
-                        required
-                        onchange="updatePriceAndStock(this, ${rowIndex})">
-
+                <select
+                    name="items[${currentIndex}][product_id]"
+                    class="form-control product-select"
+                    required
+                >
                     <option value="">
-                        Choisir produit
+                        Choisir un produit
                     </option>
 
                     @foreach($products as $product)
-
-                <option value="{{ $product->id }}"
-                    data-price="{{ $product->sale_price }}"
-                    data-stock="{{ $product->quantity }}"
-                    data-unit="{{ $product->unit_label }}">
-
-                    {{ $product->reference }}
-                    |
-                    {{ $product->designation }}
-                    |
-                    {{ $product->brand->name ?? '' }}
-                    |
-                    {{ $product->model->name ?? '' }}
-
-                </option>
-
-                    @endforeach
-
-                </select>
-
-            </td>
-
-            {{-- VÉHICULE --}}
-            <td>
-                <select
-                    name="items[${rowIndex}][vehicle_id]"
-                    class="form-control vehicle-select"
-                    id="vehicle_${rowIndex}"
-                    onchange="toggleNewPlateField(${rowIndex})"
-                >
-                    <option value="">
-                        Sélectionner un véhicule
-                    </option>
-
-                    @foreach($vehicles as $vehicle)
                         <option
-                            value="{{ $vehicle->id }}"
-                            data-customer-id="{{ $vehicle->customer_id }}"
+                            value="{{ $product->id }}"
+                            data-price="{{ $product->sale_price }}"
+                            data-stock="{{ $product->quantity }}"
+                            data-unit="{{ $product->unit_label ?? 'Pièce' }}"
                         >
-                            {{ $vehicle->plate_number }}
-
-                            @if($vehicle->brand || $vehicle->model)
-                                -
-                                {{ $vehicle->brand }}
-                                {{ $vehicle->model }}
-                            @endif
-
-                            @if($vehicle->customer)
-                                -
-                                {{ $vehicle->customer->name }}
-                            @endif
+                            {{ $product->reference }}
+                            |
+                            {{ $product->designation }}
+                            |
+                            {{ $product->brand->name ?? '' }}
+                            |
+                            {{ $product->model->name ?? '' }}
                         </option>
                     @endforeach
-
-                    <option value="new">
-                        + Nouvelle immatriculation
-                    </option>
                 </select>
-
-                <div
-                    id="new_plate_container_${rowIndex}"
-                    class="mt-2 d-none"
-                >
-                    <input
-                        type="text"
-                        name="items[${rowIndex}][plate_number]"
-                        id="plate_number_${rowIndex}"
-                        class="form-control text-uppercase"
-                        placeholder="Exemple : 336D106"
-                        maxlength="50"
-                        oninput="formatPlateNumber(this)"
-                    >
-
-                    <small class="text-muted">
-                        Saisissez l'immatriculation sans espace.
-                    </small>
-                </div>
             </td>
 
-            {{-- STOCK --}}
             <td class="text-center fw-bold">
-
-               <span id="stock_${rowIndex}">
-                    0
-                </span>
-
-                <small id="stock_unit_${rowIndex}">
+                <span id="stock_${currentIndex}">0</span>
+                <br>
+                <small id="stock_unit_${currentIndex}">
                     Pièce
                 </small>
-
             </td>
 
-            {{-- PRIX --}}
-            <td>
+            <td style="width: 280px; min-width: 280px;">
 
-                <div class="input-group">
+                <div
+                    class="d-flex align-items-center justify-content-between gap-2"
+                    style="min-width: 250px;"
+                >
+                    {{-- Valeur numérique envoyée au serveur --}}
+                    <input
+                        type="hidden"
+                        name="items[${currentIndex}][price]"
+                        id="price_${currentIndex}"
+                        value="0"
+                    >
 
-                    <input type="number"
-                        step="0.01"
-                        name="items[${rowIndex}][price]"
-                        id="price_${rowIndex}"
-                        class="form-control"
-                        readonly>
+                    {{-- Prix visible --}}
+                    <div
+                        class="form-control text-end fw-bold bg-white"
+                        id="price_display_${currentIndex}"
+                        style="
+                            min-width: 145px;
+                            width: 145px;
+                            font-size: 16px;
+                            white-space: nowrap;
+                            overflow: visible;
+                        "
+                    >
+                        0
+                    </div>
 
-                    <span class="input-group-text">
-
-                        <span id="price_unit_${rowIndex}">
+                    <span
+                        class="fw-semibold text-nowrap"
+                        style="min-width: 90px;"
+                    >
+                        FDJ /
+                        <span id="price_unit_${currentIndex}">
                             Pièce
                         </span>
-
                     </span>
-
                 </div>
 
             </td>
 
-            {{-- QUANTITE --}}
             <td>
-
-                <input type="number"
+                <input
+                    type="number"
                     step="0.01"
                     min="0.01"
-                    name="items[${rowIndex}][quantity]"
-                    id="qty_${rowIndex}"
+                    name="items[${currentIndex}][quantity]"
+                    id="qty_${currentIndex}"
                     class="form-control"
-                    oninput="calculateRow(${rowIndex})"
-                    required>
-
+                    value="1"
+                    required
+                >
             </td>
 
-            {{-- TOTAL --}}
             <td class="fw-bold">
-
-                <span id="total_${rowIndex}">
+                <span id="total_${currentIndex}">
                     0.00
                 </span>
-
+                FDJ
             </td>
 
-            {{-- ACTION --}}
             <td class="text-center">
-
-                <button type="button"
-                        class="btn btn-danger btn-sm"
-                        onclick="removeRow(this)">
-
-                    X
-
+                <button
+                    type="button"
+                    class="btn btn-danger btn-sm remove-row"
+                    title="Supprimer cette ligne"
+                >
+                    <i class="bx bx-trash"></i>
                 </button>
-
             </td>
+        `;
 
-        </tr>
+        itemsTableBody.appendChild(row);
 
-    `;
+        const productSelect = row.querySelector('.product-select');
+        const quantityInput = row.querySelector(`#qty_${currentIndex}`);
+        const removeButton = row.querySelector('.remove-row');
 
-    table.insertAdjacentHTML('beforeend', row);
-
-            const newSelect =
-            table.querySelector('tr:last-child .product-select');
-
-        $(newSelect).select2({
-
+        $(productSelect).select2({
             width: '100%',
-
-            placeholder:
-                'Rechercher par référence, désignation, marque ou modèle',
-
-            allowClear: true
-
-        });
-
-        const newVehicleSelect =
-            table.querySelector(
-                'tr:last-child .vehicle-select'
-            );
-
-        $(newVehicleSelect).select2({
-            width: '100%',
-            placeholder:
-                'Rechercher une immatriculation',
+            placeholder: 'Rechercher par référence, désignation, marque ou modèle',
             allowClear: true
         });
 
-    rowIndex++;
-}
-
-/*
-|--------------------------------------------------------------------------
-| UPDATE PRICE
-|--------------------------------------------------------------------------
-*/
-
-function updatePriceAndStock(select, index)
-{
-    const option =
-        select.options[select.selectedIndex];
-
-    const price =
-        parseFloat(option.dataset.price || 0);
-
-    const stock =
-        parseFloat(option.dataset.stock || 0);
-        const unit =
-    option.dataset.unit || 'Pièce';
-
-    document.getElementById(
-        `price_${index}`
-    ).value = parseFloat(price).toFixed(2);
-
-    document.getElementById(
-        `stock_${index}`
-    ).innerText = stock;
-
-    document.getElementById(
-    `stock_unit_${index}`
-    ).innerText = unit;
-
-    document.getElementById(
-        `price_unit_${index}`
-    ).innerText = unit;
-
-    calculateRow(index);
-}
-
-/*
-|--------------------------------------------------------------------------
-| CALCUL LIGNE
-|--------------------------------------------------------------------------
-*/
-
-function calculateRow(index)
-{
-    const price = parseFloat(
-        document.getElementById(
-            `price_${index}`
-        ).value
-    ) || 0;
-
-    const qty = parseFloat(
-        document.getElementById(
-            `qty_${index}`
-        ).value
-    ) || 0;
-
-    const stock = parseFloat(
-        document.getElementById(
-            `stock_${index}`
-        ).innerText
-    ) || 0;
-
-    const unit =
-    document.getElementById(
-        `stock_unit_${index}`
-    ).innerText;
-    /*
-    |--------------------------------------------------------------------------
-    | VERIFICATION STOCK
-    |--------------------------------------------------------------------------
-    */
-
-    if (qty > stock) {
-
-        Swal.fire({
-
-            icon: 'warning',
-
-            title: 'Stock insuffisant',
-
-            text:
-              'Stock disponible : ' + stock + ' ' + unit,
-
-            confirmButtonColor: '#696cff'
+        $(productSelect).on('change', function () {
+            updatePriceAndStock(this, currentIndex);
         });
 
-        document.getElementById(
-            `qty_${index}`
-        ).value = stock;
-    }
-
-    const finalQty = parseFloat(
-        document.getElementById(
-            `qty_${index}`
-        ).value
-    ) || 0;
-
-    const total = price * finalQty;
-
-    document.getElementById(
-        `total_${index}`
-    ).innerText = total.toFixed(2);
-
-    calculateGrandTotal();
-}
-
-/*
-|--------------------------------------------------------------------------
-| GRAND TOTAL
-|--------------------------------------------------------------------------
-*/
-
-function calculateGrandTotal()
-{
-    let subtotal = 0;
-
-    document.querySelectorAll('[id^="total_"]')
-        .forEach(el => {
-
-            subtotal +=
-                parseFloat(el.innerText) || 0;
-
+        quantityInput.addEventListener('input', function () {
+            calculateRow(currentIndex);
         });
 
-    const discount = parseFloat(
-        document.getElementById('discount').value
-    ) || 0;
-
-    const discountAmount =
-    (subtotal * discount) / 100;
-
-    const taxable =
-        subtotal - discountAmount;
-
-    const tva = taxable * 0.10;
-
-    let total = taxable + tva;
-
-    if (total < 0) {
-
-        total = 0;
-    }
-
-    document.getElementById(
-        'subTotal'
-    ).innerText = subtotal.toFixed(2);
-
-    document.getElementById(
-        'tvaAmount'
-    ).innerText = tva.toFixed(2);
-
-    document.getElementById(
-    'grandTotal'
-    ).innerText = Math.round(total);
-
-    document.getElementById(
-        'final_total_input'
-    ).value = Math.round(total);
-}
-
-/*
-|--------------------------------------------------------------------------
-| REMOVE ROW
-|--------------------------------------------------------------------------
-*/
-
-function removeRow(button)
-{
-    button.closest('tr').remove();
-
-    calculateGrandTotal();
-}
-/*
-|--------------------------------------------------------------------------
-| AFFICHER LE CHAMP NOUVELLE IMMATRICULATION
-|--------------------------------------------------------------------------
-*/
-
-function toggleNewPlateField(index)
-{
-    const vehicleSelect =
-        document.getElementById(
-            `vehicle_${index}`
-        );
-
-    const container =
-        document.getElementById(
-            `new_plate_container_${index}`
-        );
-
-    const plateInput =
-        document.getElementById(
-            `plate_number_${index}`
-        );
-
-    if (!vehicleSelect || !container || !plateInput) {
-        return;
-    }
-
-    if (vehicleSelect.value === 'new') {
-        /*
-        |--------------------------------------------------------------------------
-        | L'UTILISATEUR VEUT CRÉER UN NOUVEAU VÉHICULE
-        |--------------------------------------------------------------------------
-        */
-
-        container.classList.remove('d-none');
-
-        plateInput.required = true;
-
-        /*
-        |--------------------------------------------------------------------------
-        | NE PAS ENVOYER "new" COMME vehicle_id
-        |--------------------------------------------------------------------------
-        */
-
-        vehicleSelect.removeAttribute('name');
-
-        plateInput.focus();
-    } else {
-        /*
-        |--------------------------------------------------------------------------
-        | VÉHICULE EXISTANT OU AUCUN VÉHICULE
-        |--------------------------------------------------------------------------
-        */
-
-        container.classList.add('d-none');
-
-        plateInput.required = false;
-
-        plateInput.value = '';
-
-        vehicleSelect.setAttribute(
-            'name',
-            `items[${index}][vehicle_id]`
-        );
-    }
-}
-
-/*
-|--------------------------------------------------------------------------
-| FORMATAGE DE L'IMMATRICULATION
-|--------------------------------------------------------------------------
-*/
-
-function formatVehiclePlate(input)
-{
-    input.value = input.value
-        .toUpperCase()
-        .replace(/[^A-Z0-9]/g, '');
-}
-/*
-|--------------------------------------------------------------------------
-| DEFAULT ROW
-|--------------------------------------------------------------------------
-*/
-
-document.addEventListener('DOMContentLoaded', function () {
-
-    addRow();
-
-});
-
-/*
-|--------------------------------------------------------------------------
-| CREATE CUSTOMER AJAX
-|--------------------------------------------------------------------------
-*/
-
-document.getElementById(
-    'saveCustomerBtn'
-).addEventListener('click', function () {
-
-    const code =
-    document.getElementById(
-        'customer_code'
-    ).value.trim();
-
-    document.getElementById(
-            'customer_code'
-        ).value = '';
-
-    const name =
-        document.getElementById(
-            'customer_name'
-        ).value.trim();
-
-    const phone =
-        document.getElementById(
-            'customer_phone'
-        ).value.trim();
-
-    const email =
-        document.getElementById(
-            'customer_email'
-        ).value.trim();
-
-    const errorBox =
-        document.getElementById(
-            'customerModalError'
-        );
-
-    errorBox.classList.add('d-none');
-
-    errorBox.innerHTML = '';
-
-    /*
-    |--------------------------------------------------------------------------
-    | VALIDATION
-    |--------------------------------------------------------------------------
-    */
-
-   if (!code || !name) {
-
-        errorBox.innerHTML =
-            'Le code et le nom du client sont obligatoires.';
-
-        errorBox.classList.remove('d-none');
-
-        return;
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | AJAX
-    |--------------------------------------------------------------------------
-    */
-
-    fetch("{{ route('customers.store') }}", {
-
-        method: "POST",
-
-        headers: {
-
-            "Content-Type": "application/json",
-
-            "X-CSRF-TOKEN":
-                "{{ csrf_token() }}",
-
-            "Accept":
-                "application/json"
-        },
-
-       body: JSON.stringify({
-
-            code: code,
-
-            name: name,
-
-            phone: phone,
-
-            email: email
-        })
-
-    })
-
-    .then(async response => {
-
-        const data = await response.json();
-
-        if (!response.ok) {
-
-            throw data;
+        removeButton.addEventListener('click', function () {
+            $(productSelect).select2('destroy');
+            row.remove();
+
+            if (itemsTableBody.querySelectorAll('tr').length === 0) {
+                addRow();
+            }
+
+            calculateGrandTotal();
+        });
+
+        if (oldItem && oldItem.product_id) {
+            $(productSelect)
+                .val(String(oldItem.product_id))
+                .trigger('change');
+
+            quantityInput.value = oldItem.quantity ?? 1;
+            calculateRow(currentIndex);
         }
 
-        return data;
-    })
+        rowIndex++;
+    }
 
-    .then(data => {
+    /*
+    |--------------------------------------------------------------------------
+    | PRIX ET STOCK
+    |--------------------------------------------------------------------------
+    */
 
-        if (data.success) {
+    function updatePriceAndStock(select, index) {
 
-            const select =
-                document.querySelector(
-                    'select[name="customer_id"]'
-                );
+        const selectedOption = select.options[select.selectedIndex];
 
-            const option = new Option(
+        const price = parseFloat(
+            selectedOption?.dataset?.price || 0
+        );
 
-                data.customer.name,
+        const stock = parseFloat(
+            selectedOption?.dataset?.stock || 0
+        );
 
-                data.customer.id,
+        const unit =
+            selectedOption?.dataset?.unit || 'Pièce';
 
-                true,
+        document.getElementById(`price_${index}`).value =
+            price.toFixed(2);
 
-                true
-            );
+        document.getElementById(`price_display_${index}`).textContent =
+            new Intl.NumberFormat('fr-FR', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2
+            }).format(price);
+        document.getElementById(`stock_${index}`).textContent =
+            stock;
 
-            select.add(option);
+        document.getElementById(`stock_unit_${index}`).textContent =
+            unit;
 
-            /*
-            |--------------------------------------------------------------------------
-            | RESET
-            |--------------------------------------------------------------------------
-            */
+        document.getElementById(`price_unit_${index}`).textContent =
+            unit;
 
-            document.getElementById(
-                'customer_name'
-            ).value = '';
+        calculateRow(index);
+    }
 
-            document.getElementById(
-                'customer_phone'
-            ).value = '';
+    /*
+    |--------------------------------------------------------------------------
+    | CALCUL D’UNE LIGNE
+    |--------------------------------------------------------------------------
+    */
 
-            document.getElementById(
-                'customer_email'
-            ).value = '';
+    function calculateRow(index) {
 
-            /*
-            |--------------------------------------------------------------------------
-            | CLOSE MODAL
-            |--------------------------------------------------------------------------
-            */
+        const priceInput = document.getElementById(`price_${index}`);
+        const quantityInput = document.getElementById(`qty_${index}`);
+        const stockElement = document.getElementById(`stock_${index}`);
+        const unitElement = document.getElementById(`stock_unit_${index}`);
+        const totalElement = document.getElementById(`total_${index}`);
 
-            const modal =
-                bootstrap.Modal.getInstance(
+        if (
+            !priceInput ||
+            !quantityInput ||
+            !stockElement ||
+            !totalElement
+        ) {
+            return;
+        }
 
-                    document.getElementById(
-                        'customerModal'
-                    )
-                );
+        const price = parseFloat(priceInput.value) || 0;
 
-            modal.hide();
+        let quantity = parseFloat(quantityInput.value) || 0;
+        const stock = parseFloat(stockElement.textContent) || 0;
+        const unit = unitElement?.textContent || 'Pièce';
 
-            /*
-            |--------------------------------------------------------------------------
-            | SUCCESS
-            |--------------------------------------------------------------------------
-            */
+        if (quantity > stock && stock >= 0) {
 
             Swal.fire({
-
-                icon: 'success',
-
-                title: 'Succès',
-
-                text:
-                    'Client créé avec succès.',
-
-                confirmButtonColor:
-                    '#696cff'
+                icon: 'warning',
+                title: 'Stock insuffisant',
+                text: `Stock disponible : ${stock} ${unit}`,
+                confirmButtonColor: '#696cff'
             });
+
+            quantity = stock;
+            quantityInput.value = stock;
         }
 
-    })
+        const lineTotal = price * quantity;
 
-        .catch(error => {
+        totalElement.textContent =
+            lineTotal.toFixed(2);
 
-        let message = JSON.stringify(error);
+        calculateGrandTotal();
+    }
 
-        console.log(error);
+    /*
+    |--------------------------------------------------------------------------
+    | CALCUL TOTAL
+    |--------------------------------------------------------------------------
+    */
 
-        if (error.errors) {
+    function calculateGrandTotal() {
 
-            message =
-                Object.values(error.errors)
-                    .flat()
-                    .join('<br>');
+        let subtotal = 0;
+
+        document
+            .querySelectorAll('[id^="total_"]')
+            .forEach(function (element) {
+                subtotal +=
+                    parseFloat(element.textContent) || 0;
+            });
+
+        let discountPercent =
+            parseFloat(discountInput.value) || 0;
+
+        if (discountPercent < 0) {
+            discountPercent = 0;
+            discountInput.value = 0;
         }
 
-        errorBox.innerHTML = message;
+        if (discountPercent > 100) {
+            discountPercent = 100;
+            discountInput.value = 100;
+        }
 
-        errorBox.classList.remove('d-none');
+        const discountAmount =
+            subtotal * discountPercent / 100;
+
+        const taxable =
+            Math.max(0, subtotal - discountAmount);
+
+        const tva =
+            taxable * 0.10;
+
+        const total =
+            taxable + tva;
+
+        document.getElementById('subTotal').textContent =
+            subtotal.toFixed(2);
+
+        document.getElementById('discountAmount').textContent =
+            discountAmount.toFixed(2);
+
+        document.getElementById('tvaAmount').textContent =
+            tva.toFixed(2);
+
+        document.getElementById('grandTotal').textContent =
+            total.toFixed(2);
+
+        document.getElementById('final_total_input').value =
+            total.toFixed(2);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | COHÉRENCE CLIENT / VÉHICULE
+    |--------------------------------------------------------------------------
+    */
+
+    $('#vehicle_id').on('change', function () {
+
+        const option =
+            this.options[this.selectedIndex];
+
+        const vehicleCustomerId =
+            option?.dataset?.customerId || '';
+
+        /*
+         * Si le véhicule possède déjà un client et qu'aucun client
+         * n'est encore sélectionné, sélectionner automatiquement ce client.
+         */
+        if (vehicleCustomerId && !customerSelect.value) {
+            $('#customer_id')
+                .val(vehicleCustomerId)
+                .trigger('change');
+        }
     });
 
-});
+    /*
+    |--------------------------------------------------------------------------
+    | SOUMISSION
+    |--------------------------------------------------------------------------
+    */
 
+    saleForm.addEventListener('submit', function (event) {
+
+        if (!customerSelect.value) {
+            event.preventDefault();
+
+            Swal.fire({
+                icon: 'warning',
+                title: 'Client obligatoire',
+                text: 'Veuillez sélectionner le client.',
+                confirmButtonColor: '#696cff'
+            });
+
+            return;
+        }
+
+        if (!vehicleSelect.value) {
+            event.preventDefault();
+
+            Swal.fire({
+                icon: 'warning',
+                title: 'Véhicule obligatoire',
+                text: 'Veuillez sélectionner le numéro d’immatriculation.',
+                confirmButtonColor: '#696cff'
+            });
+
+            return;
+        }
+
+        const productRows =
+            itemsTableBody.querySelectorAll('tr');
+
+        if (productRows.length === 0) {
+            event.preventDefault();
+
+            Swal.fire({
+                icon: 'warning',
+                title: 'Produit obligatoire',
+                text: 'Veuillez ajouter au moins un produit.',
+                confirmButtonColor: '#696cff'
+            });
+        }
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | NOUVEAU CLIENT AJAX
+    |--------------------------------------------------------------------------
+    */
+
+    document
+        .getElementById('saveCustomerBtn')
+        .addEventListener('click', function () {
+
+            const code =
+                document.getElementById('customer_code').value.trim();
+
+            const name =
+                document.getElementById('customer_name').value.trim();
+
+            const phone =
+                document.getElementById('customer_phone').value.trim();
+
+            const email =
+                document.getElementById('customer_email').value.trim();
+
+            const errorBox =
+                document.getElementById('customerModalError');
+
+            errorBox.classList.add('d-none');
+            errorBox.innerHTML = '';
+
+            if (!code || !name) {
+                errorBox.innerHTML =
+                    'Le code et le nom du client sont obligatoires.';
+
+                errorBox.classList.remove('d-none');
+                return;
+            }
+
+            fetch("{{ route('customers.store') }}", {
+                method: 'POST',
+
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json'
+                },
+
+                body: JSON.stringify({
+                    code: code,
+                    name: name,
+                    phone: phone,
+                    email: email
+                })
+            })
+            .then(async function (response) {
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw data;
+                }
+
+                return data;
+            })
+            .then(function (data) {
+
+                if (!data.success || !data.customer) {
+                    throw new Error(
+                        'La réponse du serveur est invalide.'
+                    );
+                }
+
+                const newOption = new Option(
+                    data.customer.name,
+                    data.customer.id,
+                    true,
+                    true
+                );
+
+                customerSelect.add(newOption);
+
+                $('#customer_id')
+                    .val(String(data.customer.id))
+                    .trigger('change');
+
+                document.getElementById('customer_code').value = '';
+                document.getElementById('customer_name').value = '';
+                document.getElementById('customer_phone').value = '';
+                document.getElementById('customer_email').value = '';
+
+                const modalElement =
+                    document.getElementById('customerModal');
+
+                const modal =
+                    bootstrap.Modal.getInstance(modalElement);
+
+                if (modal) {
+                    modal.hide();
+                }
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Succès',
+                    text: 'Client créé avec succès.',
+                    confirmButtonColor: '#696cff'
+                });
+            })
+            .catch(function (error) {
+
+                let message =
+                    'Une erreur est survenue pendant la création du client.';
+
+                if (error?.errors) {
+                    message = Object.values(error.errors)
+                        .flat()
+                        .join('<br>');
+                } else if (error?.message) {
+                    message = error.message;
+                }
+
+                errorBox.innerHTML = message;
+                errorBox.classList.remove('d-none');
+            });
+        });
+
+    /*
+    |--------------------------------------------------------------------------
+    | INITIALISATION
+    |--------------------------------------------------------------------------
+    */
+
+    addProductButton.addEventListener('click', function () {
+        addRow();
+    });
+
+    discountInput.addEventListener('input', calculateGrandTotal);
+
+    @if(is_array(old('items')) && count(old('items')) > 0)
+        const oldItems = @json(old('items'));
+
+        oldItems.forEach(function (item) {
+            addRow(item);
+        });
+    @else
+        addRow();
+    @endif
+
+    calculateGrandTotal();
+});
 </script>
 
 @endsection

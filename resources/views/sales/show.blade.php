@@ -426,17 +426,17 @@
                                         vertical-align:top;
                                         ">
 
-                                        <div>
+                                       <div>
                                             <strong>
-                                            {{ $sale->customer->name ?? 'Vente comptoir' }}
+                                                {{ $sale->customer->name ?? 'Vente comptoir' }}
                                             </strong>
-
                                         </div>
 
                                         <div>
                                             <strong>
                                                 Téléphone :
                                             </strong>
+
                                             {{ $sale->customer->phone ?? '-' }}
                                         </div>
 
@@ -444,7 +444,28 @@
                                             <strong>
                                                 Email :
                                             </strong>
+
                                             {{ $sale->customer->email ?? '-' }}
+                                        </div>
+
+                                        <div>
+                                            <strong>
+                                                Immatriculation :
+                                            </strong>
+
+                                            @if($sale->vehicle)
+
+                                                <span class="badge bg-label-primary">
+                                                    {{ $sale->vehicle->plate_number }}
+                                                </span>
+
+                                            @else
+
+                                                <span class="text-muted">
+                                                    -
+                                                </span>
+
+                                            @endif
                                         </div>
 
                                         <!--div>
@@ -603,11 +624,6 @@
                                 <th>
                                     Désignation
                                 </th>
-
-                                <th class="text-center">
-                                    Immatriculation
-                                </th>
-
                                 <th class="text-center">
                                     Quantité
                                 </th>
@@ -650,25 +666,6 @@
                                     <td>
                                         {{ $item->product->designation ?? '-' }}
                                     </td>
-
-                                    <td class="text-center fw-bold">
-
-                                        @if($item->vehicle)
-
-                                            <span class="badge bg-label-primary">
-                                                {{ $item->vehicle->plate_number }}
-                                            </span>
-
-                                        @else
-
-                                            <span class="text-muted">
-                                                -
-                                            </span>
-
-                                        @endif
-
-                                    </td>
-
                                    <td class="text-center">
 
                                         {{ $item->quantity }}

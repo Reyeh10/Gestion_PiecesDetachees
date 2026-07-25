@@ -163,8 +163,8 @@
                             </td>
 
                             <td class="text-center">
-                                {{ $vehicle->sale_items_count }}
-                                vente(s)
+                               {{ $vehicle->sales_count }}
+                               {{ $vehicle->sales_count > 1 ? 'ventes' : 'vente' }}
                             </td>
 
                             <td class="text-center">

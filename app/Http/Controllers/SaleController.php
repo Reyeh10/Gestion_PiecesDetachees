@@ -247,6 +247,11 @@ use Illuminate\Support\Facades\DB;
                         'exists:customers,id',
                     ],
 
+                      'vehicle_id' => [
+                        'required',
+                        'exists:vehicles,id',
+                    ],
+
                     'payment_type' => [
                         'required',
                         'string',
@@ -269,28 +274,7 @@ use Illuminate\Support\Facades\DB;
                         'min:0.01',
                     ],
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | VÉHICULE EXISTANT
-                    |--------------------------------------------------------------------------
-                    */
 
-                    'items.*.vehicle_id' => [
-                        'nullable',
-                        'exists:vehicles,id',
-                    ],
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | NOUVELLE IMMATRICULATION
-                    |--------------------------------------------------------------------------
-                    */
-
-                    'items.*.plate_number' => [
-                        'nullable',
-                        'string',
-                        'max:50',
-                    ],
                 ],
                 [
                     'items.required' =>
@@ -330,6 +314,15 @@ use Illuminate\Support\Facades\DB;
 
                 $validatedItems = [];
 
+                $vehicle = Vehicle::findOrFail(
+                    $request->vehicle_id
+                );
+
+                $vehicle->customer_id =
+                    $request->customer_id;
+
+                $vehicle->save();
+
                 foreach ($request->items as $item) {
 
                     /*
@@ -348,63 +341,7 @@ use Illuminate\Support\Facades\DB;
                     |--------------------------------------------------------------------------
                     */
 
-                    $vehicle = null;
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | CAS 1 : VÉHICULE DÉJÀ EXISTANT
-                    |--------------------------------------------------------------------------
-                    */
-
-                    if (!empty($item['vehicle_id'])) {
-                        $vehicle = Vehicle::findOrFail(
-                            $item['vehicle_id']
-                        );
-                    }
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | CAS 2 : NOUVELLE IMMATRICULATION
-                    |--------------------------------------------------------------------------
-                    */
-
-                    if (
-                        !$vehicle &&
-                        !empty($item['plate_number'])
-                    ) {
-                        $normalizedPlate = strtoupper(
-                            preg_replace(
-                                '/[\s\-]+/',
-                                '',
-                                trim($item['plate_number'])
-                            )
-                        );
-
-                        $vehicle = Vehicle::firstOrCreate(
-                            [
-                                'plate_number' => $normalizedPlate,
-                            ],
-                            [
-                                'customer_id' => $request->customer_id,
-                            ]
-                        );
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | METTRE À JOUR LE CLIENT DU VÉHICULE
-                        |--------------------------------------------------------------------------
-                        */
-
-                        if (
-                            $request->filled('customer_id') &&
-                            !$vehicle->customer_id
-                        ) {
-                            $vehicle->customer_id =
-                                $request->customer_id;
-
-                            $vehicle->save();
-                        }
-                    }
 
                     /*
                     |--------------------------------------------------------------------------
@@ -468,7 +405,7 @@ use Illuminate\Support\Facades\DB;
                     $validatedItems[] = [
 
                         'product' => $product,
-                        'vehicle' => $vehicle,
+                        //'vehicle' => $vehicle,
 
                         'quantity' => $item['quantity'],
 
@@ -548,10 +485,13 @@ use Illuminate\Support\Facades\DB;
                     'customer_id' =>
                         $request->customer_id,
 
+                    'vehicle_id' =>
+                        $vehicle->id,
+
                     'payment_type' =>
                         $request->payment_type,
 
-                'subtotal' =>
+                    'subtotal' =>
                         $subtotal,
 
                     /*
@@ -611,9 +551,6 @@ use Illuminate\Support\Facades\DB;
 
                         'product_id' =>
                             $product->id,
-
-                        'vehicle_id' =>
-                             $item['vehicle']?->id,
 
                         'quantity' =>
                             $item['quantity'],
@@ -762,12 +699,13 @@ use Illuminate\Support\Facades\DB;
 
                 'customer',
 
+                'vehicle',
+
                 'items.product.brand',
 
                 'items.product.model',
-                'items.vehicle',
 
-                'payments'
+                'payments',
             ]);
 
             /*
@@ -1129,15 +1067,10 @@ $paid = $sale->payments()->sum('amount');
         public function invoice(Sale $sale)
         {
             $sale->load([
-
                 'customer',
-
+                'vehicle',
                 'items.product.brand',
-
                 'items.product.model',
-
-                'items.vehicle',
-
                 'payments'
             ]);
 

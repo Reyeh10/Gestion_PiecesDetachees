@@ -2,10 +2,21 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Sale extends Model
 {
+    use HasFactory;
+
+    /*
+    |--------------------------------------------------------------------------
+    | TABLE
+    |--------------------------------------------------------------------------
+    */
+
+    protected $table = 'sales';
+
     /*
     |--------------------------------------------------------------------------
     | FILLABLE
@@ -14,22 +25,24 @@ class Sale extends Model
 
     protected $fillable = [
 
+        // CLIENT ET VÉHICULE
         'customer_id',
+        'vehicle_id',
+
+        // INFORMATIONS DE LA VENTE
         'payment_type',
         'invoice_number',
-         'document_type',
+        'document_type',
 
-        // TOTALS
+        // MONTANTS
         'subtotal',
         'discount',
+        'discount_amount',
         'tva',
         'total',
 
-        // STATUS
+        // STATUT
         'status',
-
-        // Discount
-        'discount_amount',
     ];
 
     /*
@@ -40,10 +53,14 @@ class Sale extends Model
 
     protected $casts = [
 
-        'subtotal' => 'float',
-        'discount' => 'float',
-        'tva' => 'float',
-        'total' => 'float',
+        'customer_id' => 'integer',
+        'vehicle_id' => 'integer',
+
+        'subtotal' => 'decimal:2',
+        'discount' => 'decimal:2',
+        'discount_amount' => 'decimal:2',
+        'tva' => 'decimal:2',
+        'total' => 'decimal:2',
     ];
 
     /*
@@ -54,18 +71,48 @@ class Sale extends Model
 
     public function customer()
     {
-        return $this->belongsTo(Customer::class);
+        return $this->belongsTo(
+            Customer::class,
+            'customer_id',
+            'id'
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | VEHICLE
+    |--------------------------------------------------------------------------
+    */
+
+    public function vehicle()
+    {
+        return $this->belongsTo(
+            Vehicle::class,
+            'vehicle_id',
+            'id'
+        );
     }
 
     /*
     |--------------------------------------------------------------------------
     | ITEMS
     |--------------------------------------------------------------------------
+    |
+    | Cette relation peut être conservée temporairement si vos anciennes
+    | factures utilisent encore la table sale_items.
+    |
+    | Pour les nouvelles ventes de véhicules, vehicle_id sera enregistré
+    | directement dans la table sales.
+    |
     */
 
     public function items()
     {
-        return $this->hasMany(SaleItem::class);
+        return $this->hasMany(
+            SaleItem::class,
+            'sale_id',
+            'id'
+        );
     }
 
     /*
@@ -76,7 +123,11 @@ class Sale extends Model
 
     public function payments()
     {
-        return $this->hasMany(Payment::class);
+        return $this->hasMany(
+            Payment::class,
+            'sale_id',
+            'id'
+        );
     }
 
     /*
@@ -85,9 +136,13 @@ class Sale extends Model
     |--------------------------------------------------------------------------
     */
 
-    public function getPaidAmountAttribute()
+    public function getPaidAmountAttribute(): float
     {
-        return $this->payments->sum('amount');
+        if ($this->relationLoaded('payments')) {
+            return (float) $this->payments->sum('amount');
+        }
+
+        return (float) $this->payments()->sum('amount');
     }
 
     /*
@@ -96,19 +151,77 @@ class Sale extends Model
     |--------------------------------------------------------------------------
     */
 
-    public function getRemainingAmountAttribute()
+    public function getRemainingAmountAttribute(): float
     {
-        return $this->total - $this->paid_amount;
+        return max(
+            0,
+            round(
+                (float) $this->total - (float) $this->paid_amount,
+                2
+            )
+        );
     }
 
     /*
     |--------------------------------------------------------------------------
-    | FULLY PAID ?
+    | FULLY PAID
     |--------------------------------------------------------------------------
     */
 
-    public function getIsPaidAttribute()
+    public function getIsPaidAttribute(): bool
     {
-        return $this->remaining_amount <= 0;
+        return (float) $this->remaining_amount <= 0;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | PARTIALLY PAID
+    |--------------------------------------------------------------------------
+    */
+
+    public function getIsPartiallyPaidAttribute(): bool
+    {
+        return (float) $this->paid_amount > 0
+            && (float) $this->remaining_amount > 0;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | CANCELLED
+    |--------------------------------------------------------------------------
+    */
+
+    public function getIsCancelledAttribute(): bool
+    {
+        return in_array(
+            strtolower((string) $this->status),
+            [
+                'cancelled',
+                'annule',
+                'annulé',
+            ],
+            true
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | SOLD
+    |--------------------------------------------------------------------------
+    */
+
+    public function getIsSoldAttribute(): bool
+    {
+        return in_array(
+            strtolower((string) $this->status),
+            [
+                'vendu',
+                'sold',
+                'paid',
+                'paye',
+                'payé',
+            ],
+            true
+        );
     }
 }

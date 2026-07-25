@@ -24,7 +24,7 @@ class VehicleController extends Controller
 
         $vehicles = Vehicle::query()
             ->with('customer')
-            ->withCount('saleItems')
+           ->withCount('sales')
             ->when(
                 $search !== '',
                 function ($query) use ($search) {
@@ -245,22 +245,25 @@ class VehicleController extends Controller
     /**
      * Afficher un véhicule.
      */
-    public function show(Vehicle $vehicle): View
+   public function show(Vehicle $vehicle): View
     {
         $vehicle->load([
             'customer',
 
-            'saleItems' => function ($query) {
-                $query->latest('id');
+            'sales' => function ($query) {
+                $query
+                    ->with([
+                        'customer',
+                        'payments',
+                        'items.product.brand',
+                        'items.product.model',
+                    ])
+                    ->where(
+                        'document_type',
+                        'sale'
+                    )
+                    ->latest();
             },
-
-            'saleItems.product.brand',
-
-            'saleItems.product.model',
-
-            'saleItems.sale.customer',
-
-            'saleItems.sale.payments',
         ]);
 
         return view(
@@ -456,7 +459,7 @@ class VehicleController extends Controller
         |
         */
 
-        if ($vehicle->saleItems()->exists()) {
+       if ($vehicle->sales()->exists()) {
             return redirect()
                 ->route('vehicles.index')
                 ->with(

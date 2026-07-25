@@ -403,9 +403,9 @@
                     Désignation
                 </th>
 
-                <th class="text-center">
+                <!--th class="text-center">
                     Immatriculation
-                </th>
+                </th-->
 
                 <th class="text-center">
                     Quantité
@@ -449,9 +449,9 @@
                         {{ $item->product->designation ?? '-' }}
                     </td>
 
-                   <td class="text-center fw-bold">
-                        {{ $item->vehicle?->plate_number ?? '-' }}
-                   </td>
+                   <!--td class="text-center fw-bold">
+                        { { $item->vehicle?->plate_number ?? '-' }}
+                   </td-->
 
                     <td class="text-center">
 

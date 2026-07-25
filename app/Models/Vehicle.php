@@ -11,9 +11,6 @@ class Vehicle extends Model
 {
     use HasFactory;
 
-    /**
-     * Champs autorisés pour l'enregistrement.
-     */
     protected $fillable = [
         'customer_id',
         'plate_number',
@@ -25,39 +22,44 @@ class Vehicle extends Model
         'notes',
     ];
 
-    /**
-     * Conversion automatique des types.
-     */
     protected $casts = [
         'customer_id' => 'integer',
         'year' => 'integer',
     ];
 
-    /**
-     * Client propriétaire du véhicule.
-     */
     public function customer(): BelongsTo
     {
         return $this->belongsTo(
             Customer::class,
-            'customer_id'
+            'customer_id',
+            'id'
         );
     }
 
     /**
-     * Lignes de vente liées au véhicule.
+     * Anciennes lignes de vente.
      */
     public function saleItems(): HasMany
     {
         return $this->hasMany(
             SaleItem::class,
-            'vehicle_id'
+            'vehicle_id',
+            'id'
         );
     }
 
     /**
-     * Nom complet utilisé dans les listes.
+     * Nouvelles ventes liées directement au véhicule.
      */
+    public function sales(): HasMany
+    {
+        return $this->hasMany(
+            Sale::class,
+            'vehicle_id',
+            'id'
+        );
+    }
+
     public function getDisplayNameAttribute(): string
     {
         $details = array_filter([
@@ -66,18 +68,11 @@ class Vehicle extends Model
             $this->model,
         ]);
 
-        return implode(
-            ' - ',
-            $details
-        );
+        return implode(' - ', $details);
     }
 
-    /**
-     * Normaliser automatiquement l'immatriculation.
-     */
-    public function setPlateNumberAttribute(
-        mixed $value
-    ): void {
+    public function setPlateNumberAttribute(mixed $value): void
+    {
         $this->attributes['plate_number'] =
             strtoupper(
                 preg_replace(
@@ -88,12 +83,8 @@ class Vehicle extends Model
             );
     }
 
-    /**
-     * Normaliser automatiquement le VIN.
-     */
-    public function setVinAttribute(
-        mixed $value
-    ): void {
+    public function setVinAttribute(mixed $value): void
+    {
         if (
             $value === null ||
             trim((string) $value) === ''
@@ -113,12 +104,8 @@ class Vehicle extends Model
             );
     }
 
-    /**
-     * Normaliser la marque.
-     */
-    public function setBrandAttribute(
-        mixed $value
-    ): void {
+    public function setBrandAttribute(mixed $value): void
+    {
         $this->attributes['brand'] =
             $value !== null &&
             trim((string) $value) !== ''
@@ -126,12 +113,8 @@ class Vehicle extends Model
                 : null;
     }
 
-    /**
-     * Normaliser le modèle.
-     */
-    public function setModelAttribute(
-        mixed $value
-    ): void {
+    public function setModelAttribute(mixed $value): void
+    {
         $this->attributes['model'] =
             $value !== null &&
             trim((string) $value) !== ''
@@ -139,12 +122,8 @@ class Vehicle extends Model
                 : null;
     }
 
-    /**
-     * Normaliser la couleur.
-     */
-    public function setColorAttribute(
-        mixed $value
-    ): void {
+    public function setColorAttribute(mixed $value): void
+    {
         $this->attributes['color'] =
             $value !== null &&
             trim((string) $value) !== ''
