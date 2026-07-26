@@ -16,6 +16,7 @@ class SaleItem extends Model
         'vehicle_id',
         'quantity',
         'price',
+        'total',
     ];
 
     protected $casts = [
@@ -24,6 +25,7 @@ class SaleItem extends Model
         'vehicle_id' => 'integer',
         'quantity' => 'decimal:2',
         'price' => 'decimal:2',
+        'total'    => 'decimal:2',
     ];
 
     /**

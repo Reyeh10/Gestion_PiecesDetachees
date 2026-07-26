@@ -3,47 +3,41 @@
 namespace App\Http\Controllers;
 
 use App\Models\SaleItem;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class VehicleHistoryController extends Controller
 {
     /**
-     * Rechercher l’historique des pièces par immatriculation.
+     * Afficher l’historique des pièces vendues par immatriculation.
      */
     public function index(Request $request): View
     {
         /*
         |--------------------------------------------------------------------------
-        | NORMALISER L’IMMATRICULATION
+        | Normalisation de l’immatriculation recherchée
         |--------------------------------------------------------------------------
         |
-        | Exemple :
-        | 1000 d 45
-        | 1000-d-45
-        | 1000D45
+        | Exemples :
         |
-        | deviennent tous :
-        | 1000D45
+        | 200 d 77
+        | 200-D-77
+        | 200D77
+        |
+        | deviennent :
+        |
+        | 200D77
         |
         */
 
-        $plate = strtoupper(
-            preg_replace(
-                '/[^A-Z0-9]/',
-                '',
-                trim(
-                    (string) $request->input(
-                        'plate',
-                        ''
-                    )
-                )
-            ) ?? ''
+        $plate = $this->normalizePlate(
+            (string) $request->query('plate', '')
         );
 
         /*
         |--------------------------------------------------------------------------
-        | COLLECTION VIDE PAR DÉFAUT
+        | Collection vide par défaut
         |--------------------------------------------------------------------------
         */
 
@@ -51,52 +45,88 @@ class VehicleHistoryController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | RECHERCHE
+        | Recherche de l’historique
         |--------------------------------------------------------------------------
         */
 
         if ($plate !== '') {
             $items = SaleItem::query()
+
+                /*
+                |--------------------------------------------------------------------------
+                | Charger toutes les relations nécessaires
+                |--------------------------------------------------------------------------
+                |
+                | Le véhicule est maintenant associé à la vente :
+                |
+                | sale_items.sale_id
+                |          ↓
+                | sales.vehicle_id
+                |          ↓
+                | vehicles.id
+                |
+                */
+
                 ->with([
-                    'vehicle',
                     'product.brand',
                     'product.model',
                     'sale.customer',
+                    'sale.vehicle',
                     'sale.payments',
                 ])
 
                 /*
                 |--------------------------------------------------------------------------
-                | RECHERCHER DANS LA TABLE VEHICLES
+                | Rechercher l’immatriculation à travers la vente
                 |--------------------------------------------------------------------------
-                |
-                | sale_items.vehicle_id
-                |          ↓
-                | vehicles.id
-                |          ↓
-                | vehicles.plate_number
-                |
                 */
 
                 ->whereHas(
-                    'vehicle',
-                    function ($vehicleQuery) use ($plate) {
-                        $vehicleQuery->where(
-                            'plate_number',
-                            $plate
+                    'sale.vehicle',
+                    function (Builder $vehicleQuery) use ($plate): void {
+                        /*
+                         * Cette comparaison fonctionne même si la plaque
+                         * enregistrée contient des espaces ou des tirets.
+                         *
+                         * Exemple :
+                         *
+                         * 200-D-77
+                         * 200 D 77
+                         * 200D77
+                         */
+
+                        $vehicleQuery->whereRaw(
+                            "
+                            UPPER(
+                                REPLACE(
+                                    REPLACE(
+                                        REPLACE(
+                                            TRIM(plate_number),
+                                            '-',
+                                            ''
+                                        ),
+                                        ' ',
+                                        ''
+                                    ),
+                                    '.',
+                                    ''
+                                )
+                            ) = ?
+                            ",
+                            [$plate]
                         );
                     }
                 )
 
                 /*
                 |--------------------------------------------------------------------------
-                | UNIQUEMENT LES VENTES
+                | Garder uniquement les ventes
                 |--------------------------------------------------------------------------
                 */
 
                 ->whereHas(
                     'sale',
-                    function ($saleQuery) {
+                    function (Builder $saleQuery): void {
                         $saleQuery->where(
                             'document_type',
                             'sale'
@@ -106,20 +136,35 @@ class VehicleHistoryController extends Controller
 
                 /*
                 |--------------------------------------------------------------------------
-                | PLUS RÉCENT EN PREMIER
+                | Trier par vente récente
                 |--------------------------------------------------------------------------
                 */
 
-                ->latest('id')
+                ->orderByDesc('sale_id')
+                ->orderByDesc('id')
                 ->get();
         }
 
         return view(
             'vehicles.history',
-            compact(
-                'plate',
-                'items'
-            )
+            [
+                'plate' => $plate,
+                'items' => $items,
+            ]
         );
+    }
+
+    /**
+     * Normaliser une immatriculation.
+     */
+    private function normalizePlate(string $plate): string
+    {
+        $plate = strtoupper(trim($plate));
+
+        return preg_replace(
+            '/[^A-Z0-9]/',
+            '',
+            $plate
+        ) ?? '';
     }
 }
