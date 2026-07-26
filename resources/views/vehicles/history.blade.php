@@ -11,12 +11,37 @@
         </h3>
 
         <p class="text-muted mb-0">
-            Recherchez toutes les pièces vendues pour un véhicule.
+            Recherchez toutes les pièces vendues pour un véhicule
+            pendant une période donnée.
         </p>
 
     </div>
 
     <div class="card-body">
+
+        {{-- ====================================================== --}}
+        {{-- ERREURS DE VALIDATION                                  --}}
+        {{-- ====================================================== --}}
+
+        @if($errors->any())
+
+            <div class="alert alert-danger">
+
+                <ul class="mb-0">
+
+                    @foreach($errors->all() as $error)
+
+                        <li>
+                            {{ $error }}
+                        </li>
+
+                    @endforeach
+
+                </ul>
+
+            </div>
+
+        @endif
 
         {{-- ====================================================== --}}
         {{-- FORMULAIRE DE RECHERCHE                                --}}
@@ -28,7 +53,8 @@
             class="row g-3 align-items-end mb-4"
         >
 
-            <div class="col-lg-8 col-md-7">
+            {{-- IMMATRICULATION --}}
+            <div class="col-xl-4 col-lg-4 col-md-6">
 
                 <label
                     for="plate"
@@ -41,7 +67,7 @@
                     type="text"
                     name="plate"
                     id="plate"
-                    value="{{ $plate }}"
+                    value="{{ old('plate', $plate) }}"
                     class="form-control text-uppercase"
                     placeholder="Exemple : 200D77"
                     autocomplete="off"
@@ -50,7 +76,48 @@
 
             </div>
 
-            <div class="col-lg-4 col-md-5">
+            {{-- DATE DE DÉBUT --}}
+            <div class="col-xl-2 col-lg-2 col-md-3">
+
+                <label
+                    for="date_from"
+                    class="form-label fw-semibold"
+                >
+                    Date de début
+                </label>
+
+                <input
+                    type="date"
+                    name="date_from"
+                    id="date_from"
+                    value="{{ old('date_from', $dateFrom) }}"
+                    class="form-control"
+                >
+
+            </div>
+
+            {{-- DATE DE FIN --}}
+            <div class="col-xl-2 col-lg-2 col-md-3">
+
+                <label
+                    for="date_to"
+                    class="form-label fw-semibold"
+                >
+                    Date de fin
+                </label>
+
+                <input
+                    type="date"
+                    name="date_to"
+                    id="date_to"
+                    value="{{ old('date_to', $dateTo) }}"
+                    class="form-control"
+                >
+
+            </div>
+
+            {{-- BOUTONS --}}
+            <div class="col-xl-4 col-lg-4 col-md-12">
 
                 <div class="d-flex gap-2">
 
@@ -78,25 +145,225 @@
         @if($plate !== '')
 
             {{-- ================================================== --}}
-            {{-- INFORMATION DE RECHERCHE                           --}}
+            {{-- RÉSUMÉ DE LA RECHERCHE                             --}}
             {{-- ================================================== --}}
 
-            <div class="alert alert-info">
+            <div class="alert alert-info mb-3">
 
-                Résultats pour l’immatriculation :
+                <div class="d-flex flex-wrap align-items-center gap-2">
 
-                <strong>
-                    {{ $plate }}
-                </strong>
-
-                @if($items->isNotEmpty())
-
-                    <span class="ms-2">
-                        — {{ $items->count() }}
-                        {{ $items->count() > 1 ? 'pièces trouvées' : 'pièce trouvée' }}
+                    <span>
+                        Résultats pour l’immatriculation :
                     </span>
 
-                @endif
+                    <strong>
+                        {{ $plate }}
+                    </strong>
+
+                    @if($dateFrom || $dateTo)
+
+                        <span class="mx-1">
+                            |
+                        </span>
+
+                        <span>
+                            Période :
+                        </span>
+
+                        <strong>
+
+                            @if($dateFrom)
+
+                                {{ \Carbon\Carbon::parse($dateFrom)->format('d/m/Y') }}
+
+                            @else
+
+                                Début indéfini
+
+                            @endif
+
+                            au
+
+                            @if($dateTo)
+
+                                {{ \Carbon\Carbon::parse($dateTo)->format('d/m/Y') }}
+
+                            @else
+
+                                Aujourd’hui
+
+                            @endif
+
+                        </strong>
+
+                    @endif
+
+                </div>
+
+            </div>
+
+            {{-- ================================================== --}}
+            {{-- CARTES DES STATISTIQUES                            --}}
+            {{-- ================================================== --}}
+
+            <div class="row g-3 mb-4">
+
+                {{-- NOMBRE DE VENTES --}}
+                <div class="col-xl-3 col-lg-6 col-md-6">
+
+                    <div class="card border shadow-none h-100">
+
+                        <div class="card-body">
+
+                            <div class="d-flex justify-content-between align-items-center">
+
+                                <div>
+
+                                    <div class="text-muted small mb-1">
+                                        Nombre de ventes
+                                    </div>
+
+                                    <h3 class="mb-0 fw-bold">
+                                        {{ $salesCount }}
+                                    </h3>
+
+                                </div>
+
+                                <div class="avatar bg-label-primary rounded">
+
+                                    <i class="bx bx-receipt fs-3"></i>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                {{-- NOMBRE DE LIGNES DE PIÈCES --}}
+                <div class="col-xl-3 col-lg-6 col-md-6">
+
+                    <div class="card border shadow-none h-100">
+
+                        <div class="card-body">
+
+                            <div class="d-flex justify-content-between align-items-center">
+
+                                <div>
+
+                                    <div class="text-muted small mb-1">
+                                        Lignes de pièces
+                                    </div>
+
+                                    <h3 class="mb-0 fw-bold">
+                                        {{ $piecesCount }}
+                                    </h3>
+
+                                </div>
+
+                                <div class="avatar bg-label-info rounded">
+
+                                    <i class="bx bx-package fs-3"></i>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                {{-- QUANTITÉ TOTALE --}}
+                <div class="col-xl-3 col-lg-6 col-md-6">
+
+                    <div class="card border shadow-none h-100">
+
+                        <div class="card-body">
+
+                            <div class="d-flex justify-content-between align-items-center">
+
+                                <div>
+
+                                    <div class="text-muted small mb-1">
+                                        Quantité totale
+                                    </div>
+
+                                    <h3 class="mb-0 fw-bold">
+
+                                        {{ number_format(
+                                            (float) $totalQuantity,
+                                            2,
+                                            ',',
+                                            ' '
+                                        ) }}
+
+                                    </h3>
+
+                                </div>
+
+                                <div class="avatar bg-label-success rounded">
+
+                                    <i class="bx bx-calculator fs-3"></i>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+                {{-- MONTANT TOTAL DES PIÈCES --}}
+                <div class="col-xl-3 col-lg-6 col-md-6">
+
+                    <div class="card border shadow-none h-100">
+
+                        <div class="card-body">
+
+                            <div class="d-flex justify-content-between align-items-center">
+
+                                <div>
+
+                                    <div class="text-muted small mb-1">
+                                        Montant total des pièces
+                                    </div>
+
+                                    <h3 class="mb-0 fw-bold">
+
+                                        {{ number_format(
+                                            (float) $totalAmount,
+                                            2,
+                                            ',',
+                                            ' '
+                                        ) }}
+
+                                        <small class="fs-6">
+                                            FDJ
+                                        </small>
+
+                                    </h3>
+
+                                </div>
+
+                                <div class="avatar bg-label-warning rounded">
+
+                                    <i class="bx bx-money fs-3"></i>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
 
             </div>
 
@@ -111,6 +378,7 @@
                     <thead class="table-light">
 
                         <tr>
+
                             <th class="text-nowrap">
                                 Date
                             </th>
@@ -139,6 +407,14 @@
                                 Quantité
                             </th>
 
+                            <th class="text-end text-nowrap">
+                                Prix unitaire
+                            </th>
+
+                            <th class="text-end text-nowrap">
+                                Total ligne
+                            </th>
+
                             <th class="text-center">
                                 Statut
                             </th>
@@ -146,6 +422,7 @@
                             <th class="text-center">
                                 Action
                             </th>
+
                         </tr>
 
                     </thead>
@@ -155,13 +432,18 @@
                         @forelse($items as $item)
 
                             @php
+
                                 $sale = $item->sale;
                                 $vehicle = $sale?->vehicle;
                                 $customer = $sale?->customer;
                                 $product = $item->product;
+
                                 $status = strtolower(
-                                    trim((string) ($sale?->status ?? ''))
+                                    trim(
+                                        (string) ($sale?->status ?? '')
+                                    )
                                 );
+
                             @endphp
 
                             <tr>
@@ -206,8 +488,10 @@
                                             {{ $product->brand->name }}
 
                                             @if($product?->model?->name)
+
                                                 —
                                                 {{ $product->model->name }}
+
                                             @endif
 
                                         </div>
@@ -234,6 +518,36 @@
                                     ) }}
 
                                     {{ $product?->unit_label ?? 'Pièce' }}
+
+                                </td>
+
+                                {{-- PRIX UNITAIRE --}}
+                                <td class="text-end text-nowrap">
+
+                                    {{ number_format(
+                                        (float) $item->price,
+                                        2,
+                                        ',',
+                                        ' '
+                                    ) }}
+
+                                    FDJ
+
+                                </td>
+
+                                {{-- TOTAL DE LA LIGNE --}}
+                                <td class="text-end text-nowrap fw-bold">
+
+                                    {{ number_format(
+                                        $item->total !== null
+                                            ? (float) $item->total
+                                            : (float) $item->price * (float) $item->quantity,
+                                        2,
+                                        ',',
+                                        ' '
+                                    ) }}
+
+                                    FDJ
 
                                 </td>
 
@@ -283,10 +597,13 @@
                                         @default
 
                                             <span class="badge bg-secondary">
-                                                {{ $sale?->status
-                                                    ? ucfirst($sale->status)
-                                                    : 'Non défini'
+
+                                                {{
+                                                    $sale?->status
+                                                        ? ucfirst($sale->status)
+                                                        : 'Non défini'
                                                 }}
+
                                             </span>
 
                                     @endswitch
@@ -323,7 +640,7 @@
                             <tr>
 
                                 <td
-                                    colspan="9"
+                                    colspan="11"
                                     class="text-center py-5 text-muted"
                                 >
 
@@ -333,11 +650,12 @@
                                     ></i>
 
                                     <div class="mt-2">
-                                        Aucune pièce trouvée pour cette immatriculation.
+                                        Aucune vente trouvée pour cette immatriculation
+                                        pendant la période sélectionnée.
                                     </div>
 
                                     <div class="small mt-1">
-                                        Vérifiez que le véhicule est associé à une vente.
+                                        Modifiez les dates ou vérifiez l’immatriculation.
                                     </div>
 
                                 </td>
