@@ -54,7 +54,7 @@
         >
 
             {{-- IMMATRICULATION --}}
-            <div class="col-xl-4 col-lg-4 col-md-6">
+            <div class="col-xl-3 col-lg-4 col-md-6">
 
                 <label
                     for="plate"
@@ -116,8 +116,62 @@
 
             </div>
 
+            {{-- STATUT --}}
+            <div class="col-xl-2 col-lg-2 col-md-4">
+
+                <label
+                    for="status"
+                    class="form-label fw-semibold"
+                >
+                    Statut
+                </label>
+
+                <select
+                    name="status"
+                    id="status"
+                    class="form-select"
+                >
+
+                    <option value="">
+                        Tous les statuts
+                    </option>
+
+                    <option
+                        value="vendu"
+                        {{ old('status', $statusFilter) === 'vendu'
+                            ? 'selected'
+                            : ''
+                        }}
+                    >
+                        Vendue
+                    </option>
+
+                    <option
+                        value="payé"
+                        {{ old('status', $statusFilter) === 'payé'
+                            ? 'selected'
+                            : ''
+                        }}
+                    >
+                        Payée
+                    </option>
+
+                    <option
+                        value="annulé"
+                        {{ old('status', $statusFilter) === 'annulé'
+                            ? 'selected'
+                            : ''
+                        }}
+                    >
+                        Annulée
+                    </option>
+
+                </select>
+
+            </div>
+
             {{-- BOUTONS --}}
-            <div class="col-xl-4 col-lg-4 col-md-12">
+            <div class="col-xl-3 col-lg-2 col-md-8">
 
                 <div class="d-flex gap-2">
 
@@ -194,6 +248,38 @@
 
                             @endif
 
+                        </strong>
+
+                    @endif
+
+                    @if($statusFilter)
+
+                        <span class="mx-1">
+                            |
+                        </span>
+
+                        <span>
+                            Statut :
+                        </span>
+
+                        <strong>
+                            @switch($statusFilter)
+
+                                @case('payé')
+                                    Payée
+                                    @break
+
+                                @case('vendu')
+                                    Vendue
+                                    @break
+
+                                @case('annulé')
+                                    Annulée
+                                    @break
+
+                                @default
+                                    Tous
+                            @endswitch
                         </strong>
 
                     @endif
@@ -330,9 +416,13 @@
 
                                 <div>
 
-                                    <div class="text-muted small mb-1">
+                                   <div class="text-muted small mb-1">
                                         Montant total des pièces
                                     </div>
+
+                                    <!--div class="text-muted" style="font-size: 11px;">
+                                        Hors ventes annulées
+                                    </div-->
 
                                     <h3 class="mb-0 fw-bold">
 

@@ -12,13 +12,13 @@ class VehicleHistoryController extends Controller
 {
     /**
      * Afficher l’historique des pièces vendues
-     * par immatriculation et par période.
+     * par immatriculation, période et statut.
      */
     public function index(Request $request): View
     {
         /*
         |--------------------------------------------------------------------------
-        | Validation des filtres
+        | Validation
         |--------------------------------------------------------------------------
         */
 
@@ -39,18 +39,29 @@ class VehicleHistoryController extends Controller
                 'date',
                 'after_or_equal:date_from',
             ],
-        ], [
-            'date_from.date' => 'La date de début est invalide.',
 
-            'date_to.date' => 'La date de fin est invalide.',
+            'status' => [
+                'nullable',
+                'string',
+                'in:vendu,payé,annulé',
+            ],
+        ], [
+            'date_from.date' =>
+                'La date de début est invalide.',
+
+            'date_to.date' =>
+                'La date de fin est invalide.',
 
             'date_to.after_or_equal' =>
                 'La date de fin doit être égale ou postérieure à la date de début.',
+
+            'status.in' =>
+                'Le statut sélectionné est invalide.',
         ]);
 
         /*
         |--------------------------------------------------------------------------
-        | Normalisation des filtres
+        | Filtres
         |--------------------------------------------------------------------------
         */
 
@@ -60,6 +71,7 @@ class VehicleHistoryController extends Controller
 
         $dateFrom = $validated['date_from'] ?? null;
         $dateTo = $validated['date_to'] ?? null;
+        $statusFilter = $validated['status'] ?? null;
 
         /*
         |--------------------------------------------------------------------------
@@ -76,22 +88,12 @@ class VehicleHistoryController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Lancer la recherche
+        | Recherche
         |--------------------------------------------------------------------------
-        |
-        | La recherche est lancée lorsqu’une immatriculation est fournie.
-        |
         */
 
         if ($plate !== '') {
             $query = SaleItem::query()
-
-                /*
-                |--------------------------------------------------------------------------
-                | Relations nécessaires
-                |--------------------------------------------------------------------------
-                */
-
                 ->with([
                     'product.brand',
                     'product.model',
@@ -102,15 +104,8 @@ class VehicleHistoryController extends Controller
 
                 /*
                 |--------------------------------------------------------------------------
-                | Filtrer par immatriculation
+                | Immatriculation
                 |--------------------------------------------------------------------------
-                |
-                | sale_items.sale_id
-                |          ↓
-                | sales.vehicle_id
-                |          ↓
-                | vehicles.plate_number
-                |
                 */
 
                 ->whereHas(
@@ -141,7 +136,7 @@ class VehicleHistoryController extends Controller
 
                 /*
                 |--------------------------------------------------------------------------
-                | Garder uniquement les ventes
+                | Uniquement les ventes
                 |--------------------------------------------------------------------------
                 */
 
@@ -157,7 +152,7 @@ class VehicleHistoryController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Filtrer par date de début
+            | Date de début
             |--------------------------------------------------------------------------
             */
 
@@ -179,7 +174,7 @@ class VehicleHistoryController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Filtrer par date de fin
+            | Date de fin
             |--------------------------------------------------------------------------
             */
 
@@ -201,7 +196,25 @@ class VehicleHistoryController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Récupérer les résultats
+            | Filtre par statut
+            |--------------------------------------------------------------------------
+            */
+
+            if ($statusFilter !== null) {
+                $query->whereHas(
+                    'sale',
+                    function (Builder $saleQuery) use ($statusFilter): void {
+                        $saleQuery->where(
+                            'status',
+                            $statusFilter
+                        );
+                    }
+                );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Résultats
             |--------------------------------------------------------------------------
             */
 
@@ -212,46 +225,76 @@ class VehicleHistoryController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | Statistiques
+            | Nombre de lignes
             |--------------------------------------------------------------------------
             */
 
-            // Nombre de lignes de pièces.
             $piecesCount = $items->count();
 
-            // Nombre total de quantités vendues.
+            /*
+            |--------------------------------------------------------------------------
+            | Quantité totale
+            |--------------------------------------------------------------------------
+            */
+
             $totalQuantity = $items->sum(
                 function (SaleItem $item): float {
                     return (float) $item->quantity;
                 }
             );
 
-            // Nombre de ventes/factures différentes.
+            /*
+            |--------------------------------------------------------------------------
+            | Nombre de ventes distinctes
+            |--------------------------------------------------------------------------
+            */
+
             $salesCount = $items
                 ->pluck('sale_id')
                 ->filter()
                 ->unique()
                 ->count();
 
-            // Montant total HT des pièces vendues.
-            $totalAmount = $items->sum(
-                function (SaleItem $item): float {
-                    /*
-                    * Utiliser le total de la ligne s’il est enregistré.
-                    * Sinon : prix unitaire × quantité.
-                    */
+            /*
+            |--------------------------------------------------------------------------
+            | Montant total hors ventes annulées
+            |--------------------------------------------------------------------------
+            |
+            | Les lignes annulées peuvent rester visibles dans le tableau,
+            | mais leur montant ne sera jamais ajouté au total.
+            |
+            */
+
+            $totalAmount = $items
+                ->filter(function (SaleItem $item): bool {
+                    $status = $this->normalizeStatus(
+                        (string) ($item->sale?->status ?? '')
+                    );
+
+                    return !in_array(
+                        $status,
+                        [
+                            'annule',
+                            'annulee',
+                            'cancelled',
+                            'canceled',
+                        ],
+                        true
+                    );
+                })
+                ->sum(function (SaleItem $item): float {
                     if ($item->total !== null) {
                         return (float) $item->total;
                     }
 
-                    return (float) $item->price * (float) $item->quantity;
-                }
-            );
+                    return (float) $item->price
+                        * (float) $item->quantity;
+                });
         }
 
         /*
         |--------------------------------------------------------------------------
-        | Retourner la vue
+        | Vue
         |--------------------------------------------------------------------------
         */
 
@@ -261,6 +304,7 @@ class VehicleHistoryController extends Controller
                 'plate' => $plate,
                 'dateFrom' => $dateFrom,
                 'dateTo' => $dateTo,
+                'statusFilter' => $statusFilter,
                 'items' => $items,
                 'salesCount' => $salesCount,
                 'piecesCount' => $piecesCount,
@@ -272,27 +316,31 @@ class VehicleHistoryController extends Controller
 
     /**
      * Normaliser une immatriculation.
-     *
-     * Exemples :
-     *
-     * 200 d 77
-     * 200-D-77
-     * 200D77
-     *
-     * deviennent tous :
-     *
-     * 200D77
      */
     private function normalizePlate(string $plate): string
     {
-        $plate = strtoupper(
-            trim($plate)
-        );
-
         return preg_replace(
             '/[^A-Z0-9]/',
             '',
-            $plate
+            strtoupper(trim($plate))
         ) ?? '';
+    }
+
+    /**
+     * Normaliser un statut pour permettre les comparaisons,
+     * même avec des accents ou des majuscules.
+     */
+    private function normalizeStatus(string $status): string
+    {
+        $status = mb_strtolower(
+            trim($status),
+            'UTF-8'
+        );
+
+        return str_replace(
+            ['é', 'è', 'ê', 'ë', 'à', 'â', 'ù', 'û', 'ô', 'î', 'ï'],
+            ['e', 'e', 'e', 'e', 'a', 'a', 'u', 'u', 'o', 'i', 'i'],
+            $status
+        );
     }
 }

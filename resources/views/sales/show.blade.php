@@ -937,22 +937,27 @@
                 {{-- ACTIONS --}}
                 <div class="text-end mt-5 print-hide">
 
-                    @if($sale->status !== 'cancelled')
+                   @if(
+                        auth()->user()->role === 'admin'
+                        && $sale->status !== 'cancelled'
+                    )
 
-                        <form action="{{ route('sales.cancel', $sale) }}"
+                        <form
+                            action="{{ route('sales.cancel', $sale) }}"
                             method="POST"
-                            class="d-inline">
-
+                            id="cancelInvoiceForm"
+                            class="d-inline"
+                        >
                             @csrf
-
                             @method('PUT')
 
-                            <button type="submit"
-                                    class="btn btn-warning btn-lg"
-                                    onclick="return confirm('Annuler cette facture ?')">
-
-                                ❌ Annuler la facture
-
+                            <button
+                                type="button"
+                                class="btn btn-warning btn-lg"
+                                id="cancelInvoiceButton"
+                            >
+                                <i class="bx bx-x-circle me-1"></i>
+                                Annuler la facture
                             </button>
 
                         </form>
@@ -978,5 +983,89 @@
             </div>
 
         </div>
+
+        @push('scripts')
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    const cancelButton = document.getElementById('cancelInvoiceButton');
+    const cancelForm = document.getElementById('cancelInvoiceForm');
+
+    if (!cancelButton || !cancelForm) {
+        return;
+    }
+
+    cancelButton.addEventListener('click', function () {
+
+        Swal.fire({
+            icon: 'warning',
+
+            title: 'Annuler cette facture ?',
+
+            html: `
+                <div class="text-center">
+                    <p class="mb-2">
+                        Vous êtes sur le point d’annuler la facture
+                        <strong>{{ $sale->invoice_number }}</strong>.
+                    </p>
+
+                    <p class="text-danger fw-semibold mb-0">
+                        Cette action modifiera le statut de la facture
+                        et elle ne sera plus comptabilisée dans les ventes.
+                    </p>
+                </div>
+            `,
+
+            showCancelButton: true,
+
+            confirmButtonText: `
+                <i class="bx bx-check me-1"></i>
+                Oui, annuler
+            `,
+
+            cancelButtonText: `
+                <i class="bx bx-arrow-back me-1"></i>
+                Retour
+            `,
+
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+
+            reverseButtons: true,
+
+            focusCancel: true,
+
+            allowOutsideClick: false,
+            allowEscapeKey: true,
+
+            customClass: {
+                popup: 'rounded-4 shadow-lg',
+                confirmButton: 'px-4',
+                cancelButton: 'px-4'
+            }
+        }).then(function (result) {
+
+            if (result.isConfirmed) {
+
+                Swal.fire({
+                    title: 'Annulation en cours...',
+                    text: 'Veuillez patienter.',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    didOpen: function () {
+                        Swal.showLoading();
+                    }
+                });
+
+                cancelForm.submit();
+            }
+        });
+    });
+
+});
+</script>
+
+@endpush
 
 @endsection
