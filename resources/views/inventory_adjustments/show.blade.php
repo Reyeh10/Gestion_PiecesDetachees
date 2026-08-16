@@ -2,47 +2,65 @@
 
 @section('content')
 
-<form action="{{ route('inventory-adjustments.store') }}"
-      method="POST">
+<div class="card shadow-sm border-0">
 
-    @csrf
+    {{-- ============================================================
+        HEADER
+    ============================================================ --}}
+    <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
 
-    <div class="card">
+        <div>
 
-        <div class="card-header d-flex justify-content-between align-items-center">
-
-            <h4 class="mb-0">
-                Nouvel ajustement inventaire
+            <h4 class="mb-1 fw-bold">
+                Détail de l'ajustement inventaire
             </h4>
 
-            <a href="{{ route('inventory-adjustments.index') }}"
-               class="btn btn-secondary">
-
-                Retour
-
-            </a>
+            <small class="text-muted">
+                Consultation uniquement
+            </small>
 
         </div>
 
-        <div class="card-body">
+        <a href="{{ route('inventory-adjustments.index') }}"
+           class="btn btn-secondary">
 
-            @include('inventory_adjustments.form')
+            <i class="bx bx-arrow-back me-1"></i>
 
-        </div>
+            Retour
 
-        <div class="card-footer text-end">
-
-            <button type="submit"
-                    class="btn btn-primary">
-
-                Enregistrer ajustement
-
-            </button>
-
-        </div>
+        </a>
 
     </div>
 
-</form>
+
+    {{-- ============================================================
+        BODY
+    ============================================================ --}}
+    <div class="card-body">
+
+        @include('inventory_adjustments.form', [
+            'readonly' => true
+        ])
+
+    </div>
+
+
+    {{-- ============================================================
+        FOOTER
+    ============================================================ --}}
+    <div class="card-footer bg-white text-end">
+
+        <a href="{{ route('inventory-adjustments.index') }}"
+           class="btn btn-secondary">
+
+            <i class="bx bx-arrow-back me-1"></i>
+
+            Retour à la liste
+
+        </a>
+
+    </div>
+
+</div>
 
 @endsection

@@ -31,4 +31,9 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+        'app_atelier' => [
+        'url'   => env('APP_ATELIER_URL'),
+        'token' => env('APP_ATELIER_TOKEN'),
+    ],
+
 ];

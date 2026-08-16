@@ -1,5 +1,32 @@
 @php
     $user = auth()->user();
+
+    /*
+    |--------------------------------------------------------------------------
+    | NOUVELLES COMMANDES REÇUES DU GARAGE
+    |--------------------------------------------------------------------------
+    |
+    | Compteur des commandes App Atelier qui n'ont pas encore été ouvertes.
+    | Visible pour :
+    | - admin
+    | - chef_magasinier
+    | - vendeur
+    |
+    */
+
+    $nouvellesCommandesGarage = 0;
+
+    if (
+        $user &&
+        in_array($user->role, [
+            'admin',
+            'chef_magasinier',
+            'vendeur'
+        ])
+    ) {
+        $nouvellesCommandesGarage =
+            \App\Models\ExternalBonCommande::whereNull('vu_at')->count();
+    }
 @endphp
 
 <aside id="layout-menu"
@@ -90,7 +117,10 @@
 
         </li>
 
+        {{-- ===================================================== --}}
         {{-- PRODUITS --}}
+        {{-- ===================================================== --}}
+
         @if($user && in_array($user->role, [
             'admin',
             'chef_magasinier',
@@ -99,63 +129,153 @@
             'caissier'
         ]))
 
-        <li class="menu-item
-            {{
-                request()->routeIs('products.*')
-                ? 'active open'
-                : ''
-            }}">
+            <li class="menu-item
+                {{
+                    request()->routeIs('products.*')
+                        ? 'active open'
+                        : ''
+                }}"
+            >
 
-            <a href="javascript:void(0);"
-               class="menu-link menu-toggle">
+                <a href="javascript:void(0);"
+                class="menu-link menu-toggle">
 
-                <i class="menu-icon tf-icons bx bx-package"></i>
+                    <i class="menu-icon tf-icons bx bx-package"></i>
 
-                <div>Produits</div>
+                    <div>Produits</div>
 
-            </a>
+                </a>
 
-            <ul class="menu-sub">
 
-                <li class="menu-item {{ request()->routeIs('products.index') ? 'active' : '' }}">
+                <ul class="menu-sub">
 
-                    <a href="{{ route('products.index') }}"
-                       class="menu-link">
+                    {{-- GESTION DES PRODUITS --}}
 
-                        <div>Tous les produits</div>
+                    <li class="menu-header small text-uppercase">
+                        <span class="menu-header-text">
+                            Gestion des produits
+                        </span>
+                    </li>
 
-                    </a>
 
-                </li>
+                    <li class="menu-item
+                        {{
+                            request()->routeIs(
+                                'products.index',
+                                'products.show',
+                                'products.create',
+                                'products.edit'
+                            )
+                                ? 'active'
+                                : ''
+                        }}"
+                    >
 
-                <li class="menu-item {{ request()->routeIs('products.available') ? 'active' : '' }}">
+                        <a href="{{ route('products.index') }}"
+                        class="menu-link">
 
-                    <a href="{{ route('products.available') }}"
-                       class="menu-link">
+                            <div>Tous les produits</div>
 
-                        <div>Produits disponibles</div>
+                        </a>
 
-                    </a>
+                    </li>
 
-                </li>
 
-                <li class="menu-item {{ request()->routeIs('products.sold') ? 'active' : '' }}">
+                    <li class="menu-item
+                        {{
+                            request()->routeIs('products.available')
+                                ? 'active'
+                                : ''
+                        }}"
+                    >
 
-                    <a href="{{ route('products.sold') }}"
-                       class="menu-link">
+                        <a href="{{ route('products.available') }}"
+                        class="menu-link">
 
-                        <div>Produits vendus</div>
+                            <div>Produits disponibles</div>
 
-                    </a>
+                        </a>
 
-                </li>
+                    </li>
 
-            </ul>
+                    {{-- ===================================================== --}}
+                    {{-- PIÈCES NON DISPONIBLES --}}
+                    {{-- ===================================================== --}}
 
-        </li>
+                    <li class="menu-item
+                        {{
+                            request()->routeIs('products.unavailable')
+                                ? 'active'
+                                : ''
+                        }}"
+                    >
+                        <a
+                            href="{{ route('products.unavailable') }}"
+                            class="menu-link"
+                        >
+                            <div>
+                                Pièces non disponibles
+                            </div>
+                        </a>
+                    </li>
+                    <li class="menu-item
+                        {{
+                            request()->routeIs('products.sold')
+                                ? 'active'
+                                : ''
+                        }}"
+                    >
+
+                        <a href="{{ route('products.sold') }}"
+                        class="menu-link">
+
+                            <div>Produits vendus</div>
+
+                        </a>
+
+                    </li>
+
+
+                    {{-- RÉAPPROVISIONNEMENT --}}
+
+                    @if(in_array($user->role, [
+                        'admin',
+                        'chef_magasinier',
+                        'magasinier',
+                        'vendeur'
+                    ]))
+
+                        <li class="menu-header small text-uppercase">
+                            <span class="menu-header-text">
+                                Réapprovisionnement
+                            </span>
+                        </li>
+
+
+                        <li class="menu-item
+                            {{
+                                request()->routeIs('products.to-order')
+                                    ? 'active'
+                                    : ''
+                            }}"
+                        >
+
+                            <a href="{{ route('products.to-order') }}"
+                            class="menu-link">
+
+                                <div>Pièces à commander</div>
+
+                            </a>
+
+                        </li>
+
+                    @endif
+
+                </ul>
+
+            </li>
 
         @endif
-
         {{-- CATEGORIES --}}
         <li class="menu-item {{ request()->routeIs('categories.*') ? 'active' : '' }}">
 
@@ -198,24 +318,30 @@
 
         </li>
 
+        {{-- ===================================================== --}}
         {{-- VÉHICULES --}}
+        {{-- ===================================================== --}}
+
         @if($user && in_array($user->role, [
             'admin',
             'chef_magasinier',
             'magasinier',
             'vendeur',
             'caissier'
-        ]))
+            ]))
 
             <li class="menu-item
                 {{
                     request()->routeIs('vehicles.*')
+                    || request()->routeIs('vehicle-part-requests.*')
                         ? 'active open'
                         : ''
-                }}">
+                }}"
+            >
 
+                {{-- MENU PRINCIPAL --}}
                 <a href="javascript:void(0);"
-                   class="menu-link menu-toggle">
+                class="menu-link menu-toggle">
 
                     <i class="menu-icon tf-icons bx bx-car"></i>
 
@@ -223,8 +349,35 @@
 
                 </a>
 
+
                 <ul class="menu-sub">
 
+
+                    {{-- ================================================= --}}
+                    {{-- 1. TRAÇABILITÉ DES VÉHICULES --}}
+                    {{-- ================================================= --}}
+
+                    <li class="menu-header small text-uppercase"
+                        style="
+                            padding-left: 1rem;
+                            margin-top: 8px;
+                            margin-bottom: 4px;
+                        ">
+
+                        <span class="menu-header-text"
+                            style="
+                                font-size: 10px;
+                                font-weight: 700;
+                                letter-spacing: .5px;
+                                opacity: .65;
+                            ">
+                            Traçabilité des véhicules
+                        </span>
+
+                    </li>
+
+
+                    {{-- LISTE DES VÉHICULES --}}
                     <li class="menu-item
                         {{
                             request()->routeIs(
@@ -234,47 +387,194 @@
                             )
                                 ? 'active'
                                 : ''
-                        }}">
+                        }}"
+                    >
 
                         <a href="{{ route('vehicles.index') }}"
-                           class="menu-link">
+                        class="menu-link">
 
-                            <div>Liste des véhicules</div>
+                            <div>
+                                Liste des véhicules
+                            </div>
 
                         </a>
 
                     </li>
 
+
+                    {{-- NOUVEAU VÉHICULE --}}
                     <li class="menu-item
                         {{
                             request()->routeIs('vehicles.create')
                                 ? 'active'
                                 : ''
-                        }}">
+                        }}"
+                    >
 
                         <a href="{{ route('vehicles.create') }}"
-                           class="menu-link">
+                        class="menu-link">
 
-                            <div>Nouveau véhicule</div>
+                            <div>
+                                Nouveau véhicule
+                            </div>
 
                         </a>
 
                     </li>
 
+
+                    {{-- HISTORIQUE / TRAÇABILITÉ --}}
                     <li class="menu-item
                         {{
                             request()->routeIs('vehicles.history')
                                 ? 'active'
                                 : ''
-                        }}">
+                        }}"
+                    >
 
                         <a href="{{ route('vehicles.history') }}"
-                           class="menu-link">
+                        class="menu-link">
 
-                            <div>Traçabilité véhicule</div>
+                            <div>
+                                Historique / Traçabilité
+                            </div>
+
                         </a>
 
                     </li>
+
+
+
+                    {{-- ================================================= --}}
+                    {{-- 2. SUIVI DES PIÈCES --}}
+                    {{-- ================================================= --}}
+
+                    @if($user && in_array($user->role, [
+                        'admin',
+                        'chef_magasinier',
+                        'magasinier'
+                    ]))
+
+                        <li class="menu-header small text-uppercase"
+                            style="
+                                padding-left: 1rem;
+                                margin-top: 18px;
+                                margin-bottom: 4px;
+                            ">
+
+                            <span class="menu-header-text"
+                                style="
+                                    font-size: 10px;
+                                    font-weight: 700;
+                                    letter-spacing: .5px;
+                                    opacity: .65;
+                                ">
+                                Suivi des pièces
+                            </span>
+
+                        </li>
+
+
+                        {{-- TOUTES LES PIÈCES --}}
+                        <li class="menu-item
+                            {{
+                                request()->routeIs(
+                                    'vehicle-part-requests.index',
+                                    'vehicle-part-requests.create',
+                                    'vehicle-part-requests.store',
+                                    'vehicle-part-requests.show',
+                                    'vehicle-part-requests.edit',
+                                    'vehicle-part-requests.update',
+                                    'vehicle-part-requests.change-status'
+                                )
+                                    ? 'active'
+                                    : ''
+                            }}"
+                        >
+
+                            <a href="{{ route('vehicle-part-requests.index') }}"
+                            class="menu-link">
+
+                                <div>
+                                    Toutes les pièces
+                                </div>
+
+                            </a>
+
+                        </li>
+
+
+                        {{-- PIÈCES COMMANDÉES --}}
+                        <li class="menu-item
+                            {{
+                                request()->routeIs(
+                                    'vehicle-part-requests.ordered'
+                                )
+                                    ? 'active'
+                                    : ''
+                            }}"
+                        >
+
+                            <a href="{{ route('vehicle-part-requests.ordered') }}"
+                            class="menu-link">
+
+                                <div>
+                                    Pièces commandées
+                                </div>
+
+                            </a>
+
+                        </li>
+
+
+                        {{-- PIÈCES REÇUES --}}
+                        <li class="menu-item
+                            {{
+                                request()->routeIs(
+                                    'vehicle-part-requests.received'
+                                )
+                                    ? 'active'
+                                    : ''
+                            }}"
+                        >
+
+                            <a href="{{ route('vehicle-part-requests.received') }}"
+                            class="menu-link">
+
+                                <div>
+                                    Pièces reçues
+                                </div>
+
+                            </a>
+
+                        </li>
+
+
+                        {{-- PIÈCES NON TROUVÉES --}}
+                        <li class="menu-item
+                            {{
+                                request()->routeIs(
+                                    'vehicle-part-requests.not-found'
+                                )
+                                    ? 'active'
+                                    : ''
+                            }}"
+                        >
+
+                            <a href="{{ route(
+                                'vehicle-part-requests.not-found'
+                            ) }}"
+                            class="menu-link">
+
+                                <div>
+                                    Pièces non trouvées
+                                </div>
+
+                            </a>
+
+                        </li>
+
+                    @endif
 
                 </ul>
 
@@ -323,7 +623,10 @@
 
         @endif
 
-        {{-- TRANSFERTS DEPOTS --}}
+        {{-- ===================================================== --}}
+        {{-- TRANSFERTS ENTRE DÉPÔTS --}}
+        {{-- ===================================================== --}}
+
         @if($user && in_array($user->role, [
             'admin',
             'chef_magasinier',
@@ -332,23 +635,26 @@
             'caissier'
         ]))
 
-        <li class="menu-item
-            {{
-                request()->routeIs('transfers.*')
-                ? 'active open'
-                : ''
-            }}">
+            <li class="menu-item
+                {{
+                    request()->routeIs('depot-transfers.*')
+                        ? 'active'
+                        : ''
+                }}
+            ">
 
-            <a href="{{ route('transfers.index') }}"
-               class="menu-link">
+                <a href="{{ route('depot-transfers.index') }}"
+                class="menu-link">
 
-                <i class="menu-icon tf-icons bx bx-transfer-alt"></i>
+                    <i class="menu-icon tf-icons bx bx-transfer-alt"></i>
 
-                <div>Transferts dépôts</div>
+                    <div>
+                        Transferts dépôts
+                    </div>
 
-            </a>
+                </a>
 
-        </li>
+            </li>
 
         @endif
 
@@ -447,6 +753,50 @@
 
         </li>
 
+                {{-- ===================================================== --}}
+                {{-- COMMANDES REÇUES DU GARAGE / APP ATELIER --}}
+                {{-- ===================================================== --}}
+
+                @if($user && in_array($user->role, [
+                    'admin',
+                    'chef_magasinier',
+                    'vendeur'
+                ]))
+
+                    <li class="menu-item
+                        {{
+                            request()->routeIs('fournisseur-commandes.*')
+                                ? 'active'
+                                : ''
+                        }}
+                    ">
+
+                        <a href="{{ route('fournisseur-commandes.index') }}"
+                        class="menu-link">
+
+                            <i class="menu-icon tf-icons bx bx-receipt"></i>
+
+                            <div>
+                                Commandes garage
+                            </div>
+
+                            {{-- NOMBRE DE NOUVELLES COMMANDES --}}
+                            @if($nouvellesCommandesGarage > 0)
+
+                                <div class="badge bg-danger rounded-pill ms-auto">
+
+                                    {{ $nouvellesCommandesGarage }}
+
+                                </div>
+
+                            @endif
+
+                        </a>
+
+                    </li>
+
+                @endif
+
         {{-- ===================================================== --}}
         {{-- TRANSACTIONS --}}
         {{-- ===================================================== --}}
@@ -518,84 +868,185 @@
 
 
 
+       {{-- ===================================================== --}}
         {{-- VENTES --}}
+        {{-- ===================================================== --}}
+
         @if($user && in_array($user->role, [
             'admin',
             'chef_magasinier',
-             'magasinier',
+            'magasinier',
             'vendeur',
             'caissier'
         ]))
 
-        <li class="menu-item
-            {{
-                request()->routeIs('sales.*') ||
-                request()->routeIs('proformas.*')
-                ? 'active open'
-                : ''
-            }}">
+            <li class="menu-item
+                {{
+                    request()->routeIs('sales.*')
+                    || request()->routeIs('proformas.*')
+                        ? 'active open'
+                        : ''
+                }}"
+            >
 
-            <a href="javascript:void(0);"
-               class="menu-link menu-toggle">
+                {{-- MENU PRINCIPAL --}}
+                <a href="javascript:void(0);"
+                class="menu-link menu-toggle">
 
-                <i class="menu-icon tf-icons bx bx-store"></i>
+                    <i class="menu-icon tf-icons bx bx-store"></i>
 
-                <div>Ventes</div>
+                    <div>Ventes</div>
 
-            </a>
+                </a>
 
-            <ul class="menu-sub">
 
-                <li class="menu-item {{ request()->routeIs('sales.create') ? 'active' : '' }}">
+                <ul class="menu-sub">
 
-                    <a href="{{ route('sales.create') }}"
-                       class="menu-link">
 
-                        <div>Générer une vente</div>
+                    {{-- ================================================= --}}
+                    {{-- 1. GESTION DES VENTES --}}
+                    {{-- ================================================= --}}
 
-                    </a>
+                    <li class="menu-header small text-uppercase"
+                        style="
+                            padding-left: 1rem;
+                            margin-top: 8px;
+                            margin-bottom: 4px;
+                        ">
 
-                </li>
+                        <span class="menu-header-text"
+                            style="
+                                font-size: 10px;
+                                font-weight: 700;
+                                letter-spacing: .5px;
+                                opacity: .65;
+                            ">
+                            Gestion des ventes
+                        </span>
 
-                <li class="menu-item {{ request()->routeIs('sales.index') ? 'active' : '' }}">
+                    </li>
 
-                    <a href="{{ route('sales.index') }}"
-                       class="menu-link">
 
-                        <div>Liste des ventes</div>
+                    {{-- GÉNÉRER UNE VENTE --}}
+                    <li class="menu-item
+                        {{
+                            request()->routeIs('sales.create')
+                                ? 'active'
+                                : ''
+                        }}"
+                    >
 
-                    </a>
+                        <a href="{{ route('sales.create') }}"
+                        class="menu-link">
 
-                </li>
+                            <div>
+                                Générer une vente
+                            </div>
 
-                <li class="menu-item {{ request()->routeIs('proformas.create') ? 'active' : '' }}">
+                        </a>
 
-                    <a href="{{ route('proformas.create') }}"
-                       class="menu-link">
+                    </li>
 
-                        <div>Générer un proforma</div>
 
-                    </a>
+                    {{-- LISTE DES VENTES --}}
+                    <li class="menu-item
+                        {{
+                            request()->routeIs(
+                                'sales.index',
+                                'sales.show'
+                            )
+                                ? 'active'
+                                : ''
+                        }}"
+                    >
 
-                </li>
+                        <a href="{{ route('sales.index') }}"
+                        class="menu-link">
 
-                <li class="menu-item {{ request()->routeIs('proformas.index') ? 'active' : '' }}">
+                            <div>
+                                Liste des ventes
+                            </div>
 
-                    <a href="{{ route('proformas.index') }}"
-                       class="menu-link">
+                        </a>
 
-                        <div>Liste des proformas</div>
+                    </li>
 
-                    </a>
 
-                </li>
 
-            </ul>
+                    {{-- ================================================= --}}
+                    {{-- 2. GESTION DES PROFORMAS --}}
+                    {{-- ================================================= --}}
 
-        </li>
+                    <li class="menu-header small text-uppercase"
+                        style="
+                            padding-left: 1rem;
+                            margin-top: 18px;
+                            margin-bottom: 4px;
+                        ">
+
+                        <span class="menu-header-text"
+                            style="
+                                font-size: 10px;
+                                font-weight: 700;
+                                letter-spacing: .5px;
+                                opacity: .65;
+                            ">
+                            Gestion des proformas
+                        </span>
+
+                    </li>
+
+
+                    {{-- GÉNÉRER UN PROFORMA --}}
+                    <li class="menu-item
+                        {{
+                            request()->routeIs('proformas.create')
+                                ? 'active'
+                                : ''
+                        }}"
+                    >
+
+                        <a href="{{ route('proformas.create') }}"
+                        class="menu-link">
+
+                            <div>
+                                Générer un proforma
+                            </div>
+
+                        </a>
+
+                    </li>
+
+
+                    {{-- LISTE DES PROFORMAS --}}
+                    <li class="menu-item
+                        {{
+                            request()->routeIs(
+                                'proformas.index',
+                                'proformas.show'
+                            )
+                                ? 'active'
+                                : ''
+                        }}"
+                    >
+
+                        <a href="{{ route('proformas.index') }}"
+                        class="menu-link">
+
+                            <div>
+                                Liste des proformas
+                            </div>
+
+                        </a>
+
+                    </li>
+
+
+                </ul>
+
+            </li>
 
         @endif
-
 
 
 

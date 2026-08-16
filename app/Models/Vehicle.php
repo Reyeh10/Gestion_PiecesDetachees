@@ -60,7 +60,7 @@ class Vehicle extends Model
         );
     }
 
-    
+
 
     public function getDisplayNameAttribute(): string
     {
@@ -131,5 +131,14 @@ class Vehicle extends Model
             trim((string) $value) !== ''
                 ? trim((string) $value)
                 : null;
+    }
+
+    public function partRequests()
+    {
+        return $this->hasMany(
+            VehiclePartRequest::class,
+            'vehicle_id',
+            'id'
+        );
     }
 }

@@ -39,14 +39,26 @@
                         </x-dropdown-link>
 
                         <!-- Authentication -->
-                        <form method="POST" action="{{ route('logout') }}">
+                      <form
+                            method="POST"
+                            action="{{ route('logout') }}"
+                            class="m-0"
+                        >
                             @csrf
 
-                            <x-dropdown-link :href="route('logout')"
-                                    onclick="event.preventDefault();
-                                                this.closest('form').submit();">
-                                {{ __('Log Out') }}
-                            </x-dropdown-link>
+                            <button
+                                type="submit"
+                                class="dropdown-item text-danger w-100 d-flex align-items-center"
+                                style="
+                                    border: 0;
+                                    background: transparent;
+                                    text-align: left;
+                                "
+                            >
+                                <i class="bx bx-power-off me-2"></i>
+
+                                Déconnexion
+                            </button>
                         </form>
                     </x-slot>
                 </x-dropdown>
@@ -85,14 +97,26 @@
                 </x-responsive-nav-link>
 
                 <!-- Authentication -->
-                <form method="POST" action="{{ route('logout') }}">
+               <form
+                    method="POST"
+                    action="{{ route('logout') }}"
+                    class="w-100"
+                >
                     @csrf
 
-                    <x-responsive-nav-link :href="route('logout')"
-                            onclick="event.preventDefault();
-                                        this.closest('form').submit();">
-                        {{ __('Log Out') }}
-                    </x-responsive-nav-link>
+                    <button
+                        type="submit"
+                        class="nav-link text-danger w-100 d-flex align-items-center"
+                        style="
+                            border: 0;
+                            background: transparent;
+                            text-align: left;
+                        "
+                    >
+                        <i class="bx bx-power-off me-2"></i>
+
+                        Déconnexion
+                    </button>
                 </form>
             </div>
         </div>

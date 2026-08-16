@@ -4,10 +4,24 @@
 
 <div class="card border-0 shadow-sm rounded-4">
 
+    {{-- ========================================================= --}}
     {{-- HEADER --}}
-    <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center py-4">
+    {{-- ========================================================= --}}
+
+    <div
+        class="
+            card-header
+            bg-white
+            border-0
+            d-flex
+            justify-content-between
+            align-items-center
+            py-4
+        "
+    >
 
         <div>
+
             <h3 class="fw-bold mb-1 text-dark">
                 Liste des proformas
             </h3>
@@ -15,12 +29,22 @@
             <small class="text-muted">
                 Gestion des proformas et devis clients
             </small>
+
         </div>
 
-        <a href="{{ route('proformas.create') }}"
-           class="btn btn-primary rounded-pill px-4 shadow-sm">
 
-            <i class="bx bx-plus"></i>
+        <a
+            href="{{ route('proformas.create') }}"
+            class="
+                btn
+                btn-primary
+                rounded-pill
+                px-4
+                shadow-sm
+            "
+        >
+
+            <i class="bx bx-plus me-1"></i>
 
             Nouveau proforma
 
@@ -28,117 +52,273 @@
 
     </div>
 
+
+
+    {{-- ========================================================= --}}
     {{-- BODY --}}
+    {{-- ========================================================= --}}
+
     <div class="card-body">
 
-        {{-- SUCCESS MESSAGE --}}
+
+        {{-- ===================================================== --}}
+        {{-- MESSAGES --}}
+        {{-- ===================================================== --}}
+
         @if(session('success'))
 
-            <div class="alert alert-success alert-dismissible fade show">
+            <div
+                class="
+                    alert
+                    alert-success
+                    alert-dismissible
+                    fade
+                    show
+                "
+            >
 
                 {{ session('success') }}
 
-                <button type="button"
-                        class="btn-close"
-                        data-bs-dismiss="alert"></button>
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="alert"
+                    aria-label="Fermer"
+                ></button>
 
             </div>
 
         @endif
 
-        {{-- SEARCH BAR --}}
-       <form method="GET"
+
+        @if(session('error'))
+
+            <div
+                class="
+                    alert
+                    alert-danger
+                    alert-dismissible
+                    fade
+                    show
+                "
+            >
+
+                {{ session('error') }}
+
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="alert"
+                    aria-label="Fermer"
+                ></button>
+
+            </div>
+
+        @endif
+
+
+        @if(session('info'))
+
+            <div
+                class="
+                    alert
+                    alert-info
+                    alert-dismissible
+                    fade
+                    show
+                "
+            >
+
+                {{ session('info') }}
+
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="alert"
+                    aria-label="Fermer"
+                ></button>
+
+            </div>
+
+        @endif
+
+
+
+        {{-- ===================================================== --}}
+        {{-- RECHERCHE / FILTRES --}}
+        {{-- ===================================================== --}}
+
+        <form
+            method="GET"
             action="{{ route('proformas.index') }}"
-            class="row g-2 align-items-center mb-4">
+            class="row g-3 align-items-end mb-4"
+        >
 
-            {{-- CLIENT --}}
-            <div class="col-md-3">
+
+            {{-- RECHERCHE --}}
+            <div class="col-lg-7 col-md-6">
+
+                <label
+                    for="search"
+                    class="form-label fw-semibold"
+                >
+                    Recherche
+                </label>
+
 
                 <div class="input-group shadow-sm">
 
-                    <span class="input-group-text bg-light border-0">
-                        <i class="bx bx-user text-primary"></i>
+                    <span
+                        class="
+                            input-group-text
+                            bg-light
+                            border-0
+                        "
+                    >
+
+                        <i
+                            class="
+                                bx
+                                bx-search
+                                text-primary
+                            "
+                        ></i>
+
                     </span>
 
-                    <input type="text"
-                        name="client"
-                        class="form-control border-0 bg-light"
-                        placeholder="Recherche client..."
-                        value="{{ request('client') }}">
+
+                    <input
+                        type="text"
+                        name="search"
+                        id="search"
+                        class="
+                            form-control
+                            border-0
+                            bg-light
+                        "
+                        placeholder="N° proforma, client, téléphone, email, VIN, marque, modèle..."
+                        value="{{ $search ?? request('search') }}"
+                    >
 
                 </div>
 
             </div>
 
-            {{-- REFERENCE --}}
-            <div class="col-md-2">
 
-                <div class="input-group shadow-sm">
 
-                    <span class="input-group-text bg-light border-0">
-                        <i class="bx bx-barcode text-primary"></i>
-                    </span>
+            {{-- STATUT --}}
+            <div class="col-lg-3 col-md-3">
 
-                    <input type="text"
-                        name="reference"
-                        class="form-control border-0 bg-light"
-                        placeholder="Référence..."
-                        value="{{ request('reference') }}">
+                <label
+                    for="status"
+                    class="form-label fw-semibold"
+                >
+                    Statut
+                </label>
 
-                </div>
+
+                <select
+                    name="status"
+                    id="status"
+                    class="form-select shadow-sm"
+                >
+
+                    <option value="">
+                        Tous les statuts
+                    </option>
+
+
+                    <option
+                        value="Validé"
+                        {{
+                            ($status ?? request('status')) === 'Validé'
+                                ? 'selected'
+                                : ''
+                        }}
+                    >
+                        Validé
+                    </option>
+
+
+                    <option
+                        value="Converti"
+                        {{
+                            ($status ?? request('status')) === 'Converti'
+                                ? 'selected'
+                                : ''
+                        }}
+                    >
+                        Converti
+                    </option>
+
+
+                    <option
+                        value="Annulé"
+                        {{
+                            ($status ?? request('status')) === 'Annulé'
+                                ? 'selected'
+                                : ''
+                        }}
+                    >
+                        Annulé
+                    </option>
+
+
+                    <option
+                        value="Expiré"
+                        {{
+                            ($status ?? request('status')) === 'Expiré'
+                                ? 'selected'
+                                : ''
+                        }}
+                    >
+                        Expiré
+                    </option>
+
+                </select>
 
             </div>
 
-            {{-- DESIGNATION --}}
-            <div class="col-md-3">
 
-                <div class="input-group shadow-sm">
 
-                    <span class="input-group-text bg-light border-0">
-                        <i class="bx bx-package text-primary"></i>
-                    </span>
+            {{-- RECHERCHER --}}
+            <div class="col-lg-1 col-md-2">
 
-                    <input type="text"
-                        name="designation"
-                        class="form-control border-0 bg-light"
-                        placeholder="Désignation..."
-                        value="{{ request('designation') }}">
+                <button
+                    type="submit"
+                    class="
+                        btn
+                        btn-primary
+                        w-100
+                        fw-semibold
+                        shadow-sm
+                    "
+                    title="Rechercher"
+                >
 
-                </div>
-
-            </div>
-
-            {{-- DATE --}}
-            <div class="col-md-2">
-
-                <input type="date"
-                    name="date"
-                    class="form-control bg-light border-0 shadow-sm"
-                    value="{{ request('date') }}">
-
-            </div>
-
-            {{-- BUTTON SEARCH --}}
-            <div class="col-md-1">
-
-                <button type="submit"
-                        class="btn btn-primary w-100 fw-bold shadow-sm"
-                        style="height:42px;border-radius:10px;">
-
-                    Rechercher
+                    <i class="bx bx-search"></i>
 
                 </button>
 
             </div>
 
-            {{-- BUTTON RESET --}}
-            <div class="col-md-1">
 
-                <a href="{{ route('proformas.index') }}"
-                class="btn btn-secondary w-100 fw-bold shadow-sm d-flex align-items-center justify-content-center"
-                style="height:42px;border-radius:10px;">
 
-                    Reset
+            {{-- RESET --}}
+            <div class="col-lg-1 col-md-1">
+
+                <a
+                    href="{{ route('proformas.index') }}"
+                    class="
+                        btn
+                        btn-secondary
+                        w-100
+                        shadow-sm
+                    "
+                    title="Réinitialiser"
+                >
+
+                    <i class="bx bx-reset"></i>
 
                 </a>
 
@@ -146,169 +326,385 @@
 
         </form>
 
+
+
+        {{-- ===================================================== --}}
         {{-- TABLE --}}
+        {{-- ===================================================== --}}
+
         <div class="table-responsive">
 
-            <table class="table align-middle table-hover">
+            <table
+                class="
+                    table
+                    align-middle
+                    table-hover
+                "
+            >
 
-                <thead class="bg-light">
+                <thead class="table-light">
 
                     <tr>
 
-                        <th class="fw-bold text-uppercase small">
+                        <th
+                            class="
+                                fw-bold
+                                text-uppercase
+                                small
+                            "
+                        >
+                            Proforma
+                        </th>
+
+
+                        <th
+                            class="
+                                fw-bold
+                                text-uppercase
+                                small
+                            "
+                        >
                             Client
                         </th>
 
-                        <th class="fw-bold text-uppercase small">
-                            Référence
+
+                        <th
+                            class="
+                                fw-bold
+                                text-uppercase
+                                small
+                            "
+                        >
+                            Véhicule
                         </th>
 
-                        <th class="fw-bold text-uppercase small">
-                            Désignation
+
+                        <th
+                            class="
+                                fw-bold
+                                text-uppercase
+                                small
+                                text-end
+                            "
+                        >
+                            Montant
                         </th>
 
-                        <th class="fw-bold text-uppercase small text-end">
-                            Total
+
+                        <th
+                            class="
+                                fw-bold
+                                text-uppercase
+                                small
+                                text-center
+                            "
+                        >
+                            Statut
                         </th>
 
-                        <th class="fw-bold text-uppercase small">
+
+                        <th
+                            class="
+                                fw-bold
+                                text-uppercase
+                                small
+                            "
+                        >
                             Date
                         </th>
 
-                        <th width="180"
-                            class="fw-bold text-uppercase small text-center">
 
+                        <th
+                            width="110"
+                            class="
+                                fw-bold
+                                text-uppercase
+                                small
+                                text-center
+                            "
+                        >
                             Actions
-
                         </th>
 
                     </tr>
 
                 </thead>
 
+
                 <tbody>
 
-                    @forelse($sales as $proforma)
+                    @forelse($proformas as $proforma)
 
-                        <tr class="border-bottom">
+                        <tr>
 
-                            {{-- CLIENT --}}
-                            <td class="fw-semibold">
 
-                                {{ $proforma->customer->name ?? 'Vente comptoir' }}
+                            {{-- ================================= --}}
+                            {{-- NUMÉRO PROFORMA --}}
+                            {{-- ================================= --}}
 
-                            </td>
-
-                            {{-- REFERENCE --}}
                             <td>
 
-                                <span class="badge bg-label-primary fs-6">
+                                <span
+                                    class="
+                                        badge
+                                        bg-label-primary
+                                    "
+                                >
 
-                                    {{ $proforma->invoice_number }}
+                                    {{ $proforma->proforma_number }}
 
                                 </span>
 
                             </td>
 
-                            {{-- DESIGNATION --}}
+
+
+                            {{-- ================================= --}}
+                            {{-- CLIENT --}}
+                            {{-- ================================= --}}
+
                             <td>
 
-                                @if($proforma->items->count())
+                                <div
+                                    class="
+                                        fw-semibold
+                                        text-dark
+                                    "
+                                >
 
-                                    <div class="fw-semibold text-dark">
+                                    {{
+                                        $proforma->customer?->name
+                                        ?? 'Client non défini'
+                                    }}
 
-                                        {{ $proforma->items->first()->product->designation ?? '-' }}
+                                </div>
 
-                                    </div>
 
-                                    @if($proforma->items->count() > 1)
+                                @if($proforma->customer?->phone)
 
-                                        <small class="text-muted">
+                                    <small class="text-muted">
 
-                                            + {{ $proforma->items->count() - 1 }}
-                                            autre(s) produit(s)
+                                        {{
+                                            $proforma
+                                                ->customer
+                                                ->phone
+                                        }}
 
-                                        </small>
-
-                                    @endif
-
-                                @else
-
-                                    -
+                                    </small>
 
                                 @endif
 
                             </td>
 
-                            {{-- TOTAL --}}
-                            <td class="text-end fw-bold text-success">
 
-                                {{ number_format($proforma->total, 2, ',', ' ') }} $
+
+                            {{-- ================================= --}}
+                            {{-- VÉHICULE --}}
+                            {{-- ================================= --}}
+
+                            <td>
+
+                                @if($proforma->vehicle)
+
+                                    <div class="fw-semibold">
+
+                                        {{
+                                            $proforma
+                                                ->vehicle
+                                                ->plate_number
+                                            ?? '-'
+                                        }}
+
+                                    </div>
+
+
+                                    <small class="text-muted">
+
+                                        {{
+                                            trim(
+                                                (
+                                                    $proforma
+                                                        ->vehicle
+                                                        ->brand
+                                                    ?? ''
+                                                )
+                                                . ' '
+                                                .
+                                                (
+                                                    $proforma
+                                                        ->vehicle
+                                                        ->model
+                                                    ?? ''
+                                                )
+                                            )
+                                            ?: '-'
+                                        }}
+
+                                    </small>
+
+                                @else
+
+                                    <span class="text-muted">
+                                        -
+                                    </span>
+
+                                @endif
 
                             </td>
 
+
+
+                            {{-- ================================= --}}
+                            {{-- MONTANT --}}
+                            {{-- ================================= --}}
+
+                            <td
+                                class="
+                                    text-end
+                                    fw-bold
+                                    text-success
+                                "
+                            >
+
+                                {{
+                                    number_format(
+                                        (float) $proforma->total_amount,
+                                        2,
+                                        ',',
+                                        ' '
+                                    )
+                                }}
+
+                                FDJ
+
+                            </td>
+
+
+
+                            {{-- ================================= --}}
+                            {{-- STATUT --}}
+                            {{-- ================================= --}}
+
+                            <td class="text-center">
+
+                                @php
+
+                                    $statusClass = match(
+                                        $proforma->status
+                                    ) {
+
+                                        'Validé' =>
+                                            'bg-label-primary',
+
+                                        'Converti' =>
+                                            'bg-label-success',
+
+                                        'Annulé' =>
+                                            'bg-label-danger',
+
+                                        'Expiré' =>
+                                            'bg-label-warning',
+
+                                        default =>
+                                            'bg-label-secondary',
+
+                                    };
+
+                                @endphp
+
+
+                                <span
+                                    class="
+                                        badge
+                                        {{ $statusClass }}
+                                    "
+                                >
+
+                                    {{
+                                        $proforma->status
+                                        ?? '-'
+                                    }}
+
+                                </span>
+
+                            </td>
+
+
+
+                            {{-- ================================= --}}
                             {{-- DATE --}}
+                            {{-- ================================= --}}
+
                             <td>
 
-                                {{ optional($proforma->created_at)->format('d/m/Y H:i') }}
+                                {{
+                                    optional(
+                                        $proforma->proforma_date
+                                    )
+                                    ->format(
+                                        'd/m/Y H:i'
+                                    )
+                                    ?? '-'
+                                }}
 
                             </td>
 
+
+
+                            {{-- ================================= --}}
                             {{-- ACTIONS --}}
-                            <td>
+                            {{-- ================================= --}}
 
-                                <div class="d-flex align-items-center gap-2">
+                            <td class="text-center">
 
-                                    {{-- VOIR --}}
-                                    <a href="{{ route('proformas.show', $proforma) }}"
-                                    class="btn btn-info btn-sm">
+                                <a
+                                    href="{{
+                                        route(
+                                            'proformas.show',
+                                            $proforma
+                                        )
+                                    }}"
+                                    class="
+                                        btn
+                                        btn-info
+                                        btn-sm
+                                    "
+                                    title="Voir"
+                                >
 
-                                        <i class="bx bx-show"></i>
+                                    <i class="bx bx-show"></i>
 
-                                    </a>
+                                </a>
 
-                                    {{-- ADMIN + CHEF MAGASINIER --}}
-                                    @if(in_array(auth()->user()->role, ['admin', 'chef_magasinier']))
-
-                                        {{-- EDIT --}}
-                                        <a href="{{ route('proformas.edit', $proforma) }}"
-                                        class="btn btn-warning btn-sm">
-
-                                            <i class="bx bx-edit"></i>
-
-                                        </a>
-
-                                        {{-- DELETE --}}
-                                        <form action="{{ route('proformas.destroy', $proforma) }}"
-                                            method="POST"
-                                            class="delete-form d-inline">
-
-                                            @csrf
-                                            @method('DELETE')
-
-                                            <button type="submit"
-                                                    class="btn btn-danger btn-sm"
-                                                    onclick="confirmDelete(event)">
-
-                                                <i class="bx bx-trash"></i>
-
-                                            </button>
-                                        </form>
-                                    @endif
-                                </div>
                             </td>
+
                         </tr>
+
 
                     @empty
 
                         <tr>
 
-                            <td colspan="6"
-                                class="text-center text-muted py-5">
+                            <td
+                                colspan="7"
+                                class="
+                                    text-center
+                                    text-muted
+                                    py-5
+                                "
+                            >
 
-                                <i class="bx bx-file display-6 d-block mb-2"></i>
+                                <i
+                                    class="
+                                        bx
+                                        bx-file
+                                        display-6
+                                        d-block
+                                        mb-2
+                                    "
+                                ></i>
 
-                                Aucun proforma trouvé
+                                Aucun proforma trouvé.
 
                             </td>
 
@@ -322,52 +718,30 @@
 
         </div>
 
+
+
+        {{-- ===================================================== --}}
+        {{-- PAGINATION --}}
+        {{-- ===================================================== --}}
+
+        @if($proformas->hasPages())
+
+            <div
+                class="
+                    d-flex
+                    justify-content-center
+                    mt-4
+                "
+            >
+
+                {{ $proformas->links() }}
+
+            </div>
+
+        @endif
+
     </div>
 
 </div>
-
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
-<script>
-
-function confirmDelete(event)
-{
-    event.preventDefault();
-
-    let form = event.target.closest('form');
-
-    Swal.fire({
-
-        title: 'Supprimer le proforma ?',
-
-        text: "Cette action est irréversible.",
-
-        icon: 'warning',
-
-        showCancelButton: true,
-
-        confirmButtonColor: '#d33',
-
-        cancelButtonColor: '#6c757d',
-
-        confirmButtonText: 'Oui, supprimer',
-
-        cancelButtonText: 'Annuler',
-
-        background: '#fff',
-
-        color: '#333',
-
-    }).then((result) => {
-
-        if (result.isConfirmed)
-        {
-            form.submit();
-        }
-
-    });
-}
-
-</script>
 
 @endsection

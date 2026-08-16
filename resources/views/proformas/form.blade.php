@@ -2,248 +2,509 @@
 
 @section('content')
 
-<form action="{{ route('proformas.store') }}" method="POST">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-@csrf
+<style>
+    .stcd-swal-popup {
+        border-radius: 20px !important;
+        padding: 28px 30px 30px !important;
+        box-shadow: 0 20px 60px rgba(15, 23, 42, .20) !important;
+    }
 
-{{-- ALERTS --}}
-@if(session('success'))
-    <div class="alert alert-success">
-        {{ session('success') }}
-    </div>
-@endif
+    .stcd-swal-title {
+        color: #344054 !important;
+        font-size: 23px !important;
+        font-weight: 700 !important;
+    }
 
-@if(session('error'))
-    <div class="alert alert-danger">
-        {{ session('error') }}
-    </div>
-@endif
+    .stcd-swal-message {
+        color: #667085 !important;
+        font-size: 15px !important;
+        line-height: 1.6 !important;
+    }
 
-@if($errors->any())
-    <div class="alert alert-danger">
-        <ul class="mb-0">
-            @foreach($errors->all() as $e)
-                <li>{{ $e }}</li>
-            @endforeach
-        </ul>
-    </div>
-@endif
+    .stcd-swal-confirm {
+        min-width: 130px !important;
+        border-radius: 9px !important;
+        font-weight: 600 !important;
+    }
 
-<div class="card shadow-sm border-0">
+    .proforma-card {
+        border-radius: 14px;
+        overflow: hidden;
+    }
 
-    {{-- HEADER --}}
-    <div class="card-header border-0 pb-0">
-        <h3 class="mb-0 fw-bold">
-           Nouveau proforma
-        </h3>
-    </div>
+    #itemsTable th,
+    #itemsTable td {
+        vertical-align: middle;
+    }
 
-    {{-- BODY --}}
-    <div class="card-body">
+    .vehicle-message {
+        min-height: 18px;
+    }
+</style>
 
-        <div class="row align-items-end">
 
-            {{-- CLIENT --}}
-            <div class="col-md-6 mb-3">
+<form
+    action="{{ route('proformas.store') }}"
+    method="POST"
+    id="proformaForm"
+    novalidate
+>
+    @csrf
 
-                <div class="d-flex justify-content-between align-items-center mb-2">
+    {{-- =========================================================
+         ALERTES
+    ========================================================= --}}
 
-                    <label class="form-label fw-semibold mb-0">
-                        Client
-                    </label>
+    @if(session('success'))
+        <div class="alert alert-success alert-dismissible fade show">
+            {{ session('success') }}
 
-                    <button type="button"
+            <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="alert"
+                aria-label="Fermer"
+            ></button>
+        </div>
+    @endif
+
+    @if(session('error'))
+        <div class="alert alert-danger alert-dismissible fade show">
+            {{ session('error') }}
+
+            <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="alert"
+                aria-label="Fermer"
+            ></button>
+        </div>
+    @endif
+
+    @if($errors->any())
+        <div class="alert alert-danger">
+            <strong>
+                Veuillez corriger les erreurs suivantes :
+            </strong>
+
+            <ul class="mb-0 mt-2">
+                @foreach($errors->all() as $error)
+                    <li>
+                        {{ $error }}
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
+
+    <div class="card shadow-sm border-0 proforma-card">
+
+        {{-- =====================================================
+             HEADER
+        ===================================================== --}}
+
+        <div class="card-header bg-white border-0 pb-0">
+            <h3 class="mb-0 fw-bold">
+                Nouveau proforma
+            </h3>
+        </div>
+
+
+        <div class="card-body">
+
+           {{-- =========================================================
+                CLIENT / VEHICULE / PAIEMENT
+            ========================================================= --}}
+
+            <div class="row g-3 mb-2">
+
+                {{-- =====================================================
+                    CLIENT
+                ===================================================== --}}
+                <div class="col-lg-4 col-md-6">
+
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+
+                        <label
+                            for="customer_id"
+                            class="form-label fw-semibold mb-0"
+                        >
+                            Client
+                        </label>
+
+                        <button
+                            type="button"
                             class="btn btn-primary btn-sm"
                             data-bs-toggle="modal"
-                            data-bs-target="#customerModal">
+                            data-bs-target="#customerModal"
+                        >
+                            <i class="bx bx-plus me-1"></i>
+                            Nouveau client
+                        </button>
 
-                        <i class="bx bx-plus"></i>
-                        Nouveau client
-                    </button>
+                    </div>
 
-                </div>
+                    <select
+                        name="customer_id"
+                        id="customer_id"
+                        class="form-control select2"
+                        required
+                    >
 
-                <select name="customer_id"
-                        class="form-control select2">
-
-                    <option value="">
-                        Vente comptoir
-                    </option>
-
-                    @foreach($customers as $c)
-
-                        <option value="{{ $c->id }}"
-                            {{ old('customer_id') == $c->id ? 'selected' : '' }}>
-
-                            {{ $c->name }}
-
+                        <option value="">
+                            Sélectionner un client
                         </option>
 
-                    @endforeach
+                        @foreach($customers as $customer)
 
-                </select>
+                            <option
+                                value="{{ $customer->id }}"
+                                {{ old('customer_id') == $customer->id ? 'selected' : '' }}
+                            >
+                                {{ $customer->name }}
+                            </option>
+
+                        @endforeach
+
+                    </select>
+
+                    @error('customer_id')
+                        <div class="text-danger small mt-1">
+                            {{ $message }}
+                        </div>
+                    @enderror
+
+                </div>
+
+
+                {{-- =====================================================
+                    NUMERO D'IMMATRICULATION
+                ===================================================== --}}
+                <div class="col-lg-4 col-md-6">
+
+                    {{--
+                        Zone supérieure de même hauteur que celle du client.
+                        Le padding permet d'aligner verticalement le label.
+                    --}}
+                    <div class="d-flex align-items-center mb-2 vehicle-label-zone">
+
+                        <label
+                            for="vehicle_id"
+                            class="form-label fw-semibold mb-0"
+                        >
+                            Numéro d’immatriculation
+                        </label>
+
+                    </div>
+
+                    <select
+                        name="vehicle_id"
+                        id="vehicle_id"
+                        class="form-control"
+                        data-selected="{{ old('vehicle_id', $selectedVehicle->id ?? '') }}"
+                        disabled
+                        required
+                    >
+
+                        <option value="">
+                            Sélectionnez d’abord un client
+                        </option>
+
+                    </select>
+
+                    <div class="vehicle-message">
+
+                        <div
+                            id="vehicleLoadingMessage"
+                            class="small text-muted mt-1 d-none"
+                        >
+                            <i class="bx bx-loader-alt bx-spin"></i>
+                            Chargement des véhicules...
+                        </div>
+
+                        <div
+                            id="vehicleErrorMessage"
+                            class="small text-danger mt-1 d-none"
+                        ></div>
+
+                    </div>
+
+                    @error('vehicle_id')
+                        <div class="text-danger small mt-1">
+                            {{ $message }}
+                        </div>
+                    @enderror
+
+                </div>
+
+
+                {{-- =====================================================
+                    PAIEMENT
+                ===================================================== --}}
+                <div class="col-lg-4 col-md-6">
+
+                    <div class="d-flex align-items-center mb-2 vehicle-label-zone">
+
+                        <label
+                            for="payment_type"
+                            class="form-label fw-semibold mb-0"
+                        >
+                            Paiement
+                        </label>
+
+                    </div>
+
+                    <select
+                        name="payment_type"
+                        id="payment_type"
+                        class="form-control"
+                        required
+                    >
+
+                        <option
+                            value="Cash"
+                            {{ old('payment_type', 'Cash') === 'Cash' ? 'selected' : '' }}
+                        >
+                            Cash
+                        </option>
+
+                        <option
+                            value="Bon de commande"
+                            {{ old('payment_type') === 'Bon de commande' ? 'selected' : '' }}
+                        >
+                            Bon de commande
+                        </option>
+
+                        <option
+                            value="Echeance"
+                            {{ old('payment_type') === 'Echeance' ? 'selected' : '' }}
+                        >
+                            Échéance
+                        </option>
+
+                    </select>
+
+                    @error('payment_type')
+                        <div class="text-danger small mt-1">
+                            {{ $message }}
+                        </div>
+                    @enderror
+
+                </div>
 
             </div>
 
-        </div>
 
-        {{-- TABLE --}}
-        <div class="table-responsive mt-4">
+            {{-- =================================================
+                 PRODUITS
+            ================================================= --}}
 
-            <table class="table table-bordered align-middle"
-                   id="itemsTable">
+            <div class="table-responsive">
 
-                <thead class="table-light">
+                <table
+                    class="table table-bordered align-middle mb-0"
+                    id="itemsTable"
+                >
 
-                    <tr>
+                    <thead class="table-light">
 
-                        <th width="55%">
-                            Référence / Produit
-                        </th>
+                        <tr>
 
-                        <th width="10%"
-                            class="text-center">
+                            <th style="min-width: 360px;">
+                                Référence / Produit
+                            </th>
 
-                            Stock
-                        </th>
+                            <th
+                                style="min-width: 120px;"
+                                class="text-center"
+                            >
+                                Stock
+                            </th>
 
-                        <th width="15%">
-                            Prix unitaire
-                        </th>
+                            <th style="min-width: 220px;">
+                                Prix unitaire
+                            </th>
 
-                        <th width="10%">
-                            Qté
-                        </th>
+                            <th style="min-width: 120px;">
+                                Qté
+                            </th>
 
-                        <th width="15%">
-                            Total
-                        </th>
+                            <th style="min-width: 150px;">
+                                Total
+                            </th>
 
-                        <th width="10%"
-                            class="text-center">
+                            <th
+                                style="min-width: 90px;"
+                                class="text-center"
+                            >
+                                Action
+                            </th>
 
-                            Action
-                        </th>
+                        </tr>
 
-                    </tr>
+                    </thead>
 
-                </thead>
+                    <tbody></tbody>
 
-                <tbody></tbody>
+                </table>
 
-            </table>
+            </div>
 
-        </div>
 
-        {{-- BTN AJOUT --}}
-        <button type="button"
-                class="btn btn-success mt-2"
-                onclick="addRow()">
+            <button
+                type="button"
+                class="btn btn-success mt-3"
+                id="addProductButton"
+            >
+                <i class="bx bx-plus"></i>
+                Ajouter produit
+            </button>
 
-            <i class="bx bx-plus"></i>
-            Ajouter produit
 
-        </button>
+            <hr class="my-4">
 
-        <hr class="my-4">
 
-        {{-- TOTALS --}}
-        <div class="row justify-content-end">
+            {{-- =================================================
+                 TOTAUX
+            ================================================= --}}
 
-            <div class="col-md-4">
+            <div class="row justify-content-end">
 
-                <div class="d-flex justify-content-between mb-2">
+                <div class="col-lg-5 col-md-6">
 
-                    <strong>
-                        Sous-total :
-                    </strong>
+                    <div class="d-flex justify-content-between mb-3">
 
-                    <span id="subTotal">
-                        0.00
-                    </span>
+                        <strong>
+                            Sous-total :
+                        </strong>
 
-                </div>
-
-                {{-- REMISE --}}
-                <div class="mb-3">
-
-                    <label class="form-label">
-                        Remise
-                    </label>
-
-                    <input type="number"
-                           step="0.01"
-                          min="0"
-                           name="discount"
-                           id="discount"
-                           value="0"
-                           class="form-control"
-                           oninput="calculateGrandTotal()">
-
-                </div>
-
-                {{-- TVA --}}
-                <div class="d-flex justify-content-between mb-2">
-
-                    <strong>
-                        TVA (10%)
-                    </strong>
-
-                    <span id="tvaAmount">
-                        0.00
-                    </span>
-
-                </div>
-
-                {{-- TOTAL --}}
-                <div class="d-flex justify-content-between align-items-center mt-4">
-
-                    <h4 class="mb-0 fw-bold">
-                        Total :
-                    </h4>
-
-                    <h2 class="text-primary fw-bold mb-0">
-
-                        <span id="grandTotal">
-                            0.00
+                        <span>
+                            <span id="subTotal">
+                                0.00
+                            </span>
+                            FDJ
                         </span>
 
-                    </h2>
+                    </div>
+
+
+                    <div class="mb-3">
+
+                        <label
+                            for="discount"
+                            class="form-label fw-semibold"
+                        >
+                            Remise (%)
+                        </label>
+
+                        <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            name="discount"
+                            id="discount"
+                            value="{{ old('discount', 0) }}"
+                            class="form-control"
+                        >
+
+                    </div>
+
+
+                    <div class="d-flex justify-content-between mb-3">
+
+                        <strong>
+                            Montant de la remise :
+                        </strong>
+
+                        <span class="text-danger">
+                            -
+                            <span id="discountAmount">
+                                0.00
+                            </span>
+                            FDJ
+                        </span>
+
+                    </div>
+
+
+                    <div class="d-flex justify-content-between mb-3">
+
+                        <strong>
+                            TVA (10%) :
+                        </strong>
+
+                        <span>
+                            <span id="tvaAmount">
+                                0.00
+                            </span>
+                            FDJ
+                        </span>
+
+                    </div>
+
+
+                    <div class="d-flex justify-content-between align-items-center mt-4">
+
+                        <h4 class="mb-0 fw-bold">
+                            Total :
+                        </h4>
+
+                        <h3 class="text-primary fw-bold mb-0">
+                            <span id="grandTotal">
+                                0.00
+                            </span>
+                            FDJ
+                        </h3>
+
+                    </div>
 
                 </div>
 
             </div>
 
+
+            <input
+                type="hidden"
+                name="final_total"
+                id="final_total_input"
+                value="0"
+            >
+
         </div>
 
-        <input type="hidden"
-               name="final_total"
-               id="final_total_input">
+
+        <div class="card-footer bg-white text-end border-0">
+
+            <button
+                type="submit"
+                class="btn btn-primary px-4"
+            >
+                <i class="bx bx-check-circle me-1"></i>
+                Générer proforma
+            </button>
+
+        </div>
 
     </div>
-
-    {{-- FOOTER --}}
-    <div class="card-footer bg-white text-end border-0">
-
-        <button type="submit"
-                class="btn btn-primary px-4">
-
-            <i class="bx bx-check-circle"></i>
-            Générer proforma
-
-        </button>
-
-    </div>
-
-</div>
 
 </form>
 
-{{-- ================= MODAL CLIENT ================= --}}
-<div class="modal fade"
-     id="customerModal"
-     tabindex="-1">
 
+
+{{-- =============================================================
+     MODAL NOUVEAU CLIENT
+============================================================= --}}
+
+<div
+    class="modal fade"
+    id="customerModal"
+    tabindex="-1"
+    aria-hidden="true"
+>
     <div class="modal-dialog">
 
         <div class="modal-content">
@@ -254,73 +515,122 @@
                     Nouveau client
                 </h5>
 
-                <button type="button"
-                        class="btn-close"
-                        data-bs-dismiss="modal">
-                </button>
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Fermer"
+                ></button>
 
             </div>
+
 
             <div class="modal-body">
 
-                <div id="customerModalError"
-                     class="alert alert-danger d-none">
-                </div>
+                <div
+                    id="customerModalError"
+                    class="alert alert-danger d-none"
+                ></div>
+
 
                 <div class="mb-3">
 
-                    <label class="form-label">
+                    <label
+                        for="customer_code"
+                        class="form-label"
+                    >
+                        Code *
+                    </label>
+
+                    <input
+                        type="text"
+                        id="customer_code"
+                        class="form-control"
+                        placeholder="Ex. A003"
+                        autocomplete="off"
+                        maxlength="50"
+                        style="text-transform: uppercase;"
+                    >
+
+                    <small class="text-muted">
+                        Le code client est obligatoire.
+                    </small>
+
+                </div>
+
+
+                <div class="mb-3">
+
+                    <label
+                        for="customer_name"
+                        class="form-label"
+                    >
                         Nom *
                     </label>
 
-                    <input type="text"
-                           id="customer_name"
-                           class="form-control">
+                    <input
+                        type="text"
+                        id="customer_name"
+                        class="form-control"
+                    >
 
                 </div>
 
+
                 <div class="mb-3">
 
-                    <label class="form-label">
+                    <label
+                        for="customer_phone"
+                        class="form-label"
+                    >
                         Téléphone
                     </label>
 
-                    <input type="text"
-                           id="customer_phone"
-                           class="form-control">
+                    <input
+                        type="text"
+                        id="customer_phone"
+                        class="form-control"
+                    >
 
                 </div>
 
+
                 <div class="mb-3">
 
-                    <label class="form-label">
+                    <label
+                        for="customer_email"
+                        class="form-label"
+                    >
                         Email
                     </label>
 
-                    <input type="email"
-                           id="customer_email"
-                           class="form-control">
+                    <input
+                        type="email"
+                        id="customer_email"
+                        class="form-control"
+                    >
 
                 </div>
 
             </div>
 
+
             <div class="modal-footer">
 
-                <button type="button"
-                        class="btn btn-secondary"
-                        data-bs-dismiss="modal">
-
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-bs-dismiss="modal"
+                >
                     Annuler
-
                 </button>
 
-                <button type="button"
-                        id="saveCustomerBtn"
-                        class="btn btn-primary">
-
+                <button
+                    type="button"
+                    id="saveCustomerBtn"
+                    class="btn btn-primary"
+                >
                     Enregistrer
-
                 </button>
 
             </div>
@@ -328,67 +638,168 @@
         </div>
 
     </div>
-
 </div>
 
-{{-- ================= SCRIPT ================= --}}
+
+
+{{-- =============================================================
+     JAVASCRIPT
+============================================================= --}}
+
 <script>
+document.addEventListener('DOMContentLoaded', function () {
 
-let rowIndex = 0;
+    let rowIndex = 0;
 
-/*
-|--------------------------------------------------------------------------
-| ADD ROW
-|--------------------------------------------------------------------------
-*/
-
-function addRow()
-{
-    const table =
+    const itemsTableBody =
         document.querySelector('#itemsTable tbody');
 
-    const row = `
+    const addProductButton =
+        document.getElementById('addProductButton');
 
-        <tr>
+    const discountInput =
+        document.getElementById('discount');
 
-            {{-- PRODUIT --}}
+    const customerSelect =
+        document.getElementById('customer_id');
+
+    const vehicleSelect =
+        document.getElementById('vehicle_id');
+
+    const proformaForm =
+        document.getElementById('proformaForm');
+
+    const vehicleLoadingMessage =
+        document.getElementById('vehicleLoadingMessage');
+
+    const vehicleErrorMessage =
+        document.getElementById('vehicleErrorMessage');
+
+    const saveCustomerBtn =
+        document.getElementById('saveCustomerBtn');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | SELECT2
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        window.jQuery &&
+        $.fn.select2
+    ) {
+
+        $('#customer_id').select2({
+            width: '100%',
+            placeholder: 'Sélectionner un client',
+            allowClear: true
+        });
+
+        $('#vehicle_id').select2({
+            width: '100%',
+            placeholder: 'Sélectionnez d’abord un client',
+            allowClear: true
+        });
+
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | POPUP
+    |--------------------------------------------------------------------------
+    */
+
+    function showWarning(
+        title,
+        message
+    ) {
+        Swal.fire({
+            icon: 'warning',
+            title: title,
+            text: message,
+            confirmButtonText: 'Compris',
+            confirmButtonColor: '#696cff',
+            width: 440,
+            padding: '2rem',
+            allowOutsideClick: false,
+            showCloseButton: true,
+            customClass: {
+                popup: 'stcd-swal-popup',
+                title: 'stcd-swal-title',
+                htmlContainer: 'stcd-swal-message',
+                confirmButton: 'stcd-swal-confirm'
+            }
+        });
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | FORMATAGE
+    |--------------------------------------------------------------------------
+    */
+
+    function formatNumber(value) {
+        return new Intl.NumberFormat(
+            'fr-FR',
+            {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }
+        ).format(value);
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | AJOUTER PRODUIT
+    |--------------------------------------------------------------------------
+    */
+
+    function addRow(
+        oldItem = null
+    ) {
+
+        const currentIndex =
+            rowIndex;
+
+        const row =
+            document.createElement('tr');
+
+        row.innerHTML = `
             <td>
 
-                <select name="items[${rowIndex}][product_id]"
-                    class="form-control product-select product-large-select"
-                        required
-                        onchange="updatePriceAndStock(this, ${rowIndex})">
+                <select
+                    name="items[${currentIndex}][product_id]"
+                    class="form-control product-select"
+                    required
+                >
 
                     <option value="">
-                        Choisir produit
+                        Choisir un produit
                     </option>
 
                     @foreach($products as $product)
 
-                      <option value="{{ $product->id }}"
-                                data-price="{{ $product->sale_price }}"
-                                data-stock="{{ $product->quantity }}"
-                                data-reference="{{ $product->reference }}"
-                                data-unit="{{ $product->unit_label }}">
-
+                        <option
+                            value="{{ $product->id }}"
+                            data-price="{{ $product->sale_price }}"
+                            data-stock="{{ $product->quantity }}"
+                            data-unit="{{ $product->unit_label ?? 'Pièce' }}"
+                        >
                             {{ $product->reference }}
-                            -
-                            {{ $product->designation }}
-
-                            @if($product->brand)
-                                | {{ $product->brand->name }}
-                            @endif
-
-                            @if($product->model)
-                                {{ $product->model->name }}
-                            @endif
-
                             |
-
+                            {{ $product->designation }}
+                            |
+                            {{ $product->brand->name ?? '' }}
+                            |
+                            {{ $product->model->name ?? '' }}
+                            |
                             Stock disponible :
                             {{ number_format($product->quantity, 2) }}
-                            {{ $product->unit_label }}
-
+                            {{ $product->unit_label ?? 'Pièce' }}
                         </option>
 
                     @endforeach
@@ -397,304 +808,1147 @@ function addRow()
 
             </td>
 
-            {{-- STOCK --}}
+
             <td class="text-center fw-bold">
 
-               <span id="stock_${rowIndex}">
+                <span id="stock_${currentIndex}">
                     0
                 </span>
 
-                <small id="stock_unit_${rowIndex}">
-                    ---
+                <br>
+
+                <small
+                    id="stock_unit_${currentIndex}"
+                    class="text-muted"
+                >
+                    Pièce
                 </small>
 
             </td>
 
-            {{-- PRIX --}}
+
             <td>
 
-                <div class="input-group">
+                <input
+                    type="hidden"
+                    name="items[${currentIndex}][price]"
+                    id="price_${currentIndex}"
+                    value="0"
+                >
 
-                    <input type="number"
-                        step="0.01"
-                        name="items[${rowIndex}][price]"
-                        id="price_${rowIndex}"
-                        class="form-control"
-                        readonly>
+                <div class="d-flex align-items-center gap-2">
 
-                    <span class="input-group-text">
+                    <div
+                        class="form-control text-end fw-bold bg-white"
+                        id="price_display_${currentIndex}"
+                    >
+                        0.00
+                    </div>
 
-                        <span id="price_unit_${rowIndex}">
-                            ---
-                        </span>
-
+                    <span class="text-nowrap">
+                        FDJ
                     </span>
 
                 </div>
 
             </td>
 
-            {{-- QUANTITE --}}
+
             <td>
 
-                <input type="number"
+                <input
+                    type="number"
                     step="0.01"
                     min="0.01"
-                    name="items[${rowIndex}][quantity]"
-                    id="qty_${rowIndex}"
+                    name="items[${currentIndex}][quantity]"
+                    id="qty_${currentIndex}"
                     class="form-control"
-                    oninput="calculateRow(${rowIndex})"
-                    required>
+                    value="1"
+                    required
+                >
 
             </td>
 
-            {{-- TOTAL --}}
-            <td class="fw-bold">
 
-                <span id="total_${rowIndex}">
+            <td class="fw-bold text-end">
+
+                <span
+                    id="total_${currentIndex}"
+                    class="line-total"
+                >
                     0.00
                 </span>
 
+                FDJ
+
             </td>
 
-            {{-- ACTION --}}
+
             <td class="text-center">
 
-                <button type="button"
-                        class="btn btn-danger btn-sm"
-                        onclick="removeRow(this)">
-
-                    X
-
+                <button
+                    type="button"
+                    class="btn btn-danger btn-sm remove-row"
+                    title="Supprimer"
+                >
+                    <i class="bx bx-trash"></i>
                 </button>
 
             </td>
+        `;
 
-        </tr>
+        itemsTableBody
+            .appendChild(row);
 
-    `;
+        const productSelect =
+            row.querySelector(
+                '.product-select'
+            );
 
-    table.insertAdjacentHTML('beforeend', row);
+        const quantityInput =
+            row.querySelector(
+                `#qty_${currentIndex}`
+            );
 
-    rowIndex++;
-}
+        const removeButton =
+            row.querySelector(
+                '.remove-row'
+            );
 
-/*
-|--------------------------------------------------------------------------
-| UPDATE PRICE
-|--------------------------------------------------------------------------
-*/
 
-function updatePriceAndStock(select, index)
-{
-    const option =
-        select.options[select.selectedIndex];
+        if (
+            window.jQuery &&
+            $.fn.select2
+        ) {
 
-    const price =
-        parseFloat(option.dataset.price || 0);
+            $(productSelect)
+                .select2({
+                    width: '100%',
+                    placeholder:
+                        'Rechercher par référence, désignation, marque ou modèle',
+                    allowClear: true
+                });
 
-    const stock =
-        parseFloat(option.dataset.stock || 0);
-        const unit =
-    option.dataset.unit || 'Pièce';
+            $(productSelect)
+                .on(
+                    'change',
+                    function () {
 
-    document.getElementById(
-        `price_${index}`
-    ).value = price.toFixed(2);
+                        updatePriceAndStock(
+                            this,
+                            currentIndex
+                        );
 
-    document.getElementById(
-        `stock_${index}`
-    ).innerText = stock;
+                    }
+                );
 
-    document.getElementById(
-    `stock_unit_${index}`
-    ).innerText = unit;
+        } else {
 
-    document.getElementById(
-        `price_unit_${index}`
-    ).innerText = unit;
+            productSelect
+                .addEventListener(
+                    'change',
+                    function () {
 
-    calculateRow(index);
-}
+                        updatePriceAndStock(
+                            this,
+                            currentIndex
+                        );
 
-/*
-|--------------------------------------------------------------------------
-| CALCUL LIGNE
-|--------------------------------------------------------------------------
-*/
+                    }
+                );
 
-function calculateRow(index)
-{
-    const price = parseFloat(
-        document.getElementById(
-            `price_${index}`
-        ).value
-    ) || 0;
+        }
 
-    const qty = parseFloat(
-        document.getElementById(
-            `qty_${index}`
-        ).value
-    ) || 0;
 
-    const stock = parseFloat(
-        document.getElementById(
-            `stock_${index}`
-        ).innerText
-    ) || 0;
+        quantityInput
+            .addEventListener(
+                'input',
+                function () {
 
-    const unit =
-    document.getElementById(
-        `stock_unit_${index}`
-    ).innerText;
+                    calculateRow(
+                        currentIndex
+                    );
+
+                }
+            );
+
+
+        removeButton
+            .addEventListener(
+                'click',
+                function () {
+
+                    if (
+                        window.jQuery &&
+                        $.fn.select2 &&
+                        $(productSelect)
+                            .hasClass(
+                                'select2-hidden-accessible'
+                            )
+                    ) {
+                        $(productSelect)
+                            .select2('destroy');
+                    }
+
+                    row.remove();
+
+                    if (
+                        itemsTableBody
+                            .querySelectorAll('tr')
+                            .length === 0
+                    ) {
+                        addRow();
+                    }
+
+                    calculateGrandTotal();
+                }
+            );
+
+
+        if (
+            oldItem &&
+            oldItem.product_id
+        ) {
+
+            /*
+            |--------------------------------------------------------------------------
+            | RESTAURER LE PRODUIT APRÈS UNE ERREUR SERVEUR
+            |--------------------------------------------------------------------------
+            |
+            | Important :
+            | on force d'abord la vraie valeur du <select>, puis on lit directement
+            | l'option sélectionnée pour remettre PRIX + STOCK avant de recalculer
+            | la quantité. Cela évite le faux "Stock disponible : 0".
+            |
+            */
+
+            productSelect.value =
+                String(
+                    oldItem.product_id
+                );
+
+            /*
+            | Mettre immédiatement à jour le stock et le prix depuis data-*.
+            */
+            updatePriceAndStock(
+                productSelect,
+                currentIndex
+            );
+
+            /*
+            | Ensuite seulement restaurer la quantité.
+            */
+            quantityInput.value =
+                oldItem.quantity ?? 1;
+
+            calculateRow(
+                currentIndex
+            );
+
+            /*
+            | Rafraîchir Select2 visuellement sans relancer la logique métier.
+            */
+            if (
+                window.jQuery &&
+                $.fn.select2
+            ) {
+                $(productSelect)
+                    .val(
+                        String(
+                            oldItem.product_id
+                        )
+                    )
+                    .trigger(
+                        'change.select2'
+                    );
+            }
+        }
+
+        rowIndex++;
+    }
+
+
     /*
     |--------------------------------------------------------------------------
-    | VERIFICATION STOCK
+    | PRIX / STOCK
     |--------------------------------------------------------------------------
     */
 
-    if (qty > stock) {
+    function updatePriceAndStock(
+        select,
+        index
+    ) {
 
-        Swal.fire({
+        const selectedOption =
+            select.options[
+                select.selectedIndex
+            ];
 
-            icon: 'warning',
+        const price =
+            parseFloat(
+                selectedOption?.dataset?.price || 0
+            ) || 0;
 
-            title: 'Stock insuffisant',
+        const stock =
+            parseFloat(
+                selectedOption?.dataset?.stock || 0
+            ) || 0;
 
-            text:
-              'Stock disponible : ' + stock + ' ' + unit,
-
-            confirmButtonColor: '#696cff'
-        });
+        const unit =
+            selectedOption?.dataset?.unit ||
+            'Pièce';
 
         document.getElementById(
-            `qty_${index}`
-        ).value = stock;
+            `price_${index}`
+        ).value =
+            price.toFixed(2);
+
+        document.getElementById(
+            `price_display_${index}`
+        ).textContent =
+            formatNumber(price);
+
+        document.getElementById(
+            `stock_${index}`
+        ).textContent =
+            stock;
+
+        document.getElementById(
+            `stock_unit_${index}`
+        ).textContent =
+            unit;
+
+        calculateRow(
+            index
+        );
     }
 
-    const finalQty = parseFloat(
+
+    /*
+    |--------------------------------------------------------------------------
+    | CALCUL LIGNE
+    |--------------------------------------------------------------------------
+    */
+
+    function calculateRow(
+        index
+    ) {
+
+        const price =
+            parseFloat(
+                document.getElementById(
+                    `price_${index}`
+                ).value
+            ) || 0;
+
+        let quantity =
+            parseFloat(
+                document.getElementById(
+                    `qty_${index}`
+                ).value
+            ) || 0;
+
+        let stock =
+            parseFloat(
+                document.getElementById(
+                    `stock_${index}`
+                ).textContent
+            ) || 0;
+
+        let unit =
+            document.getElementById(
+                `stock_unit_${index}`
+            ).textContent ||
+            'Pièce';
+
+        /*
+        |--------------------------------------------------------------------------
+        | SÉCURITÉ : RELIRE LE STOCK DEPUIS L'OPTION PRODUIT
+        |--------------------------------------------------------------------------
+        |
+        | Après un retour withInput(), certains navigateurs/Select2 peuvent
+        | restaurer le produit visuellement avant que le stock affiché soit remis.
+        | On relit donc data-stock / data-unit avant d'afficher une alerte.
+        |
+        */
+
+        const row =
+            document.getElementById(
+                `qty_${index}`
+            )?.closest('tr');
+
+        const productSelect =
+            row?.querySelector(
+                '.product-select'
+            );
+
+        const selectedOption =
+            productSelect?.options[
+                productSelect.selectedIndex
+            ];
+
+        if (
+            productSelect &&
+            productSelect.value &&
+            selectedOption
+        ) {
+
+            const optionStock =
+                parseFloat(
+                    selectedOption.dataset.stock || 0
+                ) || 0;
+
+            const optionUnit =
+                selectedOption.dataset.unit ||
+                'Pièce';
+
+            if (
+                stock <= 0 &&
+                optionStock > 0
+            ) {
+
+                stock =
+                    optionStock;
+
+                unit =
+                    optionUnit;
+
+                document.getElementById(
+                    `stock_${index}`
+                ).textContent =
+                    optionStock;
+
+                document.getElementById(
+                    `stock_unit_${index}`
+                ).textContent =
+                    optionUnit;
+            }
+        }
+
+        if (
+            quantity > stock &&
+            stock >= 0
+        ) {
+
+            showWarning(
+                'Stock insuffisant',
+                `Stock disponible : ${stock} ${unit}`
+            );
+
+            quantity =
+                stock;
+
+            document.getElementById(
+                `qty_${index}`
+            ).value =
+                stock;
+        }
+
+        const lineTotal =
+            price * quantity;
+
         document.getElementById(
-            `qty_${index}`
-        ).value
-    ) || 0;
+            `total_${index}`
+        ).textContent =
+            lineTotal.toFixed(2);
 
-    const total = price * finalQty;
-
-    document.getElementById(
-        `total_${index}`
-    ).innerText = total.toFixed(2);
-
-    calculateGrandTotal();
-}
-
-/*
-|--------------------------------------------------------------------------
-| GRAND TOTAL
-|--------------------------------------------------------------------------
-*/
-
-function calculateGrandTotal()
-{
-    let subtotal = 0;
-
-    document.querySelectorAll('[id^="total_"]')
-        .forEach(el => {
-
-            subtotal +=
-                parseFloat(el.innerText) || 0;
-
-        });
-
-    const discount = parseFloat(
-        document.getElementById('discount').value
-    ) || 0;
-
-    const taxable = subtotal - discount;
-
-    const tva = taxable * 0.10;
-
-    let total = taxable + tva;
-
-    if (total < 0) {
-
-        total = 0;
+        calculateGrandTotal();
     }
 
-    document.getElementById(
-        'subTotal'
-    ).innerText = subtotal.toFixed(2);
 
-    document.getElementById(
-        'tvaAmount'
-    ).innerText = tva.toFixed(2);
+    /*
+    |--------------------------------------------------------------------------
+    | TOTAL
+    |--------------------------------------------------------------------------
+    */
 
-    document.getElementById(
-        'grandTotal'
-    ).innerText = total.toFixed(2);
+    function calculateGrandTotal()
+    {
+        let subtotal = 0;
 
-    document.getElementById(
-        'final_total_input'
-    ).value = total.toFixed(2);
-}
+        document
+            .querySelectorAll(
+                '.line-total'
+            )
+            .forEach(
+                function (element) {
 
-/*
-|--------------------------------------------------------------------------
-| REMOVE ROW
-|--------------------------------------------------------------------------
-*/
+                    subtotal +=
+                        parseFloat(
+                            element.textContent
+                        ) || 0;
 
-function removeRow(button)
-{
-    button.closest('tr').remove();
+                }
+            );
 
-    calculateGrandTotal();
-}
+        let discountPercent =
+            parseFloat(
+                discountInput.value
+            ) || 0;
 
-/*
-|--------------------------------------------------------------------------
-| DEFAULT ROW
-|--------------------------------------------------------------------------
-*/
+        if (
+            discountPercent < 0
+        ) {
+            discountPercent = 0;
+            discountInput.value = 0;
+        }
 
-document.addEventListener('DOMContentLoaded', function () {
+        if (
+            discountPercent > 100
+        ) {
+            discountPercent = 100;
+            discountInput.value = 100;
+        }
 
-    addRow();
+        const discountAmount =
+            subtotal *
+            discountPercent /
+            100;
 
-});
+        const taxable =
+            Math.max(
+                0,
+                subtotal - discountAmount
+            );
+        const tva = taxable * 0.10;
 
-/*
-|--------------------------------------------------------------------------
-| CREATE CUSTOMER AJAX
-|--------------------------------------------------------------------------
-*/
+        const total =
+            taxable + tva;
 
-document.getElementById(
-    'saveCustomerBtn'
-).addEventListener('click', function () {
-
-    const name =
         document.getElementById(
-            'customer_name'
-        ).value.trim();
+            'subTotal'
+        ).textContent =
+            subtotal.toFixed(2);
 
-    const phone =
         document.getElementById(
-            'customer_phone'
-        ).value.trim();
+            'discountAmount'
+        ).textContent =
+            discountAmount.toFixed(2);
 
-    const email =
         document.getElementById(
-            'customer_email'
-        ).value.trim();
+            'tvaAmount'
+        ).textContent =
+            tva.toFixed(2);
 
-    const errorBox =
         document.getElementById(
-            'customerModalError'
+            'grandTotal'
+        ).textContent =
+            total.toFixed(2);
+
+        document.getElementById(
+            'final_total_input'
+        ).value =
+            total.toFixed(2);
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CLIENT -> VÉHICULE
+    |--------------------------------------------------------------------------
+    */
+
+    async function loadVehicles(
+        customerId,
+        selectedVehicleId = null
+    ) {
+
+        vehicleErrorMessage
+            .classList
+            .add('d-none');
+
+        vehicleErrorMessage.textContent =
+            '';
+
+        vehicleSelect.innerHTML =
+            '';
+
+        if (!customerId) {
+
+            vehicleSelect.innerHTML =
+                '<option value="">Sélectionnez d’abord un client</option>';
+
+            vehicleSelect.disabled =
+                true;
+
+            if (window.jQuery) {
+                $('#vehicle_id')
+                    .trigger(
+                        'change.select2'
+                    );
+            }
+
+            return;
+        }
+
+        vehicleLoadingMessage
+            .classList
+            .remove('d-none');
+
+        vehicleSelect.disabled =
+            true;
+
+        vehicleSelect.innerHTML =
+            '<option value="">Chargement des véhicules...</option>';
+
+        try {
+
+            const url =
+                "{{ url('/proformas/customers') }}/"
+                + encodeURIComponent(
+                    customerId
+                )
+                + "/vehicles";
+
+            const response =
+                await fetch(
+                    url,
+                    {
+                        method: 'GET',
+
+                        headers: {
+                            'Accept':
+                                'application/json',
+
+                            'X-Requested-With':
+                                'XMLHttpRequest'
+                        },
+
+                        cache:
+                            'no-store'
+                    }
+                );
+
+            if (!response.ok) {
+                throw new Error(
+                    'Erreur HTTP '
+                    + response.status
+                );
+            }
+
+            const data =
+                await response.json();
+
+            vehicleSelect.innerHTML =
+                '';
+
+            const defaultOption =
+                document.createElement(
+                    'option'
+                );
+
+            defaultOption.value =
+                '';
+
+            defaultOption.textContent =
+                'Sélectionner une immatriculation';
+
+            vehicleSelect
+                .appendChild(
+                    defaultOption
+                );
+
+            if (
+                data.success === true &&
+                Array.isArray(
+                    data.vehicles
+                ) &&
+                data.vehicles.length > 0
+            ) {
+
+                data.vehicles
+                    .forEach(
+                        function (vehicle) {
+
+                            const option =
+                                document.createElement(
+                                    'option'
+                                );
+
+                            option.value =
+                                vehicle.id;
+
+                            option.textContent =
+                                vehicle.label ||
+                                vehicle.plate_number ||
+                                (
+                                    'Véhicule #'
+                                    + vehicle.id
+                                );
+
+                            if (
+                                selectedVehicleId &&
+                                String(
+                                    vehicle.id
+                                ) ===
+                                String(
+                                    selectedVehicleId
+                                )
+                            ) {
+                                option.selected =
+                                    true;
+                            }
+
+                            vehicleSelect
+                                .appendChild(
+                                    option
+                                );
+                        }
+                    );
+
+                vehicleSelect.disabled =
+                    false;
+
+                if (
+                    selectedVehicleId
+                ) {
+                    vehicleSelect.value =
+                        String(
+                            selectedVehicleId
+                        );
+                } else {
+                    vehicleSelect.value =
+                        '';
+                }
+
+                if (
+                    window.jQuery
+                ) {
+                    $('#vehicle_id')
+                        .trigger(
+                            'change.select2'
+                        );
+                }
+
+            } else {
+
+                vehicleSelect.innerHTML =
+                    '<option value="">Aucun véhicule associé à ce client</option>';
+
+                vehicleSelect.disabled =
+                    true;
+
+                vehicleErrorMessage
+                    .classList
+                    .remove('d-none');
+
+                vehicleErrorMessage.textContent =
+                    'Ce client ne possède aucun véhicule associé.';
+            }
+
+        } catch (error) {
+
+            console.error(
+                'Erreur chargement véhicules :',
+                error
+            );
+
+            vehicleSelect.innerHTML =
+                '<option value="">Erreur lors du chargement</option>';
+
+            vehicleSelect.disabled =
+                true;
+
+            vehicleErrorMessage
+                .classList
+                .remove('d-none');
+
+            vehicleErrorMessage.textContent =
+                'Impossible de charger les véhicules du client.';
+
+        } finally {
+
+            vehicleLoadingMessage
+                .classList
+                .add('d-none');
+        }
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CHANGEMENT CLIENT
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        window.jQuery
+    ) {
+
+        $('#customer_id')
+            .on(
+                'change',
+                function () {
+
+                    loadVehicles(
+                        $(this).val()
+                    );
+
+                }
+            );
+
+    } else {
+
+        customerSelect
+            .addEventListener(
+                'change',
+                function () {
+
+                    loadVehicles(
+                        this.value
+                    );
+
+                }
+            );
+
+    }
+
+
+    const customerCodeInput =
+        document.getElementById(
+            'customer_code'
         );
 
-    errorBox.classList.add('d-none');
+    if (customerCodeInput) {
 
-    errorBox.innerHTML = '';
+        customerCodeInput.addEventListener(
+            'input',
+            function () {
+                this.value =
+                    this.value.toUpperCase();
+            }
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | NOUVEAU CLIENT
+    |--------------------------------------------------------------------------
+    */
+
+    saveCustomerBtn
+        .addEventListener(
+            'click',
+            async function () {
+
+                const code =
+                    document.getElementById(
+                        'customer_code'
+                    ).value.trim().toUpperCase();
+
+                const name =
+                    document.getElementById(
+                        'customer_name'
+                    ).value.trim();
+
+                const phone =
+                    document.getElementById(
+                        'customer_phone'
+                    ).value.trim();
+
+                const email =
+                    document.getElementById(
+                        'customer_email'
+                    ).value.trim();
+
+                const errorBox =
+                    document.getElementById(
+                        'customerModalError'
+                    );
+
+                errorBox
+                    .classList
+                    .add('d-none');
+
+                errorBox.innerHTML =
+                    '';
+
+                if (!code) {
+
+                    errorBox.innerHTML =
+                        'Le code du client est obligatoire.';
+
+                    errorBox
+                        .classList
+                        .remove('d-none');
+
+                    document.getElementById(
+                        'customer_code'
+                    ).focus();
+
+                    return;
+                }
+
+                if (!name) {
+
+                    errorBox.innerHTML =
+                        'Le nom du client est obligatoire.';
+
+                    errorBox
+                        .classList
+                        .remove('d-none');
+
+                    document.getElementById(
+                        'customer_name'
+                    ).focus();
+
+                    return;
+                }
+
+                try {
+
+                    const response =
+                        await fetch(
+                            "{{ route('customers.store') }}",
+                            {
+                                method:
+                                    'POST',
+
+                                headers: {
+                                    'Content-Type':
+                                        'application/json',
+
+                                    'X-CSRF-TOKEN':
+                                        '{{ csrf_token() }}',
+
+                                    'Accept':
+                                        'application/json'
+                                },
+
+                                body:
+                                    JSON.stringify({
+                                        code: code,
+                                        name: name,
+                                        phone: phone,
+                                        email: email
+                                    })
+                            }
+                        );
+
+                    const data =
+                        await response.json();
+
+                    if (!response.ok) {
+                        throw data;
+                    }
+
+                    if (
+                        !data.success ||
+                        !data.customer
+                    ) {
+                        throw new Error(
+                            'Réponse serveur invalide.'
+                        );
+                    }
+
+                    const customerLabel =
+                        (
+                            data.customer.code
+                                ? data.customer.code + ' - '
+                                : ''
+                        )
+                        + data.customer.name;
+
+                    const option =
+                        new Option(
+                            customerLabel,
+                            data.customer.id,
+                            true,
+                            true
+                        );
+
+                    customerSelect
+                        .add(
+                            option
+                        );
+
+                    if (
+                        window.jQuery
+                    ) {
+
+                        $('#customer_id')
+                            .val(
+                                String(
+                                    data.customer.id
+                                )
+                            )
+                            .trigger(
+                                'change'
+                            );
+
+                    } else {
+
+                        customerSelect.value =
+                            String(
+                                data.customer.id
+                            );
+
+                        customerSelect
+                            .dispatchEvent(
+                                new Event(
+                                    'change'
+                                )
+                            );
+
+                    }
+
+                    document.getElementById(
+                        'customer_code'
+                    ).value = '';
+
+                    document.getElementById(
+                        'customer_name'
+                    ).value = '';
+
+                    document.getElementById(
+                        'customer_phone'
+                    ).value = '';
+
+                    document.getElementById(
+                        'customer_email'
+                    ).value = '';
+
+                    const modalElement =
+                        document.getElementById(
+                            'customerModal'
+                        );
+
+                    if (
+                        window.bootstrap &&
+                        modalElement
+                    ) {
+
+                        const modal =
+                            bootstrap.Modal
+                                .getInstance(
+                                    modalElement
+                                );
+
+                        if (modal) {
+                            modal.hide();
+                        }
+                    }
+
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Client créé',
+                        text:
+                            'Le client a été créé avec succès.',
+                        confirmButtonColor:
+                            '#696cff'
+                    });
+
+                } catch (error) {
+
+                    let message =
+                        'Erreur lors de la création du client.';
+
+                    if (
+                        error &&
+                        error.errors
+                    ) {
+                        message =
+                            Object
+                                .values(
+                                    error.errors
+                                )
+                                .flat()
+                                .join('<br>');
+                    } else if (
+                        error &&
+                        error.message
+                    ) {
+                        message =
+                            error.message;
+                    }
+
+                    errorBox.innerHTML =
+                        message;
+
+                    errorBox
+                        .classList
+                        .remove('d-none');
+                }
+
+            }
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ÉVÉNEMENTS
+    |--------------------------------------------------------------------------
+    */
+
+    addProductButton
+        .addEventListener(
+            'click',
+            function () {
+                addRow();
+            }
+        );
+
+    discountInput
+        .addEventListener(
+            'input',
+            calculateGrandTotal
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | OLD ITEMS
+    |--------------------------------------------------------------------------
+    */
+
+    @if(is_array(old('items')) && count(old('items')) > 0)
+
+        const oldItems =
+            @json(old('items'));
+
+        oldItems
+            .forEach(
+                function (item) {
+
+                    addRow(
+                        item
+                    );
+
+                }
+            );
+
+    @else
+
+        addRow();
+
+    @endif
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | OLD CLIENT / VEHICULE
+    |--------------------------------------------------------------------------
+    */
+
+    const initialCustomerId =
+        customerSelect.value;
+
+    const oldVehicleId =
+        vehicleSelect.dataset.selected ||
+        null;
+
+    if (
+        initialCustomerId
+    ) {
+
+        loadVehicles(
+            initialCustomerId,
+            oldVehicleId
+        );
+
+    }
+
 
     /*
     |--------------------------------------------------------------------------
@@ -702,160 +1956,117 @@ document.getElementById(
     |--------------------------------------------------------------------------
     */
 
-    if (!name) {
+    proformaForm
+        .addEventListener(
+            'submit',
+            function (event) {
 
-        errorBox.innerHTML =
-            'Le nom du client est obligatoire.';
+                if (
+                    !customerSelect.value &&
+                    !vehicleSelect.value
+                ) {
 
-        errorBox.classList.remove('d-none');
+                    event.preventDefault();
 
-        return;
-    }
+                    showWarning(
+                        'Informations obligatoires',
+                        'Veuillez sélectionner le client et son véhicule.'
+                    );
 
-    /*
-    |--------------------------------------------------------------------------
-    | AJAX
-    |--------------------------------------------------------------------------
-    */
+                    return;
+                }
 
-    fetch("{{ route('customers.store') }}", {
+                if (
+                    !customerSelect.value
+                ) {
 
-        method: "POST",
+                    event.preventDefault();
 
-        headers: {
+                    showWarning(
+                        'Client obligatoire',
+                        'Veuillez sélectionner un client.'
+                    );
 
-            "Content-Type": "application/json",
+                    return;
+                }
 
-            "X-CSRF-TOKEN":
-                "{{ csrf_token() }}",
+                if (
+                    !vehicleSelect.value
+                ) {
 
-            "Accept":
-                "application/json"
-        },
+                    event.preventDefault();
 
-        body: JSON.stringify({
+                    showWarning(
+                        'Véhicule obligatoire',
+                        'Veuillez sélectionner le véhicule associé au client.'
+                    );
 
-            name: name,
+                    return;
+                }
 
-            phone: phone,
+                const rows =
+                    itemsTableBody
+                        .querySelectorAll(
+                            'tr'
+                        );
 
-            email: email
-        })
+                if (
+                    rows.length === 0
+                ) {
 
-    })
+                    event.preventDefault();
 
-    .then(async response => {
+                    showWarning(
+                        'Produit obligatoire',
+                        'Veuillez ajouter au moins un produit.'
+                    );
 
-        const data = await response.json();
+                    return;
+                }
 
-        if (!response.ok) {
+                let validProduct =
+                    false;
 
-            throw data;
-        }
+                rows.forEach(
+                    function (row) {
 
-        return data;
-    })
+                        const select =
+                            row.querySelector(
+                                '.product-select'
+                            );
 
-    .then(data => {
+                        if (
+                            select &&
+                            select.value
+                        ) {
+                            validProduct =
+                                true;
+                        }
 
-        if (data.success) {
-
-            const select =
-                document.querySelector(
-                    'select[name="customer_id"]'
+                    }
                 );
 
-            const option = new Option(
+                if (
+                    !validProduct
+                ) {
 
-                data.customer.name,
+                    event.preventDefault();
 
-                data.customer.id,
+                    showWarning(
+                        'Produit obligatoire',
+                        'Veuillez sélectionner au moins un produit.'
+                    );
 
-                true,
+                    return;
+                }
 
-                true
-            );
+            }
+        );
 
-            select.add(option);
 
-            /*
-            |--------------------------------------------------------------------------
-            | RESET
-            |--------------------------------------------------------------------------
-            */
-
-            document.getElementById(
-                'customer_name'
-            ).value = '';
-
-            document.getElementById(
-                'customer_phone'
-            ).value = '';
-
-            document.getElementById(
-                'customer_email'
-            ).value = '';
-
-            /*
-            |--------------------------------------------------------------------------
-            | CLOSE MODAL
-            |--------------------------------------------------------------------------
-            */
-
-            const modal =
-                bootstrap.Modal.getInstance(
-
-                    document.getElementById(
-                        'customerModal'
-                    )
-                );
-
-            modal.hide();
-
-            /*
-            |--------------------------------------------------------------------------
-            | SUCCESS
-            |--------------------------------------------------------------------------
-            */
-
-            Swal.fire({
-
-                icon: 'success',
-
-                title: 'Succès',
-
-                text:
-                    'Client créé avec succès.',
-
-                confirmButtonColor:
-                    '#696cff'
-            });
-        }
-
-    })
-
-    .catch(error => {
-
-        let message =
-            'Erreur lors de la création du client.';
-
-        if (error.errors) {
-
-            message =
-                Object.values(error.errors)
-                    .flat()
-                    .join('<br>');
-        }
-
-        errorBox.innerHTML = message;
-
-        errorBox.classList.remove('d-none');
-    });
+    calculateGrandTotal();
 
 });
-
-
-
 </script>
 
 @endsection

@@ -28,7 +28,7 @@ class Product extends Model
 
         /*
         |--------------------------------------------------------------------------
-        | TYPE UNITE
+        | TYPE UNITÉ
         |--------------------------------------------------------------------------
         */
 
@@ -57,6 +57,11 @@ class Product extends Model
         */
 
         'quantity',
+        'received_quantity',
+
+        // Quantité initialement entrée dans le stock
+        'initial_quantity',
+
         'min_stock',
         'max_stock',
 
@@ -67,18 +72,14 @@ class Product extends Model
         */
 
         'purchase_price',
-
         'coef_purchase',
-
         'cost_price',
-
         'coef_sale',
-
         'sale_price',
 
         /*
         |--------------------------------------------------------------------------
-        | STATUS
+        | STATUT
         |--------------------------------------------------------------------------
         */
 
@@ -100,9 +101,9 @@ class Product extends Model
         */
 
         'quantity' => 'decimal:2',
-
+        'received_quantity' => 'decimal:2',
+        'initial_quantity' => 'decimal:2',
         'min_stock' => 'decimal:2',
-
         'max_stock' => 'decimal:2',
 
         /*
@@ -147,7 +148,10 @@ class Product extends Model
 
     public function model()
     {
-        return $this->belongsTo(CarModel::class, 'model_id');
+        return $this->belongsTo(
+            CarModel::class,
+            'model_id'
+        );
     }
 
     /*
@@ -158,7 +162,10 @@ class Product extends Model
 
     public function family()
     {
-        return $this->belongsTo(FamilyModel::class, 'family_id');
+        return $this->belongsTo(
+            FamilyModel::class,
+            'family_id'
+        );
     }
 
     /*
@@ -169,7 +176,10 @@ class Product extends Model
 
     public function subfamily()
     {
-        return $this->belongsTo(Subfamily::class, 'subfamily_id');
+        return $this->belongsTo(
+            Subfamily::class,
+            'subfamily_id'
+        );
     }
 
     /*
@@ -180,7 +190,10 @@ class Product extends Model
 
     public function rayon()
     {
-        return $this->belongsTo(Rayon::class, 'rayon_id');
+        return $this->belongsTo(
+            Rayon::class,
+            'rayon_id'
+        );
     }
 
     /*
@@ -191,7 +204,10 @@ class Product extends Model
 
     public function location()
     {
-        return $this->belongsTo(Location::class, 'location_id');
+        return $this->belongsTo(
+            Location::class,
+            'location_id'
+        );
     }
 
     /*
@@ -202,7 +218,9 @@ class Product extends Model
 
     public function category()
     {
-        return $this->belongsTo(Category::class);
+        return $this->belongsTo(
+            Category::class
+        );
     }
 
     /*
@@ -213,7 +231,9 @@ class Product extends Model
 
     public function stockMovements()
     {
-        return $this->hasMany(StockMovement::class);
+        return $this->hasMany(
+            StockMovement::class
+        );
     }
 
     /*
@@ -224,7 +244,9 @@ class Product extends Model
 
     public function purchaseItems()
     {
-        return $this->hasMany(PurchaseItem::class);
+        return $this->hasMany(
+            PurchaseItem::class
+        );
     }
 
     /*
@@ -235,7 +257,9 @@ class Product extends Model
 
     public function saleItems()
     {
-        return $this->hasMany(SaleItem::class);
+        return $this->hasMany(
+            SaleItem::class
+        );
     }
 
     /*
@@ -246,14 +270,16 @@ class Product extends Model
 
     public function inventoryAdjustments()
     {
-        return $this->hasMany(InventoryAdjustment::class);
+        return $this->hasMany(
+            InventoryAdjustment::class
+        );
     }
 
-         /*
-            |--------------------------------------------------------------------------
-            | RELATIONS
-            |--------------------------------------------------------------------------
-            */
+    /*
+    |--------------------------------------------------------------------------
+    | Produit -> Fournisseurs
+    |--------------------------------------------------------------------------
+    */
 
     public function suppliers()
     {
@@ -265,27 +291,97 @@ class Product extends Model
             'purchase_price',
             'delivery_delay',
             'is_primary',
-            'active'
+            'active',
         ])
         ->withTimestamps();
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | Produit -> Stocks par dépôt
+    |--------------------------------------------------------------------------
+    */
+
     public function depotStocks()
     {
-        return $this->hasMany(ProductDepotStock::class);
+        return $this->hasMany(
+            ProductDepotStock::class
+        );
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Produit -> Dépôts
+    |--------------------------------------------------------------------------
+    */
 
     public function depots()
     {
-        return $this->belongsToMany(Depot::class, 'product_depot_stocks')
-            ->withPivot('quantity')
-            ->withTimestamps();
+        return $this->belongsToMany(
+            Depot::class,
+            'product_depot_stocks'
+        )
+        ->withPivot('quantity')
+        ->withTimestamps();
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | STOCK TOTAL TOUS DÉPÔTS
+    |--------------------------------------------------------------------------
+    */
 
     public function getTotalStockAttribute()
     {
-        return $this->depotStocks()->sum('quantity');
+        return $this
+            ->depotStocks()
+            ->sum('quantity');
     }
 
-    
+    /*
+    |--------------------------------------------------------------------------
+    | Produit -> Demandes de pièces véhicule
+    |--------------------------------------------------------------------------
+    */
+
+    public function vehiclePartRequests()
+    {
+        return $this->hasMany(
+            VehiclePartRequest::class
+        );
+    }
+
+     /*
+    |--------------------------------------------------------------------------
+    | Produit -> quantité initial
+    |--------------------------------------------------------------------------
+    */
+
+    public function getUnavailableQuantityAttribute(): float
+    {
+        $initial = (float) ($this->initial_quantity ?? 0);
+        $received = (float) ($this->received_quantity ?? 0);
+
+        return max(0, $initial - $received);
+    }
+
+    public function getAvailabilityStatusAttribute(): string
+    {
+        $initial = (float) ($this->initial_quantity ?? 0);
+        $received = (float) ($this->received_quantity ?? 0);
+
+        if ($initial <= 0) {
+            return 'non_defini';
+        }
+
+        if ($received <= 0) {
+            return 'a_commander';
+        }
+
+        if ($received < $initial) {
+            return 'partiellement_recu';
+        }
+
+        return 'recu';
+    }
 }

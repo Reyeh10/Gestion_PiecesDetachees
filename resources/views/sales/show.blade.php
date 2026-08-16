@@ -1,6 +1,102 @@
 @extends('layouts.layoutMaster')
 
+
 @section('content')
+
+@php
+    /*
+    |--------------------------------------------------------------------------
+    | ETAT FINANCIER DE LA FACTURE
+    |--------------------------------------------------------------------------
+    |
+    | Tous les montants FDJ sont comparés après arrondi à l'unité.
+    | Cela évite qu'une ancienne valeur comme 5530.25 garde la facture
+    | en "partiel" alors que 5530 FDJ ont été payés.
+    |
+    */
+
+    $invoiceTotal = (int) round(
+        (float) ($sale->total ?? 0)
+    );
+
+    $paid = (int) round(
+        (float) $sale->payments->sum('amount')
+    );
+
+    $remaining = max(
+        0,
+        $invoiceTotal - $paid
+    );
+
+    $normalizedStatus = strtolower(
+        trim((string) ($sale->status ?? 'vendu'))
+    );
+
+    $isCancelled = in_array(
+        $normalizedStatus,
+        [
+            'cancelled',
+            'annulé',
+            'annule',
+        ],
+        true
+    );
+
+    /*
+    |--------------------------------------------------------------------------
+    | FACTURE PAYEE
+    |--------------------------------------------------------------------------
+    |
+    | La facture est considérée payée si :
+    | - son reste est égal à 0
+    | OU
+    | - son statut est déjà "payé".
+    |
+    */
+    $isPaid = !$isCancelled && (
+        $remaining <= 0
+        || in_array(
+            $normalizedStatus,
+            [
+                'paid',
+                'payé',
+                'paye',
+            ],
+            true
+        )
+    );
+
+    $isPartial = !$isCancelled
+        && !$isPaid
+        && $paid > 0;
+
+    /*
+    |--------------------------------------------------------------------------
+    | LIBELLE DU STATUT A AFFICHER
+    |--------------------------------------------------------------------------
+    */
+    if ($isCancelled) {
+
+        $displayStatus = 'ANNULÉE';
+        $displayStatusClass = 'bg-danger';
+
+    } elseif ($isPaid) {
+
+        $displayStatus = 'PAYÉ';
+        $displayStatusClass = 'bg-success';
+
+    } elseif ($isPartial) {
+
+        $displayStatus = 'PARTIEL';
+        $displayStatusClass = 'bg-warning';
+
+    } else {
+
+        $displayStatus = 'VENDU';
+        $displayStatusClass = 'bg-primary';
+    }
+@endphp
+
 
         <style>
 
@@ -190,9 +286,9 @@
                 }
 
             }
-            /* =========================================
-                CORRECTION IMPRESSION FACTURE
-                ========================================= */
+            */ =========================================*
+*                CORRECTION IMPRESSION FACTURE*
+*                ========================================= */
 
                 .card-body{
                     width:100%;
@@ -409,8 +505,8 @@
                             <div class="invoice-box">
 
                                 <!--div class="invoice-title">
-                                    Invoice To
-                                </div-->
+*                                    Invoice To*
+*                                </div-->*
 
                                  <div class="invoice-title">
                                     Facturé à
@@ -469,11 +565,11 @@
                                         </div>
 
                                         <!--div>
-                                            <strong>
-                                                Adresse :
-                                            </strong>
-                                            { { $sale->customer->address ?? '-' }}
-                                        </div-->
+*                                            <strong>*
+*                                                Adresse :*
+*                                            </strong>*
+*                                            { { $sale->customer->address ?? '-' }}*
+*                                        </div-->*
                                     </td>
 
                                 </table>
@@ -497,8 +593,8 @@
                             <div class="invoice-box">
 
                                 <!--div class="invoice-title">
-                                    Invoice Details
-                                </div-->
+*                                    Invoice Details*
+*                                </div-->*
 
                                 <div class="invoice-title">
                                     Détails de la facture
@@ -528,11 +624,11 @@
                                         </div>
 
                                         <!--div>
-                                            <strong>
-                                                Status :
-                                            </strong>
-                                            { { ucfirst($sale->status) }}
-                                        </div-->
+*                                            <strong>*
+*                                                Status :*
+*                                            </strong>*
+*                                            { { ucfirst($sale->status) }}*
+*                                        </div-->*
 
                                         <div>
 
@@ -540,37 +636,9 @@
                                                 Status :
                                             </strong>
 
-                                            @if($sale->status == 'paid')
-
-                                                <span class="badge bg-success">
-                                                    PAYÉ
-                                                </span>
-
-                                            @elseif($sale->status == 'partial')
-
-                                                <span class="badge bg-warning">
-                                                    PARTIEL
-                                                </span>
-
-                                            @elseif($sale->status == 'vendu')
-
-                                                <span class="badge bg-primary">
-                                                    VENDU
-                                                </span>
-
-                                            @elseif($sale->status == 'cancelled')
-
-                                                <span class="badge bg-danger">
-                                                    ANNULÉE
-                                                </span>
-
-                                            @else
-
-                                                <span class="badge bg-secondary">
-                                                    {{ ucfirst($sale->status) }}
-                                                </span>
-
-                                            @endif
+                                            <span class="badge {{ $displayStatusClass }}">
+                                                {{ $displayStatus }}
+                                            </span>
 
                                         </div>
 
@@ -846,10 +914,7 @@
 
                 </div>
 
-                @php
-                    $paid = $sale->payments->sum('amount');
-                    $remaining = $sale->total - $paid;
-                @endphp
+
 
                 {{-- RESUME --}}
                 <div class="text-end mt-4">
@@ -859,7 +924,7 @@
                         Payé :
 
                         <strong>
-                          {{ number_format(round($paid), 0, ',', ' ') }} FDJ
+                          {{ number_format($paid, 0, ',', ' ') }} FDJ
                         </strong>
 
                     </h5>
@@ -870,7 +935,7 @@
 
                         <strong class="{{ $remaining > 0 ? 'text-danger' : 'text-success' }}">
 
-                           {{ number_format(round($remaining), 0, ',', ' ') }} FDJ
+                           {{ number_format($remaining, 0, ',', ' ') }} FDJ
 
                         </strong>
 
@@ -878,59 +943,163 @@
 
                 </div>
 
-                {{-- FORMULAIRE --}}
-              @if($remaining > 0 && $sale->status !== 'cancelled')
+                {{-- FORMULAIRE DE PAIEMENT --}}
 
-                <form action="{{ route('sales.payment', $sale) }}"
-                    method="POST"
-                    class="mt-4 print-hide">
+                @if(!$isCancelled && !$isPaid && $remaining > 0)
 
-                    @csrf
+                    <form
+                        action="{{ route('sales.payment', $sale) }}"
+                        method="POST"
+                        class="mt-4 print-hide"
+                    >
+                        @csrf
 
-                    <div class="row">
+                        <div class="row g-3 align-items-end">
 
-                        <div class="col-md-4">
+                            {{-- MONTANT --}}
+                            <div class="col-md-4">
 
-                            <input type="number"
-                                step="1"
-                                name="amount"
-                                max="{{ $remaining }}"
-                                class="form-control form-control-lg"
-                                placeholder="Montant"
-                                required>
+                                <label
+                                    for="payment_amount"
+                                    class="form-label fw-bold"
+                                >
+                                    Montant
+                                </label>
+
+                                <input
+                                    type="number"
+                                    id="payment_amount"
+                                    name="amount"
+                                    min="1"
+                                    max="{{ $remaining }}"
+                                    step="1"
+                                    class="form-control form-control-lg"
+                                    placeholder="Montant"
+                                    required
+                                >
+
+                                <small class="text-muted">
+                                    Reste à payer :
+                                    <strong>
+                                        {{ number_format(
+                                            $remaining,
+                                            0,
+                                            ',',
+                                            ' '
+                                        ) }}
+                                        FDJ
+                                    </strong>
+                                </small>
+
+                            </div>
+
+
+                            {{-- METHODE --}}
+                            <div class="col-md-4">
+
+                                <label
+                                    for="payment_method"
+                                    class="form-label fw-bold"
+                                >
+                                    Méthode
+                                </label>
+
+                                <select
+                                    id="payment_method"
+                                    name="method"
+                                    class="form-select form-select-lg"
+                                    required
+                                >
+
+                                    <option value="Cash">
+                                        Cash
+                                    </option>
+
+                                    <option value="Banque">
+                                        Banque
+                                    </option>
+
+                                    <option value="Chèque">
+                                        Chèque
+                                    </option>
+
+                                    <option value="Mobile Money">
+                                        Mobile Money
+                                    </option>
+
+                                </select>
+
+                            </div>
+
+
+                            {{-- BOUTON PAYER --}}
+                            <div class="col-md-4">
+
+                                <button
+                                    type="submit"
+                                    class="btn btn-success btn-lg w-100"
+                                >
+                                    <i class="bx bx-money me-1"></i>
+
+                                    PAYER LA FACTURE
+                                </button>
+
+                            </div>
 
                         </div>
 
-                        <div class="col-md-4">
+                    </form>
 
-                            <select name="method"
-                                    class="form-select form-select-lg">
 
-                                <option value="cash">
-                                    Cash
-                                </option>
+                @elseif($isPaid)
 
-                                <option value="bank">
-                                    Banque
-                                </option>
+                    {{-- FACTURE ENTIEREMENT PAYEE --}}
+                    <div class="alert alert-success mt-4 print-hide">
 
-                            </select>
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
 
-                        </div>
+                            <div>
 
-                        <div class="col-md-4">
+                                <i class="bx bx-check-circle me-1"></i>
 
-                            <button class="btn btn-success btn-lg w-100">
+                                <strong>
+                                    Facture entièrement payée
+                                </strong>
 
-                                PAYER LA FACTURE
+                            </div>
 
-                            </button>
+                            <div class="fw-bold">
+
+                                Payé :
+                                {{ number_format(
+                                    $paid,
+                                    0,
+                                    ',',
+                                    ' '
+                                ) }}
+                                FDJ
+
+                            </div>
 
                         </div>
 
                     </div>
 
-                </form>
+
+                @elseif($isCancelled)
+
+                    {{-- FACTURE ANNULEE --}}
+                    <div class="alert alert-danger mt-4 print-hide">
+
+                        <i class="bx bx-x-circle me-1"></i>
+
+                        <strong>
+                            Facture annulée.
+                        </strong>
+
+                        Aucun paiement supplémentaire n'est autorisé.
+
+                    </div>
 
                 @endif
 
@@ -939,7 +1108,7 @@
 
                    @if(
                         auth()->user()->role === 'admin'
-                        && $sale->status !== 'cancelled'
+                        && !$isCancelled
                     )
 
                         <form
@@ -1003,7 +1172,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             title: 'Annuler cette facture ?',
 
-            html: `
+            html: \`
                 <div class="text-center">
                     <p class="mb-2">
                         Vous êtes sur le point d’annuler la facture
@@ -1015,19 +1184,19 @@ document.addEventListener('DOMContentLoaded', function () {
                         et elle ne sera plus comptabilisée dans les ventes.
                     </p>
                 </div>
-            `,
+            \`,
 
             showCancelButton: true,
 
-            confirmButtonText: `
+            confirmButtonText: \`
                 <i class="bx bx-check me-1"></i>
                 Oui, annuler
-            `,
+            \`,
 
-            cancelButtonText: `
+            cancelButtonText: \`
                 <i class="bx bx-arrow-back me-1"></i>
                 Retour
-            `,
+            \`,
 
             confirmButtonColor: '#dc3545',
             cancelButtonColor: '#6c757d',

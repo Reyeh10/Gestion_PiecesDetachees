@@ -264,6 +264,12 @@ class VehicleController extends Controller
                     )
                     ->latest();
             },
+
+            'partRequests' => function ($query) {
+            $query->latest('requested_at')
+                ->latest('id');
+        },
+        
         ]);
 
         return view(

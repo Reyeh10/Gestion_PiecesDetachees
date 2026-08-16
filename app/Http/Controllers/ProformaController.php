@@ -2,722 +2,656 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-
+use App\Models\Customer;
 use App\Models\Product;
+use App\Models\Proforma;
+use App\Models\ProformaItem;
 use App\Models\Sale;
 use App\Models\SaleItem;
-use App\Models\Customer;
-use App\Models\StockMovement;
-
+use App\Models\Vehicle;
 use Barryvdh\DomPDF\Facade\Pdf;
-use NumberToWords\NumberToWords;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
+use Illuminate\View\View;
+use Throwable;
 
 class ProformaController extends Controller
 {
     /*
     |--------------------------------------------------------------------------
-    | INDEX
+    | LISTE DES PROFORMAS
     |--------------------------------------------------------------------------
     */
 
-    public function index(Request $request)
+    public function index(Request $request): View
     {
-        $proformas = Sale::with([
+        /*
+        |--------------------------------------------------------------------------
+        | PARAMÈTRES DE RECHERCHE
+        |--------------------------------------------------------------------------
+        */
+
+        $search = trim(
+            (string) $request->input(
+                'search',
+                ''
+            )
+        );
+
+        $status = trim(
+            (string) $request->input(
+                'status',
+                ''
+            )
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | REQUÊTE DE BASE
+        |--------------------------------------------------------------------------
+        */
+
+        $query = Proforma::query()
+            ->with([
                 'customer',
-                'items.product'
-            ])
+                'vehicle',
+                'creator',
+                'sale',
+            ]);
 
-            ->where('document_type', 'proforma')
 
-            ->when($request->client, function ($query) use ($request) {
+        /*
+        |--------------------------------------------------------------------------
+        | RECHERCHE
+        |--------------------------------------------------------------------------
+        |
+        | Accepte :
+        | PROFORMA-000001
+        | PROFORMA000001
+        | 000001
+        | 1
+        |
+        | Et fonctionne même si proforma_number est NULL pour un ancien
+        | enregistrement.
+        |
+        */
 
-                $query->whereHas('customer', function ($q) use ($request) {
+        if ($search !== '') {
 
-                    $q->where(
-                        'name',
-                        'like',
-                        '%' . $request->client . '%'
+            $query->where(
+                function ($q) use ($search) {
+
+                    $proformaId = null;
+
+                    if (
+                        preg_match(
+                            '/^PROFORMA[-\s]?0*(\d+)$/i',
+                            $search,
+                            $matches
+                        )
+                    ) {
+                        $proformaId = (int) $matches[1];
+
+                    } elseif (
+                        ctype_digit($search)
+                    ) {
+                        $proformaId = (int) $search;
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | ID / NUMÉRO PROFORMA
+                    |--------------------------------------------------------------------------
+                    */
+
+                    if (
+                        $proformaId !== null
+                        && $proformaId > 0
+                    ) {
+
+                        $q->where(
+                            'id',
+                            $proformaId
+                        );
+
+                        $q->orWhere(
+                            'proforma_number',
+                            'like',
+                            '%' . $search . '%'
+                        );
+
+                    } else {
+
+                        $q->where(
+                            'proforma_number',
+                            'like',
+                            '%' . $search . '%'
+                        );
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | CLIENT
+                    |--------------------------------------------------------------------------
+                    */
+
+                    $q->orWhereHas(
+                        'customer',
+                        function ($customerQuery) use ($search) {
+
+                            $customerQuery
+                                ->where(
+                                    'name',
+                                    'like',
+                                    '%' . $search . '%'
+                                )
+                                ->orWhere(
+                                    'phone',
+                                    'like',
+                                    '%' . $search . '%'
+                                )
+                                ->orWhere(
+                                    'email',
+                                    'like',
+                                    '%' . $search . '%'
+                                );
+                        }
                     );
-                });
-            })
 
-            ->when($request->reference, function ($query) use ($request) {
 
-                $query->whereHas('items.product', function ($q) use ($request) {
+                    /*
+                    |--------------------------------------------------------------------------
+                    | VÉHICULE
+                    |--------------------------------------------------------------------------
+                    */
 
-                    $q->where(
-                        'reference',
-                        'like',
-                        '%' . $request->reference . '%'
+                    $q->orWhereHas(
+                        'vehicle',
+                        function ($vehicleQuery) use ($search) {
+
+                            $vehicleQuery
+                                ->where(
+                                    'plate_number',
+                                    'like',
+                                    '%' . $search . '%'
+                                )
+                                ->orWhere(
+                                    'vin',
+                                    'like',
+                                    '%' . $search . '%'
+                                )
+                                ->orWhere(
+                                    'brand',
+                                    'like',
+                                    '%' . $search . '%'
+                                )
+                                ->orWhere(
+                                    'model',
+                                    'like',
+                                    '%' . $search . '%'
+                                );
+                        }
                     );
-                });
-            })
+                }
+            );
+        }
 
-            ->when($request->designation, function ($query) use ($request) {
 
-                $query->whereHas('items.product', function ($q) use ($request) {
+        /*
+        |--------------------------------------------------------------------------
+        | FILTRE STATUT
+        |--------------------------------------------------------------------------
+        */
 
-                    $q->where(
-                        'designation',
-                        'like',
-                        '%' . $request->designation . '%'
-                    );
-                });
-            })
+        if ($status !== '') {
 
-            ->when($request->date, function ($query) use ($request) {
+            $query->where(
+                'status',
+                $status
+            );
+        }
 
-                $query->whereDate(
-                    'created_at',
-                    $request->date
-                );
-            })
 
-            ->latest()
+        /*
+        |--------------------------------------------------------------------------
+        | LISTE
+        |--------------------------------------------------------------------------
+        */
 
-            ->paginate(10);
+        $proformas = $query
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->paginate(15)
+            ->withQueryString();
+
 
         return view(
             'proformas.index',
+            compact(
+                'proformas',
+                'search',
+                'status'
+            )
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | FORMULAIRE DE CRÉATION
+    |--------------------------------------------------------------------------
+    */
+
+    public function create(): View
+    {
+        $products = Product::query()
+            ->with(['brand', 'model', 'depotStocks.depot'])
+            ->where('quantity', '>', 0)
+            ->where('status', '!=', 'vendu')
+            ->orderBy('designation')
+            ->get();
+
+        $customers = Customer::query()
+            ->orderBy('name')
+            ->get();
+
+        return view(
+            'proformas.create',
+            compact('products', 'customers')
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | FORMULAIRE DE CRÉATION AVEC VÉHICULE
+    |--------------------------------------------------------------------------
+    */
+
+    public function createWithVehicle(
+        Vehicle $vehicle
+    ): View|RedirectResponse {
+        $products = Product::query()
+            ->with(['brand', 'model', 'depotStocks.depot'])
+            ->where('quantity', '>', 0)
+            ->where('status', '!=', 'vendu')
+            ->orderBy('designation')
+            ->get();
+
+        $customers = Customer::query()
+            ->orderBy('name')
+            ->get();
+
+        return view(
+            'proformas.create',
             [
-                'sales' => $proformas
+                'products' => $products,
+                'customers' => $customers,
+                'selectedVehicle' => $vehicle,
             ]
         );
     }
 
     /*
     |--------------------------------------------------------------------------
-    | CREATE
+    | VÉHICULES DU CLIENT
     |--------------------------------------------------------------------------
     */
 
-    public function create()
-    {
-        $customers = Customer::orderBy('name')->get();
-
-        $products = Product::with([
+    public function vehiclesByCustomer(
+        Customer $customer
+    ): JsonResponse {
+        $vehicles = Vehicle::query()
+            ->where('customer_id', $customer->id)
+            ->orderBy('plate_number')
+            ->get([
+                'id',
+                'customer_id',
+                'plate_number',
                 'brand',
-                'model'
+                'model',
             ])
-            ->where('quantity', '>', 0)
-            ->orderBy('designation')
-            ->get();
+            ->map(function (Vehicle $vehicle): array {
+                $description = trim(
+                    implode(
+                        ' ',
+                        array_filter([
+                            $vehicle->brand,
+                            $vehicle->model,
+                        ])
+                    )
+                );
 
-        return view(
-            'proformas.create',
-            compact('customers', 'products')
-        );
+                return [
+                    'id' => $vehicle->id,
+                    'customer_id' => $vehicle->customer_id,
+                    'plate_number' => $vehicle->plate_number,
+                    'brand' => $vehicle->brand,
+                    'model' => $vehicle->model,
+                    'label' => $description !== ''
+                        ? $vehicle->plate_number . ' - ' . $description
+                        : $vehicle->plate_number,
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'success' => true,
+            'vehicles' => $vehicles,
+        ]);
     }
+
     /*
     |--------------------------------------------------------------------------
-    | STORE
+    | ENREGISTRER LE PROFORMA
     |--------------------------------------------------------------------------
     */
 
-    public function store(Request $request)
+    public function store(Request $request): RedirectResponse
     {
-        $request->validate([
+        $validated = $request->validate(
+            [
+                'customer_id' => [
+                    'required',
+                    'integer',
+                    'exists:customers,id',
+                ],
 
-            'items' => 'required|array|min:1',
+                'vehicle_id' => [
+                    'required',
+                    'integer',
+                    Rule::exists('vehicles', 'id')
+                        ->where(
+                            fn ($query) => $query->where(
+                                'customer_id',
+                                $request->input('customer_id')
+                            )
+                        ),
+                ],
 
-            'items.*.product_id' =>
-                'required|exists:products,id',
+                'payment_type' => [
+                    'required',
+                    'in:Cash,Bon de commande,Echeance',
+                ],
 
-            'items.*.quantity' =>
-                'required|numeric|min:0.01',
+                'discount' => [
+                    'nullable',
+                    'numeric',
+                    'min:0',
+                    'max:100',
+                ],
 
-            'items.*.price' =>
-                'required|numeric|min:0',
-        ]);
+                'items' => [
+                    'required',
+                    'array',
+                    'min:1',
+                ],
+
+                'items.*.product_id' => [
+                    'required',
+                    'integer',
+                    'exists:products,id',
+                ],
+
+                'items.*.quantity' => [
+                    'required',
+                    'numeric',
+                    'min:0.01',
+                ],
+            ],
+            [
+                'customer_id.required' =>
+                    'Veuillez sélectionner un client.',
+
+                'vehicle_id.required' =>
+                    'Veuillez sélectionner le véhicule associé au client.',
+
+                'vehicle_id.exists' =>
+                    'Le véhicule sélectionné n’appartient pas au client choisi.',
+
+                'payment_type.required' =>
+                    'Veuillez sélectionner le mode de paiement.',
+
+                'items.required' =>
+                    'Vous devez ajouter au moins un produit.',
+
+                'items.min' =>
+                    'Vous devez ajouter au moins un produit.',
+
+                'items.*.product_id.required' =>
+                    'Veuillez sélectionner un produit.',
+
+                'items.*.quantity.required' =>
+                    'La quantité est obligatoire.',
+
+                'items.*.quantity.min' =>
+                    'La quantité doit être supérieure à zéro.',
+            ]
+        );
 
         DB::beginTransaction();
 
         try {
+            $vehicle = Vehicle::query()
+                ->whereKey($validated['vehicle_id'])
+                ->where('customer_id', $validated['customer_id'])
+                ->lockForUpdate()
+                ->firstOrFail();
 
-            /*
-            |--------------------------------------------------------------------------
-            | CALCUL TOTAL
-            |--------------------------------------------------------------------------
-            */
+            $subtotal = 0.00;
+            $validatedItems = [];
 
-           $subtotal = 0;
+            foreach ($validated['items'] as $itemData) {
+                $product = Product::query()
+                    ->lockForUpdate()
+                    ->findOrFail($itemData['product_id']);
 
-            $subtotal = 0;
+                $quantity = round(
+                    (float) $itemData['quantity'],
+                    2
+                );
 
-            foreach ($request->items as $item) {
+                $availableQuantity = round(
+                    (float) $product->quantity,
+                    2
+                );
+
+                if ($quantity > $availableQuantity) {
+                    DB::rollBack();
+
+                    return back()
+                        ->withInput()
+                        ->with(
+                            'error',
+                            'Stock insuffisant pour : '
+                            . $product->reference
+                            . ' - '
+                            . $product->designation
+                            . ' | Disponible : '
+                            . number_format(
+                                $availableQuantity,
+                                2,
+                                ',',
+                                ' '
+                            )
+                            . ' '
+                            . ($product->unit_label ?? 'Pièce')
+                        );
+                }
+
+                $price = round(
+                    (float) $product->sale_price,
+                    2
+                );
 
                 $lineTotal = round(
-                    $item['quantity'] *
-                    $item['price']
+                    $quantity * $price,
+                    2
                 );
 
                 $subtotal += $lineTotal;
+
+                $validatedItems[] = [
+                    'product_id' => $product->id,
+                    'quantity' => $quantity,
+                    'price' => $price,
+                    'total' => $lineTotal,
+                ];
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | REMISE
-            |--------------------------------------------------------------------------
-            */
+            $subtotal = round($subtotal, 2);
 
-            $discountPercent =
-                $request->discount ?? 0;
-
-            $discount = round(
-                ($subtotal * $discountPercent) / 100
+            $discountPercent = round(
+                (float) ($validated['discount'] ?? 0),
+                2
             );
 
-            /*
-            |--------------------------------------------------------------------------
-            | TVA
-            |--------------------------------------------------------------------------
-            */
+            $discountAmount = round(
+                ($subtotal * $discountPercent) / 100,
+                2
+            );
 
-            $taxable =
-                $subtotal - $discount;
+            $taxable = max(
+                0,
+                round(
+                    $subtotal - $discountAmount,
+                    2
+                )
+            );
 
             $tva = round(
-                $taxable * 0.10
+                $taxable * 0.10,
+                2
             );
-
-            /*
-            |--------------------------------------------------------------------------
-            | TOTAL FINAL
-            |--------------------------------------------------------------------------
-            */
 
             $total = round(
-                $taxable + $tva
+                $taxable + $tva,
+                2
             );
+
             /*
             |--------------------------------------------------------------------------
-            | CREATE PROFORMA
+            | NUMÉRO DU PROFORMA
             |--------------------------------------------------------------------------
             */
 
-            $sale = Sale::create([
+            $nextId = ((int) Proforma::max('id')) + 1;
 
-                'customer_id' =>
-                    $request->customer_id,
+            $proformaNumber =
+                'PROFORMA-'
+                . str_pad(
+                    (string) $nextId,
+                    6,
+                    '0',
+                    STR_PAD_LEFT
+                );
 
-                'payment_type' => null,
+            /*
+            |--------------------------------------------------------------------------
+            | CRÉER LE PROFORMA
+            |--------------------------------------------------------------------------
+            */
 
-                'status' =>
-                    'proforma',
+            $proforma = Proforma::create([
+                'proforma_number' => $proformaNumber,
 
-                'document_type' =>
-                    'proforma',
+                'customer_id' => $validated['customer_id'],
+                'vehicle_id' => $vehicle->id,
+                'created_by' => auth()->id(),
 
-                'subtotal' =>
-                    $subtotal,
+                'payment_type' => $validated['payment_type'],
 
-                'discount' =>
-                    $discount,
+                'subtotal' => $subtotal,
+                'discount' => $discountPercent,
+                'discount_amount' => $discountAmount,
+                'tva' => $tva,
+                'total' => $total,
 
-                'tva' =>
-                    $tva,
-
-                'total' =>
-                    $total,
-
-                'invoice_number' =>
-
-                    'PRO-' .
-
-                    date('Y') .
-
-                    '-' .
-
-                    str_pad(
-                        Sale::max('id') + 1,
-                        5,
-                        '0',
-                        STR_PAD_LEFT
-                    ),
+                'status' => Proforma::STATUS_VALIDATED,
             ]);
 
             /*
             |--------------------------------------------------------------------------
-            | SAVE ITEMS
+            | ENREGISTRER LES PRODUITS
+            |--------------------------------------------------------------------------
+            |
+            | IMPORTANT :
+            | on ne diminue PAS le stock lors de la création du proforma.
             |--------------------------------------------------------------------------
             */
 
-            foreach ($request->items as $item) {
-
-                SaleItem::create([
-
-                    'sale_id' =>
-                        $sale->id,
-
-                    'product_id' =>
-                        $item['product_id'],
-
-                    'quantity' =>
-                        $item['quantity'],
-
-                    'price' =>
-                        $item['price'],
+            foreach ($validatedItems as $item) {
+                ProformaItem::create([
+                    'proforma_id' => $proforma->id,
+                    'product_id' => $item['product_id'],
+                    'quantity' => $item['quantity'],
+                    'price' => $item['price'],
+                    'total' => $item['total'],
                 ]);
             }
 
             DB::commit();
 
             return redirect()
-
-                ->route(
-                    'proformas.show',
-                    $sale->id
-                )
-
+                ->route('proformas.show', $proforma)
                 ->with(
                     'success',
-                    'Proforma généré avec succès.'
+                    'Le proforma a été créé avec succès.'
                 );
 
-        } catch (\Exception $e) {
-
+        } catch (Throwable $e) {
             DB::rollBack();
 
+            Log::error(
+                'Création proforma impossible.',
+                [
+                    'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'user_id' => auth()->id(),
+                    'customer_id' => $validated['customer_id'] ?? null,
+                    'vehicle_id' => $validated['vehicle_id'] ?? null,
+                    'payment_type' => $validated['payment_type'] ?? null,
+                ]
+            );
+
             return back()
-
                 ->withInput()
-
-                ->withErrors([
-                    'error' => $e->getMessage()
-                ]);
+                ->with(
+                    'error',
+                    app()->environment('local')
+                        ? 'ERREUR : ' . $e->getMessage()
+                        : 'La création du proforma a échoué.'
+                );
         }
     }
 
     /*
     |--------------------------------------------------------------------------
-    | SHOW
+    | AFFICHER LE PROFORMA
     |--------------------------------------------------------------------------
     */
 
-    public function show(int $id)
-    {
-        $sale = Sale::with([
-
+    public function show(
+        Proforma $proforma
+    ): View {
+        $proforma->load([
             'customer',
-
-            'items.product.brand',
-
-            'items.product.model',
-
-        ])->findOrFail($id);
-
-       $total = round($sale->total);
-        $entier = $total;
-        $centimes = 0;
-
-        $numberToWords =
-            new NumberToWords();
-
-        $numberTransformer =
-            $numberToWords
-                ->getNumberTransformer('fr');
-
-        $totalInWords = strtoupper(
-
-            $numberTransformer->toWords(
-                $entier
-            )
-
-        ) . ' FDJ';
-
-
+            'vehicle',
+            'creator',
+            'sale',
+            'items.product',
+        ]);
 
         return view(
             'proformas.show',
-            compact(
-                'sale',
-                'totalInWords'
-            )
+            compact('proforma')
         );
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | EDIT
-    |--------------------------------------------------------------------------
-    */
-
-    public function edit(int $id)
-    {
-        $sale = Sale::with('items')
-            ->findOrFail($id);
-
-        $customers =
-            Customer::orderBy('name')->get();
-
-        $products =
-            Product::orderBy('designation')->get();
-
-        return view(
-            'proformas.edit',
-            compact(
-                'sale',
-                'customers',
-                'products'
-            )
-        );
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | UPDATE
-    |--------------------------------------------------------------------------
-    */
-
-    public function update(
-        Request $request,
-        int $id
-    ) {
-
-        $sale = Sale::findOrFail($id);
-
-        $request->validate([
-
-            'items' => 'required|array|min:1',
-
-            'items.*.product_id' =>
-                'required|exists:products,id',
-
-            'items.*.quantity' =>
-                'required|numeric|min:0.01',
-
-            'items.*.price' =>
-                'required|numeric|min:0',
-        ]);
-
-        DB::beginTransaction();
-
-        try {
-
-            /*
-            |--------------------------------------------------------------------------
-            | DELETE OLD ITEMS
-            |--------------------------------------------------------------------------
-            */
-
-            $sale->items()->delete();
-
-            /*
-            |--------------------------------------------------------------------------
-            | RECALCUL TOTAL
-            |--------------------------------------------------------------------------
-            */
-
-            $subtotal = 0;
-
-            foreach ($request->items as $item) {
-
-                $subtotal +=
-                    $item['quantity'] *
-                    $item['price'];
-            }
-
-            $discount =
-                $request->discount ?? 0;
-
-            $tva =
-                ($subtotal - $discount) * 0.10;
-
-            $total =
-                $subtotal +
-                $tva -
-                $discount;
-
-            /*
-            |--------------------------------------------------------------------------
-            | UPDATE PROFORMA
-            |--------------------------------------------------------------------------
-            */
-
-            $sale->update([
-
-                'customer_id' =>
-                    $request->customer_id,
-
-                'subtotal' =>
-                    $subtotal,
-
-                'discount' =>
-                    $discount,
-
-                'tva' =>
-                    $tva,
-
-                'total' =>
-                    $total,
-            ]);
-
-            /*
-            |--------------------------------------------------------------------------
-            | SAVE ITEMS
-            |--------------------------------------------------------------------------
-            */
-
-            foreach ($request->items as $item) {
-
-                SaleItem::create([
-
-                    'sale_id' =>
-                        $sale->id,
-
-                    'product_id' =>
-                        $item['product_id'],
-
-                    'quantity' =>
-                        $item['quantity'],
-
-                    'price' =>
-                        $item['price'],
-                ]);
-            }
-
-            DB::commit();
-
-            return redirect()
-
-                ->route(
-                    'proformas.show',
-                    $sale->id
-                )
-
-                ->with(
-                    'success',
-                    'Proforma modifié avec succès.'
-                );
-
-        } catch (\Exception $e) {
-
-            DB::rollBack();
-
-            return back()
-
-                ->withInput()
-
-                ->withErrors([
-                    'error' => $e->getMessage()
-                ]);
-        }
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | CONVERT PROFORMA TO SALE
-    |--------------------------------------------------------------------------
-    */
-
-   public function convertToSale(int $id)
-{
-    DB::beginTransaction();
-
-    try {
-
-        /*
-        |--------------------------------------------------------------------------
-        | GET PROFORMA
-        |--------------------------------------------------------------------------
-        */
-
-       $proforma = Sale::with([
-            'customer',
-            'items.product',
-        ])->findOrFail($id);
-
-        /*
-        |--------------------------------------------------------------------------
-        | VERIFY ITEMS
-        |--------------------------------------------------------------------------
-        */
-
-       if ($proforma->items()->count() <= 0) {
-        throw new \Exception(
-            'Aucun produit trouvé dans ce proforma.'
-            );
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | VERIFY STOCK
-        |--------------------------------------------------------------------------
-        */
-
-        foreach ($proforma->items as $item) {
-
-            $product = Product::find($item->product_id);
-
-            if (!$product) {
-
-                throw new \Exception(
-                    'Produit introuvable.'
-                );
-            }
-
-            if ($item->quantity > $product->quantity) {
-
-                throw new \Exception(
-
-                    'Stock insuffisant pour : '
-
-                    . $product->designation
-
-                    . ' | Disponible : '
-
-                    . $product->quantity
-                );
-            }
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | CONVERT PROFORMA TO SALE
-        |--------------------------------------------------------------------------
-        */
-
-        $proforma->document_type = 'sale';
-
-        $proforma->status = 'vendu';
-
-        $proforma->payment_type = 'cash';
-
-        $proforma->invoice_number =
-
-            'INV-' .
-
-            date('Y') .
-
-            '-' .
-
-            str_pad(
-                $proforma->id,
-                5,
-                '0',
-                STR_PAD_LEFT
-            );
-
-        $proforma->save();
-
-        /*
-        |--------------------------------------------------------------------------
-        | UPDATE STOCK
-        |--------------------------------------------------------------------------
-        */
-
-        foreach ($proforma->items as $item) {
-
-            $product = Product::find($item->product_id);
-
-            /*
-            |--------------------------------------------------------------------------
-            | DECREASE STOCK
-            |--------------------------------------------------------------------------
-            */
-
-            $product->quantity =
-                $product->quantity - $item->quantity;
-
-            if ($product->quantity < 0) {
-
-                $product->quantity = 0;
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | PRODUCT STATUS
-            |--------------------------------------------------------------------------
-            */
-
-            if ($product->quantity <= 0) {
-
-                $product->status = 'vendu';
-
-            } else {
-
-                $product->status = 'disponible';
-            }
-
-            $product->save();
-
-            /*
-            |--------------------------------------------------------------------------
-            | STOCK MOVEMENT
-            |--------------------------------------------------------------------------
-            */
-
-            StockMovement::create([
-
-                'product_id' =>
-                    $product->id,
-
-                'user_id' =>
-                    auth()->id(),
-
-                'type' =>
-                    'out',
-
-                'quantity' =>
-                    $item->quantity,
-
-                'source' =>
-                    'Conversion Proforma',
-
-                'reference' =>
-                    $proforma->invoice_number,
-            ]);
-        }
-
-        DB::commit();
-
-        return redirect()
-
-            ->route(
-                'sales.show',
-                ['sale' => $proforma->id]
-            )
-
-            ->with(
-                'success',
-                'Proforma converti en vente avec succès.'
-            );
-
-    } catch (\Exception $e) {
-
-        DB::rollBack();
-
-        return back()->with(
-            'error',
-            $e->getMessage()
-        );
-    }
-}
-
-    /*
-    |--------------------------------------------------------------------------
-    | DELETE
-    |--------------------------------------------------------------------------
-    */
-
-    public function destroy(int $id)
-    {
-        $sale = Sale::findOrFail($id);
-
-        $sale->items()->delete();
-
-        $sale->delete();
-
-        return redirect()
-
-            ->route('proformas.index')
-
-            ->with(
-                'success',
-                'Proforma supprimé avec succès.'
-            );
     }
 
     /*
@@ -726,55 +660,460 @@ class ProformaController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    public function pdf(int $proforma)
-    {
-        $sale = Sale::with([
-
+    public function download(
+        Proforma $proforma
+    ) {
+        $proforma->load([
             'customer',
+            'vehicle',
+            'creator',
+            'items.product',
+        ]);
 
-            'items.product.brand',
-
-            'items.product.model',
-
-        ])->findOrFail($proforma);
-
-        $total = round($sale->total);
-        $entier = $total;
-        $centimes = 0;
-
-        $numberToWords =
-            new NumberToWords();
-
-        $numberTransformer =
-            $numberToWords
-                ->getNumberTransformer('fr');
-
-        $totalInWords = strtoupper(
-
-            $numberTransformer->toWords(
-                $entier
-            )
-
-        ) . ' FDJ';
-
-
-        $pdf = Pdf::loadView(
-
-            'proformas.proforma_pdf',
-
-            compact(
-                'sale',
-                'totalInWords'
-            )
+        $safeNumber = preg_replace(
+            '/[^A-Za-z0-9\-_]/',
+            '-',
+            $proforma->proforma_number
         );
 
-        return $pdf->download(
+        return Pdf::loadView(
+            'proformas.pdf',
+            [
+                'proforma' => $proforma,
+                'isPdf' => true,
+            ]
+        )
+            ->setPaper('a4', 'portrait')
+            ->download($safeNumber . '.pdf');
+    }
 
-            'proforma_' .
+   /*
+    |--------------------------------------------------------------------------
+    | CONVERTIR LE PROFORMA EN VENTE
+    |--------------------------------------------------------------------------
+    */
+    public function convertToSale(
+        Proforma $proforma
+    ): RedirectResponse {
 
-            $sale->invoice_number .
+        try {
 
-            '.pdf'
-        );
+            $sale = DB::transaction(
+                function () use ($proforma) {
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | VERROUILLER LE PROFORMA
+                    |--------------------------------------------------------------------------
+                    */
+
+                    $locked = Proforma::query()
+                        ->with([
+                            'items.product',
+                            'vehicle',
+                        ])
+                        ->lockForUpdate()
+                        ->findOrFail(
+                            $proforma->id
+                        );
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | DÉJÀ CONVERTI
+                    |--------------------------------------------------------------------------
+                    |
+                    | Aucun doublon de vente.
+                    | On retourne simplement la vente existante.
+                    |
+                    */
+
+                    if (
+                        $locked->status
+                        === Proforma::STATUS_CONVERTED
+                    ) {
+
+                        if (!$locked->sale_id) {
+
+                            throw new \RuntimeException(
+                                'Ce proforma est marqué comme converti, '
+                                . 'mais aucune vente associée n’a été trouvée.'
+                            );
+                        }
+
+                        return Sale::findOrFail(
+                            $locked->sale_id
+                        );
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | PROFORMA ANNULÉ
+                    |--------------------------------------------------------------------------
+                    */
+
+                    if (
+                        $locked->status
+                        === Proforma::STATUS_CANCELLED
+                    ) {
+
+                        throw new \RuntimeException(
+                            'Un proforma annulé ne peut pas être converti.'
+                        );
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | VÉRIFIER LES ARTICLES
+                    |--------------------------------------------------------------------------
+                    */
+
+                    if ($locked->items->isEmpty()) {
+
+                        throw new \RuntimeException(
+                            'Ce proforma ne contient aucun produit.'
+                        );
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | VÉRIFIER LE STOCK
+                    |--------------------------------------------------------------------------
+                    */
+
+                    foreach (
+                        $locked->items as $item
+                    ) {
+
+                        $product =
+                            Product::query()
+                                ->lockForUpdate()
+                                ->findOrFail(
+                                    $item->product_id
+                                );
+
+
+                        $requestedQuantity =
+                            round(
+                                (float) $item->quantity,
+                                2
+                            );
+
+
+                        $availableQuantity =
+                            round(
+                                (float) $product->quantity,
+                                2
+                            );
+
+
+                        if (
+                            $requestedQuantity
+                            > $availableQuantity
+                        ) {
+
+                            throw new \RuntimeException(
+
+                                'Stock insuffisant pour : '
+                                . $product->reference
+                                . ' - '
+                                . $product->designation
+                                . '. Disponible : '
+                                . number_format(
+                                    $availableQuantity,
+                                    2,
+                                    ',',
+                                    ' '
+                                )
+                                . ' '
+                                . (
+                                    $product->unit_label
+                                    ?? 'Pièce'
+                                )
+
+                            );
+                        }
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | NUMÉRO FACTURE
+                    |--------------------------------------------------------------------------
+                    */
+
+                    $nextSaleId =
+                        ((int) Sale::max('id'))
+                        + 1;
+
+
+                    $invoiceNumber =
+                        'FACT-'
+                        . date('Y')
+                        . '-'
+                        . str_pad(
+                            (string) $nextSaleId,
+                            4,
+                            '0',
+                            STR_PAD_LEFT
+                        );
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | CRÉER LA VENTE
+                    |--------------------------------------------------------------------------
+                    */
+
+                    $sale = Sale::create([
+
+                        'customer_id' =>
+                            $locked->customer_id,
+
+                        'vehicle_id' =>
+                            $locked->vehicle_id,
+
+                        'payment_type' =>
+                            $locked->payment_type,
+
+                        'subtotal' =>
+                            $locked->subtotal,
+
+                        'discount' =>
+                            $locked->discount,
+
+                        'discount_amount' =>
+                            $locked->discount_amount,
+
+                        'tva' =>
+                            $locked->tva,
+
+                        'total' =>
+                            $locked->total,
+
+                        'status' =>
+                            'vendu',
+
+                        'document_type' =>
+                            'sale',
+
+                        'invoice_number' =>
+                            $invoiceNumber,
+
+                    ]);
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | CRÉER LES LIGNES DE VENTE
+                    |--------------------------------------------------------------------------
+                    */
+
+                    foreach (
+                        $locked->items as $item
+                    ) {
+
+                        $product =
+                            Product::query()
+                                ->lockForUpdate()
+                                ->findOrFail(
+                                    $item->product_id
+                                );
+
+
+                        SaleItem::create([
+
+                            'sale_id' =>
+                                $sale->id,
+
+                            'product_id' =>
+                                $product->id,
+
+                            'quantity' =>
+                                $item->quantity,
+
+                            'price' =>
+                                $item->price,
+
+                        ]);
+
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | DIMINUER LE STOCK
+                        |--------------------------------------------------------------------------
+                        */
+
+                        $product->quantity =
+                            max(
+                                0,
+                                round(
+                                    (float) $product->quantity
+                                    -
+                                    (float) $item->quantity,
+                                    2
+                                )
+                            );
+
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | STATUT PRODUIT
+                        |--------------------------------------------------------------------------
+                        */
+
+                        $product->status =
+                            $product->quantity <= 0
+                                ? 'vendu'
+                                : 'disponible';
+
+
+                        $product->save();
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | MARQUER LE PROFORMA COMME CONVERTI
+                    |--------------------------------------------------------------------------
+                    */
+
+                    $locked->update([
+
+                        'status' =>
+                            Proforma::STATUS_CONVERTED,
+
+                        'sale_id' =>
+                            $sale->id,
+
+                        'converted_at' =>
+                            now(),
+
+                        'converted_by' =>
+                            auth()->id(),
+
+                    ]);
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | RECHARGER LA VENTE
+                    |--------------------------------------------------------------------------
+                    */
+
+                    $sale->refresh();
+
+
+                    return $sale;
+
+                }
+            );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | REDIRECTION VERS LA FACTURE HTML
+            |--------------------------------------------------------------------------
+            |
+            | IMPORTANT :
+            | cette route ne doit PAS télécharger le PDF.
+            |
+            */
+
+            return redirect()
+                ->route(
+                    'sales.invoice',
+                    $sale->id
+                )
+                ->with(
+                    'success',
+                    'Le proforma a été converti en vente avec succès.'
+                );
+
+
+        } catch (\RuntimeException $e) {
+
+            return back()
+                ->with(
+                    'error',
+                    $e->getMessage()
+                );
+
+
+        } catch (Throwable $e) {
+
+            Log::error(
+                'Conversion du proforma impossible.',
+                [
+                    'proforma_id' =>
+                        $proforma->id,
+
+                    'message' =>
+                        $e->getMessage(),
+
+                    'file' =>
+                        $e->getFile(),
+
+                    'line' =>
+                        $e->getLine(),
+
+                    'user_id' =>
+                        auth()->id(),
+                ]
+            );
+
+
+            return back()
+                ->with(
+                    'error',
+                    app()->environment('local')
+                        ? 'ERREUR : '
+                            . $e->getMessage()
+                        : 'Une erreur est survenue pendant la conversion.'
+                );
+        }
+    }
+    /*
+    |--------------------------------------------------------------------------
+    | ANNULER
+    |--------------------------------------------------------------------------
+    */
+
+    public function cancel(
+        Proforma $proforma
+    ): RedirectResponse {
+        if (
+            $proforma->status === Proforma::STATUS_CONVERTED
+        ) {
+            return back()->with(
+                'error',
+                'Un proforma converti ne peut pas être annulé.'
+            );
+        }
+
+        if (
+            $proforma->status === Proforma::STATUS_CANCELLED
+        ) {
+            return back()->with(
+                'info',
+                'Ce proforma est déjà annulé.'
+            );
+        }
+
+        $proforma->update([
+            'status' => Proforma::STATUS_CANCELLED,
+            'cancelled_at' => now(),
+            'cancelled_by' => auth()->id(),
+        ]);
+
+        return redirect()
+            ->route('proformas.index')
+            ->with(
+                'success',
+                'Le proforma a été annulé.'
+            );
     }
 }

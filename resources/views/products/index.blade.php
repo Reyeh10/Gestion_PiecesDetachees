@@ -2,217 +2,1195 @@
 
 @section('content')
 
-@if(session('success'))
+@php
+    /*
+    |--------------------------------------------------------------------------
+    | VARIABLES DE PAGE
+    |--------------------------------------------------------------------------
+    */
 
-    <div class="alert alert-success">
-        {{ session('success') }}
-    </div>
+    $hideButtons = $hideButtons ?? false;
 
-@endif
+    $isAllProducts = request()->routeIs('products.index');
+    $isAvailableProducts = request()->routeIs('products.available');
+    $isUnavailablePage =
+        $isUnavailablePage
+        ?? request()->routeIs('products.unavailable');
+    $isSoldProducts = request()->routeIs('products.sold');
 
-@if(session('error'))
+   /*
+    |--------------------------------------------------------------------------
+    | NOMBRE DE COLONNES
+    |--------------------------------------------------------------------------
+    |
+    | Tous les produits :
+    |
+    | 7 informations :
+    | - Référence
+    | - Désignation
+    | - Marque
+    | - Modèle
+    | - Famille
+    | - Rayon
+    | - Emplacement
+    |
+    | 3 quantités :
+    | - Quantité initiale
+    | - Quantité disponible
+    | - Quantité vendue
+    |
+    | + Min
+    | + Max
+    | + Prix achat
+    | + Prix vente
+    | + Statut
+    | + Actions
+    |
+    | TOTAL = 16 colonnes
+    |
+    | IMPORTANT :
+    | "Qté reçue" et "Qté non disponible"
+    | ne sont plus affichées dans "Tous les produits".
+    |
+    */
 
-    <div class="alert alert-danger">
-        {{ session('error') }}
-    </div>
+    $tableColspan =
+        $isAllProducts
+            ? 16
+            : (
+                $isUnavailablePage
+                    ? 17
+                    : 14
+            );
+@endphp
 
-@endif
+<style>
+    /*
+    |--------------------------------------------------------------------------
+    | PAGE
+    |--------------------------------------------------------------------------
+    */
 
-<div class="card shadow-sm border-0">
+    .products-page {
+        width: 100%;
+        padding: 22px 18px 45px;
+        overflow-x: hidden;
+    }
 
-    {{-- HEADER --}}
-    <div class="card-header bg-white border-0">
+    .products-page-inner {
+        width: 100%;
+        max-width: 1700px;
+        margin: 0 auto;
+    }
 
-        {{-- TOP --}}
-        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    .products-card {
+        width: 100%;
+        min-width: 0;
+        overflow: hidden;
 
-            <h4 class="mb-0">
-                {{ $pageTitle ?? 'Liste des produits' }}
-            </h4>
+        background: #ffffff;
 
-            @if(request()->routeIs('products.available'))
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
 
-                <a href="{{ route('sales.create') }}"
-                   class="btn btn-primary">
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
 
-                    <i class="bx bx-cart"></i>
+    /*
+    |--------------------------------------------------------------------------
+    | HEADER
+    |--------------------------------------------------------------------------
+    */
 
-                    Nouvelle vente
+    .products-card-header {
+        padding: 24px 28px 22px;
 
-                </a>
+        background: #ffffff;
 
-            @endif
+        border-bottom: 1px solid #edf0f4;
+    }
 
-        </div>
+    .products-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
 
-        {{-- IMPORT FORM --}}
-        @if(
-            !$hideButtons
-            &&
-            in_array(auth()->user()->role, [
-                'admin',
-                'chef_magasinier',
-                'magasinier'
-            ])
-        )
+        gap: 16px;
+        flex-wrap: wrap;
 
-            <form action="{{ route('products.preview') }}"
-                  method="POST"
-                  enctype="multipart/form-data">
+        margin-bottom: 22px;
+    }
 
-                @csrf
+    .products-title-row h4 {
+        margin: 0;
 
-             <div class="row g-3 align-items-end justify-content-between">
+        font-size: clamp(22px, 2vw, 28px);
+        font-weight: 800;
 
-                    {{-- FOURNISSEUR --}}
-                    <div class="col-md-3">
+        color: #334155;
+    }
 
-                        <label class="form-label fw-semibold">
-                            Fournisseur
-                        </label>
+    /*
+    |--------------------------------------------------------------------------
+    | IMPORT
+    |--------------------------------------------------------------------------
+    */
 
-                        <select name="supplier_id"
-                                class="form-select"
-                                required>
+    .product-import-grid {
+        display: flex;
+        align-items: flex-end;
+        flex-wrap: wrap;
 
-                            <option value="">
-                                Sélectionner fournisseur
-                            </option>
+        gap: 14px;
 
-                            @foreach($suppliers as $supplier)
+        width: 100%;
+        min-width: 0;
+    }
 
-                                <option value="{{ $supplier->id }}">
-                                    {{ $supplier->name }}
-                                </option>
+    .product-import-field {
+        min-width: 0;
+    }
 
-                            @endforeach
+    .product-import-field:nth-child(1),
+    .product-import-field:nth-child(2) {
+        flex: 1 1 220px;
+    }
 
-                        </select>
+    .product-import-field:nth-child(3) {
+        flex: 1.15 1 280px;
+    }
 
-                    </div>
+    .product-actions-field {
+        flex: 1.2 1 360px;
+    }
 
-                    {{-- DEPOT --}}
-                    <div class="col-md-3">
+    /*
+    |--------------------------------------------------------------------------
+    | LABELS
+    |--------------------------------------------------------------------------
+    */
 
-                        <label class="form-label fw-semibold">
-                            Dépôt
-                        </label>
+    .product-import-field .form-label {
+        display: block;
 
-                        <select name="depot_id"
-                                class="form-select"
-                                required>
+        margin-bottom: 8px;
 
-                            <option value="">
-                                Sélectionner dépôt
-                            </option>
+        font-size: 11px;
+        font-weight: 800;
 
-                            @foreach($depots as $depot)
+        letter-spacing: .06em;
 
-                                <option value="{{ $depot->id }}">
-                                    {{ $depot->name }}
-                                </option>
+        color: #52657b;
 
-                            @endforeach
+        text-transform: uppercase;
+    }
 
-                        </select>
+    /*
+    |--------------------------------------------------------------------------
+    | SELECT FOURNISSEUR / DÉPÔT
+    |--------------------------------------------------------------------------
+    */
 
-                    </div>
+    .modern-select-wrapper {
+        position: relative;
 
-                    {{-- FICHIER --}}
-                    <div class="col-md-3">
+        width: 100%;
+    }
 
-                        <label class="form-label fw-semibold">
-                            Fichier Excel
-                        </label>
+    .modern-select-icon {
+        position: absolute;
 
-                        <input type="file"
-                               name="file"
-                               class="form-control"
-                               accept=".xlsx,.xls,.csv"
-                               required>
+        top: 50%;
+        left: 15px;
 
-                    </div>
+        transform: translateY(-50%);
 
-                    {{-- IMPORT --}}
-                    <div class="col-md-3">
+        z-index: 2;
 
-                        <div class="d-flex gap-2 w-100">
+        display: flex;
+        align-items: center;
+        justify-content: center;
 
-                            {{-- IMPORT --}}
-                            <button type="submit"
-                                    class="btn btn-success flex-fill">
+        width: 22px;
+        height: 22px;
 
-                                <i class="bx bx-upload"></i>
-                                Importer
+        color: #64748b;
 
-                            </button>
+        pointer-events: none;
+    }
 
-                            {{-- EXPORT EXCEL --}}
-                            <a href="{{ route('products.export.excel') }}"
-                            class="btn btn-info flex-fill">
+    .modern-select-icon i {
+        font-size: 20px;
+    }
 
-                                <i class="bx bx-download"></i>
-                                Excel
+    .modern-select {
+        width: 100%;
+        height: 48px;
 
-                            </a>
+        padding: 0 44px 0 46px;
 
-                            {{-- EXPORT PDF --}}
-                            <!--a href="{ { route('products.export.pdf') }}"
-                                class="btn btn-danger flex-fill">
+        font-size: 14px;
+        font-weight: 500;
 
-                                    <i class="bx bx-file"></i>
-                                    PDF
-                            </a-->
+        color: #475569;
 
-                            {{-- AJOUT --}}
-                            <a href="{{ route('products.create') }}"
-                            class="btn btn-primary">
+        background-color: #ffffff;
 
-                                <i class="bx bx-plus"></i>
+        border: 1px solid #d8dee8;
+        border-radius: 10px;
 
-                            </a>
+        outline: none;
 
-                        </div>
+        cursor: pointer;
 
-                    </div>
-                    <!--div class="col-md-1">
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
 
-                        <a href="{ { route('products.create') }}"
-                           class="btn btn-primary w-100">
-                            <i class="bx bx-plus"></i>
-                        </a>
+        background-image:
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
 
-                    </div-->
+        background-repeat: no-repeat;
+        background-position: right 14px center;
+        background-size: 17px;
 
-                </div>
+        transition:
+            border-color .2s ease,
+            box-shadow .2s ease,
+            background-color .2s ease;
+    }
 
-            </form>
+    .modern-select:hover {
+        border-color: #a5b4fc;
+
+        background-color: #fafaff;
+    }
+
+    .modern-select:focus {
+        border-color: #696cff;
+
+        background-color: #ffffff;
+
+        box-shadow:
+            0 0 0 3px rgba(105, 108, 255, 0.12);
+    }
+
+    .modern-select option {
+        color: #334155;
+
+        background: #ffffff;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | FICHIER EXCEL
+    |--------------------------------------------------------------------------
+    */
+
+    .product-file-input {
+        width: 100%;
+        height: 48px;
+
+        padding: 5px 8px;
+
+        font-size: 14px;
+
+        color: #64748b;
+
+        background: #ffffff;
+
+        border: 1px solid #d8dee8;
+        border-radius: 10px;
+
+        box-shadow: none;
+
+        transition:
+            border-color .2s ease,
+            box-shadow .2s ease;
+    }
+
+    .product-file-input:hover {
+        border-color: #a5b4fc;
+    }
+
+    .product-file-input:focus {
+        outline: none;
+
+        border-color: #696cff;
+
+        box-shadow:
+            0 0 0 3px rgba(105, 108, 255, .12);
+    }
+
+    .product-file-input::file-selector-button {
+        height: 36px;
+
+        margin-right: 12px;
+
+        padding: 0 14px;
+
+        color: #475569;
+
+        background: #f8fafc;
+
+        border: none;
+        border-right: 1px solid #e2e8f0;
+
+        font-size: 13px;
+        font-weight: 600;
+
+        cursor: pointer;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | BOUTONS IMPORT / EXCEL / AJOUT
+    |--------------------------------------------------------------------------
+    */
+
+    .product-action-buttons {
+        display: grid;
+
+        grid-template-columns:
+            minmax(125px, 1.15fr)
+            minmax(105px, 1fr)
+            52px;
+
+        gap: 10px;
+
+        width: 100%;
+        min-width: 0;
+    }
+
+    .product-action-buttons .btn {
+        min-width: 0;
+        min-height: 48px;
+
+        padding: 10px 13px;
+
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        gap: 7px;
+
+        white-space: nowrap;
+
+        font-size: 14px;
+        font-weight: 700;
+
+        border-radius: 9px;
+
+        box-shadow:
+            0 5px 12px rgba(15, 23, 42, .10);
+    }
+
+    .product-action-buttons .btn-success {
+        color: #ffffff;
+
+        background: #34d399;
+        border-color: #34d399;
+    }
+
+    .product-action-buttons .btn-success:hover {
+        background: #10b981;
+        border-color: #10b981;
+    }
+
+    .product-action-buttons .btn-info {
+        color: #ffffff;
+
+        background: #13c2c2;
+        border-color: #13c2c2;
+    }
+
+    .product-action-buttons .btn-info:hover {
+        background: #0ea5a5;
+        border-color: #0ea5a5;
+    }
+
+    .product-add-button {
+        width: 52px;
+
+        min-width: 52px !important;
+
+        padding: 0 !important;
+
+        font-size: 23px !important;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | BODY
+    |--------------------------------------------------------------------------
+    */
+
+    .products-card-body {
+        padding: 22px 28px 28px;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | RECHERCHE
+    |--------------------------------------------------------------------------
+    */
+
+    .product-search-grid {
+        display: flex;
+        align-items: stretch;
+        flex-wrap: wrap;
+
+        gap: 12px;
+
+        width: 100%;
+
+        margin-bottom: 22px;
+    }
+
+    .product-search-input {
+        flex: 1 1 360px;
+
+        min-width: 240px;
+    }
+
+    .product-search-grid > .btn {
+        flex: 0 1 190px;
+
+        min-width: 150px;
+    }
+
+    .product-search-grid .form-control,
+    .product-search-grid .btn {
+        min-height: 48px;
+
+        border-radius: 9px;
+    }
+
+    .product-search-grid .form-control {
+        border: 1px solid #d8dee8;
+
+        box-shadow: none;
+    }
+
+    .product-search-grid .form-control:focus {
+        border-color: #696cff;
+
+        box-shadow:
+            0 0 0 3px rgba(105, 108, 255, .12);
+    }
+
+    .product-search-grid .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        gap: 7px;
+
+        font-weight: 700;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | TABLEAU
+    |--------------------------------------------------------------------------
+    */
+
+    .products-table-wrapper {
+        width: 100%;
+        max-width: 100%;
+
+        overflow-x: auto;
+        overflow-y: visible;
+
+        -webkit-overflow-scrolling: touch;
+
+        border: 1px solid #edf0f4;
+        border-radius: 11px;
+    }
+
+    .products-table {
+        width: 100%;
+
+        min-width: 1780px;
+
+        margin: 0;
+    }
+
+    .products-table-unavailable {
+        min-width: 1660px;
+    }
+
+    .products-table thead th {
+        padding: 13px 12px;
+
+        vertical-align: middle;
+
+        white-space: nowrap;
+
+        font-size: 11px;
+        font-weight: 800;
+
+        letter-spacing: .04em;
+
+        text-transform: uppercase;
+
+        color: #52657b;
+
+        background: #e8edf3;
+    }
+
+    .products-table tbody td {
+        padding: 13px 12px;
+
+        vertical-align: middle;
+
+        font-size: 13px;
+
+        color: #52657b;
+    }
+
+    .products-table tbody tr:hover {
+        background: #f8fafc;
+    }
+
+    .products-table .reference-cell {
+        min-width: 180px;
+
+        white-space: nowrap;
+    }
+
+    .products-table .designation-cell {
+        min-width: 200px;
+        max-width: 250px;
+    }
+
+    .products-table .numeric-cell {
+        white-space: nowrap;
+
+        text-align: right;
+    }
+
+    .products-table .actions-cell {
+        min-width: 140px;
+
+        white-space: nowrap;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | ACTIONS TABLEAU
+    |--------------------------------------------------------------------------
+    */
+
+    .product-row-actions {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        gap: 6px;
+    }
+
+    .product-row-actions .btn {
+        width: 36px;
+        height: 34px;
+
+        padding: 0;
+
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        border-radius: 7px;
+    }
+
+    .product-row-actions form {
+        margin: 0;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | BADGES DE QUANTITÉ
+    |--------------------------------------------------------------------------
+    */
+
+    .quantity-badge {
+        min-width: 88px;
+
+        padding: 5px 8px;
+
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        border-radius: 6px;
+
+        font-size: 12px;
+        font-weight: 700;
+
+        white-space: nowrap;
+    }
+
+    .quantity-initial {
+        color: #4f46e5;
+
+        background: #eef2ff;
+    }
+
+    .quantity-received {
+        color: #0369a1;
+
+        background: #e0f2fe;
+    }
+
+    .quantity-available {
+        color: #15803d;
+
+        background: #dcfce7;
+    }
+
+    .quantity-unavailable {
+        color: #b45309;
+
+        background: #fef3c7;
+    }
+
+    .quantity-sold {
+        color: #b91c1c;
+
+        background: #fee2e2;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | BADGES DE STATUT
+    |--------------------------------------------------------------------------
+    */
+
+    .product-status-badge {
+        min-width: 108px;
+
+        padding: 6px 9px;
+
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        border-radius: 999px;
+
+        font-size: 11px;
+        font-weight: 800;
+
+        white-space: nowrap;
+    }
+
+    .product-status-available {
+        color: #166534;
+
+        background: #dcfce7;
+    }
+
+    .product-status-unavailable {
+        color: #991b1b;
+
+        background: #fee2e2;
+    }
+
+    .product-status-partial {
+        color: #92400e;
+
+        background: #fef3c7;
+    }
+
+    .product-status-low {
+        color: #9a3412;
+
+        background: #ffedd5;
+    }
+
+    .product-status-sold {
+        color: #475569;
+
+        background: #e2e8f0;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | PAGINATION
+    |--------------------------------------------------------------------------
+    */
+
+    .products-pagination {
+        display: flex;
+        justify-content: center;
+
+        margin-top: 22px;
+    }
+
+    .products-pagination svg,
+    .products-pagination nav svg {
+        width: 18px !important;
+        height: 18px !important;
+
+        max-width: 18px !important;
+        max-height: 18px !important;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | ÉCRANS MOYENS
+    |--------------------------------------------------------------------------
+    */
+
+    @media (max-width: 1100px) {
+
+        .products-card-header,
+        .products-card-body {
+            padding-left: 20px;
+            padding-right: 20px;
+        }
+
+        .product-actions-field {
+            flex-basis: 100%;
+        }
+
+        .product-action-buttons {
+            max-width: 430px;
+
+            margin-left: auto;
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | TABLETTE
+    |--------------------------------------------------------------------------
+    */
+
+    @media (max-width: 768px) {
+
+        .products-page {
+            padding: 14px 10px 32px;
+        }
+
+        .products-card-header,
+        .products-card-body {
+            padding: 16px;
+        }
+
+        .product-import-field:nth-child(1),
+        .product-import-field:nth-child(2),
+        .product-import-field:nth-child(3),
+        .product-actions-field {
+            flex: 1 1 100%;
+        }
+
+        .product-action-buttons {
+            max-width: none;
+
+            margin-left: 0;
+        }
+
+        .product-search-input,
+        .product-search-grid > .btn {
+            flex: 1 1 100%;
+
+            min-width: 0;
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | MOBILE
+    |--------------------------------------------------------------------------
+    */
+
+    @media (max-width: 480px) {
+
+        .products-title-row {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .products-title-row .btn {
+            width: 100%;
+        }
+
+        .product-action-buttons {
+            grid-template-columns: 1fr;
+        }
+
+        .product-add-button {
+            width: 100%;
+
+            min-width: 0 !important;
+        }
+
+        .products-table {
+            min-width: 1450px;
+        }
+    }
+</style>
+
+
+<div class="products-page">
+
+    <div class="products-page-inner">
+
+        {{-- ============================================================
+            MESSAGES
+        ============================================================ --}}
+
+        @if(session('success'))
+
+            <div class="alert alert-success alert-dismissible fade show">
+
+                {{ session('success') }}
+
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="alert"
+                    aria-label="Fermer"
+                ></button>
+
+            </div>
 
         @endif
 
-    </div>
 
-    {{-- BODY --}}
-    <div class="card-body pt-4">
+        @if(session('error'))
 
-        {{-- SEARCH --}}
-        <form method="GET" class="mb-4">
+            <div class="alert alert-danger alert-dismissible fade show">
 
-            <div class="row align-items-center g-3">
+                {{ session('error') }}
 
-                <div class="col-md-4">
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="alert"
+                    aria-label="Fermer"
+                ></button>
 
-                    <input type="text"
-                           name="search"
-                           class="form-control"
-                           placeholder="Recherche produit..."
-                           value="{{ request('search') }}">
+            </div>
+
+        @endif
+
+
+        <div class="products-card">
+
+            {{-- ========================================================
+                HEADER
+            ======================================================== --}}
+
+            <div class="products-card-header">
+
+                <div class="products-title-row">
+
+                    <h4>
+                        {{ $pageTitle ?? 'Liste des produits' }}
+                    </h4>
+
+
+                    @if($isAvailableProducts)
+
+                        <a
+                            href="{{ route('sales.create') }}"
+                            class="btn btn-primary"
+                        >
+
+                            <i class="bx bx-cart me-1"></i>
+
+                            Nouvelle vente
+
+                        </a>
+
+                    @endif
 
                 </div>
 
-                <div class="col-md-2">
 
-                    <button class="btn btn-primary w-100">
+                {{-- ====================================================
+                    IMPORTATION
+                ==================================================== --}}
+
+                @if(
+                    !$hideButtons
+                    &&
+                    in_array(
+                        auth()->user()->role,
+                        [
+                            'admin',
+                            'chef_magasinier',
+                            'magasinier'
+                        ],
+                        true
+                    )
+                )
+
+                    <form
+                        action="{{ route('products.preview') }}"
+                        method="POST"
+                        enctype="multipart/form-data"
+                    >
+
+                        @csrf
+
+
+                        <div class="product-import-grid">
+
+
+                            {{-- ==========================================
+                                FOURNISSEUR
+                            ========================================== --}}
+
+                            <div class="product-import-field">
+
+                                <label
+                                    for="supplier_id"
+                                    class="form-label"
+                                >
+                                    Fournisseur
+                                </label>
+
+
+                                <div class="modern-select-wrapper">
+
+                                    <span class="modern-select-icon">
+
+                                        <i class="bx bx-buildings"></i>
+
+                                    </span>
+
+
+                                    <select
+                                        name="supplier_id"
+                                        id="supplier_id"
+                                        class="modern-select"
+                                        required
+                                    >
+
+                                        <option value="">
+                                            Sélectionner un fournisseur
+                                        </option>
+
+
+                                        @foreach($suppliers as $supplier)
+
+                                            <option
+                                                value="{{ $supplier->id }}"
+                                                @selected(
+                                                    old('supplier_id')
+                                                    == $supplier->id
+                                                )
+                                            >
+
+                                                {{ $supplier->name }}
+
+                                            </option>
+
+                                        @endforeach
+
+                                    </select>
+
+                                </div>
+
+                            </div>
+
+
+                            {{-- ==========================================
+                                DÉPÔT
+                            ========================================== --}}
+
+                            <div class="product-import-field">
+
+                                <label
+                                    for="depot_id"
+                                    class="form-label"
+                                >
+                                    Dépôt
+                                </label>
+
+
+                                <div class="modern-select-wrapper">
+
+                                    <span class="modern-select-icon">
+
+                                        <i class="bx bx-store-alt"></i>
+
+                                    </span>
+
+
+                                    <select
+                                        name="depot_id"
+                                        id="depot_id"
+                                        class="modern-select"
+                                        required
+                                    >
+
+                                        <option value="">
+                                            Sélectionner un dépôt
+                                        </option>
+
+
+                                        @foreach($depots as $depot)
+
+                                            <option
+                                                value="{{ $depot->id }}"
+                                                @selected(
+                                                    old('depot_id')
+                                                    == $depot->id
+                                                )
+                                            >
+
+                                                {{ $depot->name }}
+
+                                            </option>
+
+                                        @endforeach
+
+                                    </select>
+
+                                </div>
+
+                            </div>
+
+
+                            {{-- ==========================================
+                                FICHIER EXCEL
+                            ========================================== --}}
+
+                            <div class="product-import-field">
+
+                                <label
+                                    for="product_import_file"
+                                    class="form-label"
+                                >
+                                    Fichier Excel
+                                </label>
+
+
+                                <input
+                                    type="file"
+                                    name="file"
+                                    id="product_import_file"
+                                    class="product-file-input"
+                                    accept=".xlsx,.xls,.csv"
+                                    required
+                                >
+
+                            </div>
+
+
+                            {{-- ==========================================
+                                ACTIONS
+                            ========================================== --}}
+
+                            <div
+                                class="
+                                    product-import-field
+                                    product-actions-field
+                                "
+                            >
+
+                                <div class="product-action-buttons">
+
+
+                                    {{-- IMPORTER --}}
+
+                                    <button
+                                        type="submit"
+                                        class="btn btn-success"
+                                    >
+
+                                        <i class="bx bx-upload"></i>
+
+                                        Importer
+
+                                    </button>
+
+
+                                    {{-- EXCEL --}}
+
+                                    <a
+                                        href="{{
+                                            route(
+                                                'products.export.excel'
+                                            )
+                                        }}"
+                                        class="btn btn-info"
+                                    >
+
+                                        <i class="bx bx-download"></i>
+
+                                        Excel
+
+                                    </a>
+
+
+                                    {{-- AJOUTER --}}
+
+                                    <a
+                                        href="{{ route('products.create') }}"
+                                        class="
+                                            btn
+                                            btn-primary
+                                            product-add-button
+                                        "
+                                        title="Ajouter un produit"
+                                        aria-label="Ajouter un produit"
+                                    >
+
+                                        <i class="bx bx-plus"></i>
+
+                                    </a>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </form>
+
+                @endif
+
+            </div>
+
+
+            {{-- ========================================================
+                BODY
+            ======================================================== --}}
+
+            <div class="products-card-body">
+
+
+                {{-- ====================================================
+                    RECHERCHE
+                ==================================================== --}}
+
+                <form
+                    method="GET"
+                    action="{{ url()->current() }}"
+                    class="product-search-grid"
+                >
+
+                    <div class="product-search-input">
+
+                        <input
+                            type="text"
+                            name="search"
+                            class="form-control"
+                            placeholder="Rechercher par référence ou désignation..."
+                            value="{{ request('search') }}"
+                        >
+
+                    </div>
+
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary"
+                    >
 
                         <i class="bx bx-search"></i>
 
@@ -220,410 +1198,1165 @@
 
                     </button>
 
-                </div>
 
-                <div class="col-md-2">
+                    <a
+                        href="{{ url()->current() }}"
+                        class="btn btn-secondary"
+                    >
 
-                    <a href="{{ route('products.index') }}"
-                       class="btn btn-secondary w-100">
+                        <i class="bx bx-reset"></i>
 
-                        Reset
+                        Réinitialiser
 
                     </a>
 
+                </form>
+
+
+                {{-- ====================================================
+                    TABLEAU
+                ==================================================== --}}
+
+                <div class="products-table-wrapper">
+
+                    <table
+                        class="
+                            table
+                            table-hover
+                            align-middle
+                            products-table
+                            {{ $isUnavailablePage ? 'products-table-unavailable' : '' }}
+                        "
+                    >
+
+                        <thead>
+
+                            <tr>
+
+                                <th>Référence</th>
+
+                                <th>Désignation</th>
+
+                                <th>Marque</th>
+
+                                <th>Modèle</th>
+
+                                <th>Famille</th>
+
+                                <th>Rayon</th>
+
+                                <th>Emplacement</th>
+
+
+                                {{-- ======================================
+                                    TOUS LES PRODUITS
+                                ====================================== --}}
+
+                                @if($isAllProducts)
+
+                                    <th>Qté initiale</th>
+
+                                    <!--th>Qté reçue</th-->
+
+                                    <th>Qté disponible</th>
+
+                                    <!--th>Qté non dispo.</th-->
+
+                                    <th>Qté vendue</th>
+
+                                @endif
+
+
+                                {{-- ======================================
+                                    PRODUITS DISPONIBLES
+                                ====================================== --}}
+
+                                @if($isAvailableProducts)
+
+                                    <th>Qté disponible</th>
+
+                                @endif
+
+
+                                {{-- ======================================
+                                    PIÈCES NON DISPONIBLES
+                                ====================================== --}}
+
+                                @if($isUnavailablePage)
+
+                                    <th>Qté initiale</th>
+
+                                    <th>Qté reçue</th>
+
+                                    <th>Qté disponible</th>
+
+                                    <th>Qté non dispo.</th>
+
+                                @endif
+
+
+                                {{-- ======================================
+                                    PRODUITS VENDUS
+                                ====================================== --}}
+
+                                @if($isSoldProducts)
+
+                                    <th>Qté vendue</th>
+
+                                @endif
+
+
+                                <th>Min</th>
+
+                                <th>Max</th>
+
+                                <th>Prix achat</th>
+
+                                <th>Prix vente</th>
+
+                                <th>Statut</th>
+
+
+                                <th class="text-center">
+
+                                    Actions
+
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody>
+
+                            @forelse($products as $product)
+
+
+                                @php
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | QUANTITÉ INITIALE
+                                    |--------------------------------------------------------------------------
+                                    */
+
+                                    $initialQty =
+                                        (float) (
+                                            $product->initial_quantity
+                                            ?? 0
+                                        );
+
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | QUANTITÉ REÇUE
+                                    |--------------------------------------------------------------------------
+                                    */
+
+                                    $receivedQty =
+                                        (float) (
+                                            $product->received_quantity
+                                            ?? 0
+                                        );
+
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | QUANTITÉ DISPONIBLE
+                                    |--------------------------------------------------------------------------
+                                    */
+
+                                    $availableQty =
+                                        (float) (
+                                            $product->quantity
+                                            ?? 0
+                                        );
+
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | QUANTITÉ NON DISPONIBLE
+                                    |--------------------------------------------------------------------------
+                                    |
+                                    | IMPORTANT :
+                                    |
+                                    | Qté non disponible =
+                                    | Qté initiale - Qté reçue
+                                    |
+                                    | On ne fait PAS :
+                                    | initiale - disponible
+                                    |
+                                    | car une vente ferait alors augmenter à tort
+                                    | la quantité non disponible.
+                                    |
+                                    */
+
+                                    $unavailableQty =
+                                        max(
+                                            0,
+                                            $initialQty - $receivedQty
+                                        );
+
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | QUANTITÉ VENDUE
+                                    |--------------------------------------------------------------------------
+                                    |
+                                    | Ne pas compter les ventes annulées.
+                                    |
+                                    | Le contrôleur "sold()" peut déjà fournir
+                                    | sold_quantity via withSum().
+                                    |
+                                    */
+
+                                    if (
+                                        isset($product->sold_quantity)
+                                        &&
+                                        $product->sold_quantity !== null
+                                    ) {
+
+                                        $soldQty =
+                                            (float) $product->sold_quantity;
+
+                                    } else {
+
+                                        $soldQty = (float) $product
+                                            ->saleItems()
+                                            ->whereHas(
+                                                'sale',
+                                                function ($query) {
+
+                                                    $query->whereNotIn(
+                                                        'status',
+                                                        [
+                                                            'cancelled',
+                                                            'annulé',
+                                                            'annule'
+                                                        ]
+                                                    );
+
+                                                }
+                                            )
+                                            ->sum('quantity');
+                                    }
+
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | UNITÉ
+                                    |--------------------------------------------------------------------------
+                                    */
+
+                                    $unitLabel =
+                                        $product->unit_label
+                                        ?: 'Pièce';
+
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | STATUT AFFICHÉ
+                                    |--------------------------------------------------------------------------
+                                    |
+                                    | Règles d'affichage :
+                                    |
+                                    | 1. Sur la page "Produits vendus", tout produit affiché
+                                    |    a au moins une vente non annulée : statut = Vendu.
+                                    |
+                                    | 2. En dehors de cette page, si le statut enregistré
+                                    |    dans la base vaut "vendu" : statut = Vendu.
+                                    |
+                                    | 3. Aucun stock physique : Non disponible.
+                                    |
+                                    | 4. Réception partielle : Disponible partiel.
+                                    |
+                                    | 5. Stock <= minimum : Stock faible.
+                                    |
+                                    | 6. Sinon : Disponible.
+                                    |
+                                    | IMPORTANT :
+                                    |
+                                    | On ne force pas products.status = "vendu" en base
+                                    | simplement parce qu'une partie du stock a été vendue.
+                                    | Un produit peut avoir des ventes et rester disponible
+                                    | tant qu'il possède encore du stock.
+                                    |
+                                    */
+
+                                    if ($isSoldProducts) {
+
+                                        /*
+                                        |--------------------------------------------------------------------------
+                                        | PAGE PRODUITS VENDUS
+                                        |--------------------------------------------------------------------------
+                                        |
+                                        | Le contrôleur sold() ne retourne que les produits
+                                        | dont sold_quantity > 0.
+                                        |
+                                        | Le badge affiché sur cette page doit donc toujours
+                                        | être "Vendu", même si du stock reste disponible.
+                                        |
+                                        */
+
+                                        $displayStatus =
+                                            'Vendu';
+
+                                        $statusClass =
+                                            'product-status-sold';
+
+                                    } elseif (
+                                        $product->status === 'vendu'
+                                    ) {
+
+                                        $displayStatus =
+                                            'Vendu';
+
+                                        $statusClass =
+                                            'product-status-sold';
+
+                                    } elseif (
+                                        $availableQty <= 0
+                                    ) {
+
+                                        $displayStatus =
+                                            'Non disponible';
+
+                                        $statusClass =
+                                            'product-status-unavailable';
+
+                                    } elseif (
+                                        $unavailableQty > 0
+                                    ) {
+
+                                        $displayStatus =
+                                            'Disponible partiel';
+
+                                        $statusClass =
+                                            'product-status-partial';
+
+                                    } elseif (
+                                        $availableQty
+                                        <=
+                                        (float) $product->min_stock
+                                    ) {
+
+                                        $displayStatus =
+                                            'Stock faible';
+
+                                        $statusClass =
+                                            'product-status-low';
+
+                                    } else {
+
+                                        $displayStatus =
+                                            'Disponible';
+
+                                        $statusClass =
+                                            'product-status-available';
+                                    }
+
+                                @endphp
+
+
+                                <tr>
+
+
+                                    {{-- REFERENCE --}}
+
+                                    <td class="reference-cell">
+
+                                        <strong>
+
+                                            {{ $product->reference }}
+
+                                        </strong>
+
+                                    </td>
+
+
+                                    {{-- DESIGNATION --}}
+
+                                    <td class="designation-cell">
+
+                                        {{ $product->designation }}
+
+                                    </td>
+
+
+                                    {{-- MARQUE --}}
+
+                                    <td>
+
+                                        {{
+                                            $product->brand?->name
+                                            ?? 'Non défini'
+                                        }}
+
+                                    </td>
+
+
+                                    {{-- MODELE --}}
+
+                                    <td>
+
+                                        {{
+                                            $product->model?->name
+                                            ?? 'Non défini'
+                                        }}
+
+                                    </td>
+
+
+                                    {{-- FAMILLE --}}
+
+                                    <td>
+
+                                        {{
+                                            $product->family?->name
+                                            ?? 'Non défini'
+                                        }}
+
+                                    </td>
+
+
+                                    {{-- RAYON --}}
+
+                                    <td>
+
+                                        {{
+                                            $product->rayon?->name
+                                            ?? 'Non défini'
+                                        }}
+
+                                    </td>
+
+
+                                    {{-- EMPLACEMENT --}}
+
+                                    <td>
+
+                                        {{
+                                            $product->location?->name
+                                            ?? 'Non défini'
+                                        }}
+
+                                    </td>
+
+
+                                    {{-- ==================================
+                                        PAGE TOUS LES PRODUITS
+                                    ================================== --}}
+
+                                    @if($isAllProducts)
+
+
+                                        {{-- QUANTITÉ INITIALE --}}
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-initial
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $initialQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+
+                                        {{-- QUANTITÉ REÇUE --}}
+
+                                        <!--td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-received
+                                                "
+                                            >
+
+                                                { {
+                                                    number_format(
+                                                        $receivedQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                { { $unitLabel }}
+
+                                            </span>
+
+                                        </td-->
+
+
+                                        {{-- QUANTITÉ DISPONIBLE --}}
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-available
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $availableQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+
+                                        {{-- QUANTITÉ NON DISPONIBLE --}}
+
+                                        <!--td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-unavailable
+                                                "
+                                            >
+
+                                                { 
+                                                    number_format(
+                                                        $unavailableQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                { { $unitLabel }}
+
+                                            </span>
+
+                                        </td-->
+
+
+                                        {{-- QUANTITÉ VENDUE --}}
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-sold
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $soldQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+                                    @endif
+
+
+                                    {{-- ==================================
+                                        PRODUITS DISPONIBLES
+                                    ================================== --}}
+
+                                    @if($isAvailableProducts)
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-available
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $availableQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+                                    @endif
+
+
+                                    {{-- ==================================
+                                        PIÈCES NON DISPONIBLES
+                                    ================================== --}}
+
+                                    @if($isUnavailablePage)
+
+
+                                        {{-- QUANTITÉ INITIALE --}}
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-initial
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $initialQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+
+                                        {{-- QUANTITÉ REÇUE --}}
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-received
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $receivedQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+
+                                        {{-- QUANTITÉ DISPONIBLE --}}
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-available
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $availableQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+
+                                        {{-- QUANTITÉ NON DISPONIBLE --}}
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-unavailable
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $unavailableQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+                                    @endif
+
+
+                                    {{-- ==================================
+                                        PRODUITS VENDUS
+                                    ================================== --}}
+
+                                    @if($isSoldProducts)
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-sold
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $soldQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+                                    @endif
+
+
+                                    {{-- MIN --}}
+
+                                    <td class="numeric-cell">
+
+                                        {{
+                                            number_format(
+                                                (float)
+                                                $product->min_stock,
+                                                2,
+                                                ',',
+                                                ' '
+                                            )
+                                        }}
+
+                                    </td>
+
+
+                                    {{-- MAX --}}
+
+                                    <td class="numeric-cell">
+
+                                        {{
+                                            number_format(
+                                                (float)
+                                                $product->max_stock,
+                                                2,
+                                                ',',
+                                                ' '
+                                            )
+                                        }}
+
+                                    </td>
+
+
+                                    {{-- PRIX ACHAT --}}
+
+                                    <td class="numeric-cell">
+
+                                        {{
+                                            number_format(
+                                                (float)
+                                                $product->purchase_price,
+                                                2,
+                                                ',',
+                                                ' '
+                                            )
+                                        }}
+
+                                    </td>
+
+
+                                    {{-- PRIX VENTE --}}
+
+                                    <td class="numeric-cell">
+
+                                        <strong>
+
+                                            {{
+                                                number_format(
+                                                    (float)
+                                                    $product->sale_price,
+                                                    2,
+                                                    ',',
+                                                    ' '
+                                                )
+                                            }}
+
+                                        </strong>
+
+                                    </td>
+
+
+                                    {{-- ==================================
+                                        STATUT
+                                    ================================== --}}
+
+                                    <td>
+
+                                        <span
+                                            class="
+                                                product-status-badge
+                                                {{ $statusClass }}
+                                            "
+                                        >
+
+                                            {{ $displayStatus }}
+
+                                        </span>
+
+                                    </td>
+
+
+                                    {{-- ==================================
+                                        ACTIONS
+                                    ================================== --}}
+
+                                    <td
+                                        class="
+                                            actions-cell
+                                            text-center
+                                        "
+                                    >
+
+                                        <div class="product-row-actions">
+
+
+                                            {{-- VOIR --}}
+
+                                            <a
+                                                href="{{
+                                                    route(
+                                                        'products.show',
+                                                        $product
+                                                    )
+                                                }}"
+                                                class="
+                                                    btn
+                                                    btn-info
+                                                    btn-sm
+                                                "
+                                                title="Voir"
+                                            >
+
+                                                <i class="bx bx-show"></i>
+
+                                            </a>
+
+
+                                            {{-- MODIFIER / SUPPRIMER --}}
+
+                                            @if(
+                                                in_array(
+                                                    auth()->user()->role,
+                                                    [
+                                                        'admin',
+                                                        'chef_magasinier'
+                                                    ],
+                                                    true
+                                                )
+                                            )
+
+
+                                                {{-- MODIFIER --}}
+
+                                                <a
+                                                    href="{{
+                                                        route(
+                                                            'products.edit',
+                                                            $product
+                                                        )
+                                                    }}"
+                                                    class="
+                                                        btn
+                                                        btn-warning
+                                                        btn-sm
+                                                    "
+                                                    title="Modifier"
+                                                >
+
+                                                    <i
+                                                        class="
+                                                            bx
+                                                            bx-edit
+                                                        "
+                                                    ></i>
+
+                                                </a>
+
+
+                                                {{-- SUPPRIMER --}}
+
+                                                <form
+                                                    action="{{
+                                                        route(
+                                                            'products.destroy',
+                                                            $product
+                                                        )
+                                                    }}"
+                                                    method="POST"
+                                                    class="
+                                                        delete-form
+                                                        mb-0
+                                                    "
+                                                >
+
+                                                    @csrf
+
+                                                    @method('DELETE')
+
+
+                                                    <button
+                                                        type="submit"
+                                                        class="
+                                                            btn
+                                                            btn-danger
+                                                            btn-sm
+                                                        "
+                                                        title="Supprimer"
+                                                    >
+
+                                                        <i
+                                                            class="
+                                                                bx
+                                                                bx-trash
+                                                            "
+                                                        ></i>
+
+                                                    </button>
+
+                                                </form>
+
+                                            @endif
+
+                                        </div>
+
+                                    </td>
+
+                                </tr>
+
+
+                            @empty
+
+
+                                <tr>
+
+                                    <td
+                                        colspan="{{ $tableColspan }}"
+                                        class="
+                                            text-center
+                                            text-muted
+                                            py-5
+                                        "
+                                    >
+
+                                        <i
+                                            class="
+                                                bx
+                                                bx-package
+                                                fs-1
+                                                d-block
+                                                mb-2
+                                            "
+                                        ></i>
+
+                                        Aucun produit trouvé.
+
+                                    </td>
+
+                                </tr>
+
+
+                            @endforelse
+
+                        </tbody>
+
+                    </table>
+
                 </div>
 
+
+                {{-- ====================================================
+                    PAGINATION
+                ==================================================== --}}
+
+                @if(
+                    method_exists($products, 'links')
+                    &&
+                    $products->hasPages()
+                )
+
+                    <div class="products-pagination">
+
+                        {{
+                            $products
+                                ->appends(request()->query())
+                                ->links()
+                        }}
+
+                    </div>
+
+                @endif
+
             </div>
-
-        </form>
-
-        {{-- TABLE --}}
-        <div class="table-responsive">
-
-            <table class="table table-hover align-middle">
-
-                <thead class="table-light">
-
-                    <tr>
-
-                        <th>Référence</th>
-                        <th>Désignation</th>
-                        <th>Marque</th>
-                        <th>Modèle</th>
-                        <th>Famille</th>
-                        <th>Rayon</th>
-                        <th>Emplacement</th>
-
-                        @if(request()->routeIs('products.index'))
-
-                            <th>Qté initiale</th>
-                            <th>Qté disponible</th>
-                            <th>Qté vendue</th>
-
-                        @endif
-
-                        @if(request()->routeIs('products.available'))
-
-                            <th>Qté disponible</th>
-
-                        @endif
-
-                        @if(request()->routeIs('products.sold'))
-
-                            <th>Qté vendue</th>
-
-                        @endif
-
-                        <th>Min</th>
-                        <th>Max</th>
-                        <th>Prix Achat</th>
-                        <th>Prix Vente</th>
-
-                        @if(request()->routeIs('products.index'))
-
-                            <th>Status</th>
-
-                        @endif
-
-                        <th width="180">
-                            Actions
-                        </th>
-
-                    </tr>
-
-                </thead>
-
-                <tbody>
-
-                    @forelse($products as $product)
-
-                     @php
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | QUANTITE VENDUE
-                        |--------------------------------------------------------------------------
-                        */
-
-                        $soldQty = $product->saleItems
-                            ->sum('quantity');
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | QUANTITE DISPONIBLE
-                        |--------------------------------------------------------------------------
-                        */
-
-                        $availableQty = $product->quantity;
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | TOTAL INITIAL
-                        |--------------------------------------------------------------------------
-                        */
-
-                        $initialQty =
-                            $availableQty + $soldQty;
-
-                    @endphp
-
-                        <tr>
-
-                            <td>
-                                <strong>
-                                    {{ $product->reference }}
-                                </strong>
-                            </td>
-
-                            <td>
-                                {{ $product->designation }}
-                            </td>
-
-                            <td>
-                                {{ $product->brand?->name ?? '-' }}
-                            </td>
-
-                            <td>
-                                {{ $product->model?->name ?? '-' }}
-                            </td>
-
-                            <td>
-                                {{ $product->family?->name ?? '-' }}
-                            </td>
-
-                            <td>
-                                {{ $product->rayon?->name ?? '-' }}
-                            </td>
-
-                            <td>
-                                {{ $product->location?->name ?? '-' }}
-                            </td>
-
-                          @if(request()->routeIs('products.index'))
-
-                                {{-- QTE INITIALE --}}
-                                <td>
-
-                                    <span class="badge bg-label-primary">
-
-                                        {{ $initialQty }}
-                                        {{ $product->unit_label }}
-
-                                    </span>
-
-                                </td>
-
-                                {{-- DISPONIBLE --}}
-                                <td>
-
-                                    <span class="badge bg-label-success">
-
-                                        {{ $availableQty }}
-                                        {{ $product->unit_label }}
-
-                                    </span>
-
-                                </td>
-
-                                {{-- VENDU --}}
-                                <td>
-
-                                    <span class="badge bg-label-danger">
-
-                                        {{ $soldQty }}
-                                        {{ $product->unit_label }}
-
-                                    </span>
-
-                                </td>
-
-                            @endif
-
-                            @if(request()->routeIs('products.available'))
-
-                                <td>
-
-                                    <span class="badge bg-label-success">
-
-                                        {{ $availableQty }}
-                                        {{ $product->unit_label }}
-
-                                    </span>
-
-                                </td>
-
-                            @endif
-
-                            @if(request()->routeIs('products.sold'))
-
-                                <td>
-
-                                    <span class="badge bg-label-danger">
-
-                                        {{ $soldQty }}
-
-                                    </span>
-
-                                </td>
-
-                            @endif
-
-                            <td>
-                                {{ $product->min_stock }}
-                            </td>
-
-                            <td>
-                                {{ $product->max_stock }}
-                            </td>
-
-                            <td>
-                                {{ number_format($product->purchase_price, 2) }}
-                            </td>
-
-                            <td>
-
-                                <strong>
-                                    {{ number_format($product->sale_price, 2) }}
-                                </strong>
-
-                            </td>
-
-                            @if(request()->routeIs('products.index'))
-
-                                <td>
-
-                                    @if($availableQty <= 0)
-
-                                        <span class="badge bg-danger">
-                                            Rupture
-                                        </span>
-
-                                    @elseif($availableQty <= $product->min_stock)
-
-                                        <span class="badge bg-warning text-dark">
-                                            Stock faible
-                                        </span>
-
-                                    @else
-
-                                        <span class="badge bg-success">
-                                            Disponible
-                                        </span>
-
-                                    @endif
-
-                                </td>
-
-                            @endif
-
-                           <td>
-
-                                <div class="d-flex align-items-center gap-2">
-
-                                    {{-- SHOW --}}
-                                    <a href="{{ route('products.show', $product) }}"
-                                    class="btn btn-info btn-sm">
-
-                                        <i class="bx bx-show"></i>
-
-                                    </a>
-
-                                    {{-- EDIT --}}
-                                    @if(
-                                        in_array(auth()->user()->role, [
-                                            'admin',
-                                            'chef_magasinier'
-                                        ])
-                                    )
-
-                                        <a href="{{ route('products.edit', $product) }}"
-                                        class="btn btn-warning btn-sm">
-
-                                            <i class="bx bx-edit"></i>
-
-                                        </a>
-
-                                    @endif
-
-                                    {{-- DELETE --}}
-                                    @if(
-                                        in_array(auth()->user()->role, [
-                                            'admin',
-                                            'chef_magasinier'
-                                        ])
-                                    )
-
-                                        <form action="{{ route('products.destroy', $product) }}"
-                                            method="POST"
-                                            class="delete-form mb-0">
-
-                                            @csrf
-                                            @method('DELETE')
-
-                                            <button type="submit"
-                                                    class="btn btn-danger btn-sm">
-
-                                                <i class="bx bx-trash"></i>
-
-                                            </button>
-
-                                        </form>
-
-                                    @endif
-                                </div>
-                            </td>
-                        </tr>
-
-                    @empty
-
-                        <tr>
-
-                            <td colspan="14"
-                                class="text-center text-muted py-4">
-
-                                Aucun produit trouvé
-
-                            </td>
-
-                        </tr>
-
-                    @endforelse
-
-                </tbody>
-
-            </table>
 
         </div>
-
-        {{-- PAGINATION --}}
-        @if(method_exists($products, 'links'))
-
-           <div class="d-flex justify-content-center mt-4">
-                {{ $products->withQueryString()->links() }}
-            </div>
-
-        @endif
 
     </div>
 
 </div>
 
+
 <script>
+    document.addEventListener(
+        'DOMContentLoaded',
+        function () {
 
-document.addEventListener('DOMContentLoaded', function () {
+            /*
+            |--------------------------------------------------------------------------
+            | SUPPRESSION PRODUIT
+            |--------------------------------------------------------------------------
+            */
 
-    /*
-    |--------------------------------------------------------------------------
-    | DELETE SWEET ALERT
-    |--------------------------------------------------------------------------
-    */
+            document
+                .querySelectorAll('.delete-form')
+                .forEach(function (form) {
 
-    document.querySelectorAll('.delete-form').forEach(form => {
+                    form.addEventListener(
+                        'submit',
+                        function (event) {
 
-        form.addEventListener('submit', function (e) {
+                            event.preventDefault();
 
-            e.preventDefault();
+                            /*
+                            |--------------------------------------------------------------------------
+                            | SI SWEETALERT N'EST PAS CHARGÉ
+                            |--------------------------------------------------------------------------
+                            */
 
-            Swal.fire({
+                            if (typeof Swal === 'undefined') {
 
-                title: 'Supprimer le produit ?',
+                                if (
+                                    window.confirm(
+                                        'Voulez-vous supprimer ce produit ?'
+                                    )
+                                ) {
 
-                text: 'Cette action est irréversible.',
+                                    form.submit();
+                                }
 
-                icon: 'warning',
+                                return;
+                            }
 
-                showCancelButton: true,
+                            /*
+                            |--------------------------------------------------------------------------
+                            | SWEETALERT
+                            |--------------------------------------------------------------------------
+                            */
 
-                confirmButtonColor: '#ef4444',
+                            Swal.fire({
 
-                cancelButtonColor: '#6b7280',
+                                title:
+                                    'Supprimer le produit ?',
 
-                confirmButtonText: 'Oui, supprimer',
+                                text:
+                                    'Cette action est irréversible.',
 
-                cancelButtonText: 'Annuler',
+                                icon:
+                                    'warning',
 
-                background: '#0f172a',
+                                showCancelButton:
+                                    true,
 
-                color: '#ffffff',
+                                confirmButtonColor:
+                                    '#ef4444',
 
-                borderRadius: '15px'
+                                cancelButtonColor:
+                                    '#6b7280',
 
-            }).then((result) => {
+                                confirmButtonText:
+                                    'Oui, supprimer',
 
-                if (result.isConfirmed) {
+                                cancelButtonText:
+                                    'Annuler',
 
-                    form.submit();
+                                background:
+                                    '#0f172a',
 
-                }
+                                color:
+                                    '#ffffff'
 
-            });
+                            }).then(
+                                function (result) {
 
-        });
+                                    if (
+                                        result.isConfirmed
+                                    ) {
 
-    });
-
-});
-
+                                        form.submit();
+                                    }
+                                }
+                            );
+                        }
+                    );
+                });
+        }
+    );
 </script>
 
 @endsection

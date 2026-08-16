@@ -4,32 +4,46 @@
 
         $user = auth()->user();
 
-        $names = explode(' ', $user->name);
-
-        $initials = '';
-
-        foreach ($names as $name) {
-
-            $initials .= strtoupper(substr($name, 0, 1));
-        }
+        $initials = 'U';
 
         $roleLabels = [
-
             'admin' => 'Administrateur',
             'chef_magasinier' => 'Chef magasinier',
             'magasinier' => 'Magasinier',
             'vendeur' => 'Vendeur',
             'caissier' => 'Caissier',
-
         ];
+
+        if ($user) {
+
+            $names = preg_split('/\s+/', trim($user->name));
+
+            $initials = '';
+
+            foreach (array_slice($names, 0, 2) as $name) {
+
+                if (!empty($name)) {
+                    $initials .= strtoupper(
+                        mb_substr($name, 0, 1)
+                    );
+                }
+            }
+
+            if (empty($initials)) {
+                $initials = 'U';
+            }
+        }
 
     @endphp
 
-    {{-- TOGGLE SIDEBAR --}}
+
+    {{-- ============================================================
+        TOGGLE SIDEBAR MOBILE
+    ============================================================ --}}
     <div class="layout-menu-toggle navbar-nav align-items-xl-center me-3 me-xl-0 d-xl-none">
 
         <a class="nav-item nav-link px-0 me-xl-4"
-           href="javascript:void(0)">
+           href="javascript:void(0);">
 
             <i class="bx bx-menu bx-sm text-primary"></i>
 
@@ -37,10 +51,12 @@
 
     </div>
 
-    {{-- LEFT SECTION --}}
+
+    {{-- ============================================================
+        LEFT SECTION
+    ============================================================ --}}
     <div class="d-flex align-items-center">
 
-        {{-- PAGE TITLE --}}
         <div class="me-4">
 
             <h4 class="mb-0 fw-bold text-dark">
@@ -55,183 +71,183 @@
 
     </div>
 
-    {{-- RIGHT SECTION --}}
+
+    {{-- ============================================================
+        RIGHT SECTION
+    ============================================================ --}}
     <ul class="navbar-nav flex-row align-items-center ms-auto">
 
-        {{-- NOTIFICATIONS --}}
-        <!--li class="nav-item dropdown-notifications navbar-dropdown dropdown me-3">
+        @auth
 
-            <a class="nav-link dropdown-toggle hide-arrow position-relative"
-               href="#"
-               data-bs-toggle="dropdown">
+            {{-- ====================================================
+                UTILISATEUR
+            ==================================================== --}}
+            <li class="nav-item navbar-dropdown dropdown-user dropdown">
 
-                <i class="bx bx-bell fs-3 text-dark"></i>
+                <a class="nav-link dropdown-toggle hide-arrow d-flex align-items-center"
+                   href="javascript:void(0);"
+                   data-bs-toggle="dropdown"
+                   aria-expanded="false">
 
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                    {{-- AVATAR --}}
+                    <div class="avatar avatar-online me-2">
 
-                    5
+                        <span
+                            class="avatar-initial rounded-circle bg-primary text-white fw-bold shadow-sm d-flex align-items-center justify-content-center"
+                            style="
+                                width: 42px;
+                                height: 42px;
+                                font-size: 16px;
+                                border: 2px solid #696cff;
+                            ">
 
-                </span>
+                            {{ $initials }}
 
-            </a>
+                        </span>
 
-            <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3">
+                    </div>
 
-                <li class="dropdown-header fw-bold">
-                    Notifications
-                </li>
 
-                <li>
-                    <a class="dropdown-item" href="#">
-                        Nouveau produit ajouté
-                    </a>
-                </li>
+                    {{-- NOM + RÔLE --}}
+                    <div class="d-none d-md-block">
 
-                <li>
-                    <a class="dropdown-item" href="#">
-                        Stock faible détecté
-                    </a>
-                </li>
+                        <span class="fw-semibold d-block text-dark">
 
-                <li>
-                    <a class="dropdown-item" href="#">
-                        Nouvelle vente enregistrée
-                    </a>
-                </li>
+                            {{ $user->name }}
 
-            </ul>
+                        </span>
 
-        </li-->
+                        <small class="text-muted">
 
-        {{-- USER --}}
-        <li class="nav-item navbar-dropdown dropdown-user dropdown">
+                            {{ $roleLabels[$user->role] ?? 'Utilisateur' }}
 
-            <a class="nav-link dropdown-toggle hide-arrow d-flex align-items-center"
-               href="#"
-               data-bs-toggle="dropdown">
+                        </small>
 
-                {{-- AVATAR INITIALS --}}
-                <div class="avatar avatar-online me-2">
+                    </div>
 
-                    <span
-                        class="avatar-initial rounded-circle bg-primary text-white fw-bold shadow-sm d-flex align-items-center justify-content-center"
-                        style="
-                            width:42px;
-                            height:42px;
-                            font-size:16px;
-                            border:2px solid #696cff;
-                        "
-                    >
-                        {{ $initials }}
-                    </span>
+                </a>
 
-                </div>
 
-                <div class="d-none d-md-block">
+                {{-- =================================================
+                    MENU UTILISATEUR
+                ================================================= --}}
+                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3">
 
-                    <span class="fw-semibold d-block text-dark">
+                    {{-- INFORMATIONS UTILISATEUR --}}
+                    <li>
 
-                        {{ $user->name }}
+                        <div class="dropdown-item-text py-3">
 
-                    </span>
+                            <div class="d-flex align-items-center">
 
-                    <small class="text-muted">
+                                <div class="avatar avatar-online me-3">
 
-                        {{ $roleLabels[$user->role] ?? 'Utilisateur' }}
+                                    <span
+                                        class="avatar-initial rounded-circle bg-primary text-white fw-bold d-flex align-items-center justify-content-center"
+                                        style="
+                                            width: 45px;
+                                            height: 45px;
+                                            font-size: 18px;
+                                        ">
 
-                    </small>
+                                        {{ $initials }}
 
-                </div>
+                                    </span>
 
-            </a>
+                                </div>
 
-            <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3">
 
-                <li>
+                                <div>
 
-                    <a class="dropdown-item py-3"
-                       href="#">
+                                    <span class="fw-bold d-block">
 
-                        <div class="d-flex align-items-center">
+                                        {{ $user->name }}
 
-                            {{-- GRAND AVATAR --}}
-                            <div class="avatar avatar-online me-3">
+                                    </span>
 
-                                <span
-                                    class="avatar-initial rounded-circle bg-primary text-white fw-bold d-flex align-items-center justify-content-center"
-                                    style="
-                                        width:45px;
-                                        height:45px;
-                                        font-size:18px;
-                                    "
-                                >
-                                    {{ $initials }}
-                                </span>
+                                    <small class="text-muted">
 
-                            </div>
+                                        {{ $user->email }}
 
-                            <div>
+                                    </small>
 
-                                <span class="fw-bold d-block">
+                                    <br>
 
-                                    {{ $user->name }}
+                                    <small class="text-muted">
 
-                                </span>
+                                        {{ $roleLabels[$user->role] ?? 'Utilisateur' }}
 
-                                <small class="text-muted">
+                                    </small>
 
-                                    {{ $user->email }}
-
-                                </small>
+                                </div>
 
                             </div>
 
                         </div>
 
-                    </a>
+                    </li>
 
-                </li>
 
-                <li>
-                    <div class="dropdown-divider"></div>
-                </li>
+                    <li>
 
-                {{-- PROFIL --}}
-                <!--li>
+                        <div class="dropdown-divider"></div>
 
-                    <a class="dropdown-item"
-                       href="{ { route('profile.edit') }}">
+                    </li>
 
-                        <i class="bx bx-user me-2"></i>
-                        Mon profil
 
-                    </a>
+                    {{-- =================================================
+                        PROFIL
+                    ================================================= --}}
+                    {{--
+                    <li>
 
-                </li-->
+                        <a class="dropdown-item"
+                           href="{{ route('profile.edit') }}">
 
-                {{-- LOGOUT --}}
-                <li>
+                            <i class="bx bx-user me-2"></i>
 
-                    <form method="POST"
-                          action="{{ route('logout') }}">
+                            Mon profil
 
-                        @csrf
+                        </a>
 
-                        <button type="submit"
-                                class="dropdown-item text-danger">
+                    </li>
 
-                            <i class="bx bx-power-off me-2"></i>
-                            Déconnexion
+                    <li>
 
-                        </button>
+                        <div class="dropdown-divider"></div>
 
-                    </form>
+                    </li>
+                    --}}
 
-                </li>
 
-            </ul>
+                   {{-- ============================================================
+                        DÉCONNEXION
+                    ============================================================ --}}
+                    <li>
 
-        </li>
+                       <form
+                            method="POST"
+                            action="{{ route('logout') }}"
+                            class="m-0 p-0"
+                        >
+                            @csrf
+
+                            <button
+                                type="submit"
+                                class="dropdown-item text-danger w-100 d-flex align-items-center"
+                            >
+                                <i class="bx bx-power-off me-2"></i>
+                                <span>Déconnexion</span>
+                            </button>
+                        </form>
+
+                    </li>
+
+                </ul>
+
+            </li>
+
+        @endauth
 
     </ul>
 

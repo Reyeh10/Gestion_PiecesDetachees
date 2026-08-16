@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\StockMovement;
+use App\Models\VehiclePartRequest;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
@@ -52,6 +53,42 @@ class DashboardController extends Controller
         $outOfStock =
             Product::where('quantity', '<=', 0)
                 ->count();
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | SUIVI DES PIÈCES POUR LES VÉHICULES
+        |--------------------------------------------------------------------------
+        |
+        | On compte ici le nombre de demandes de pièces dans chaque état.
+        | On utilise count() plutôt que sum(quantity), car les demandes peuvent
+        | avoir des unités différentes (Pièce, Litre, etc.).
+        |
+        */
+
+        $searchingPartRequests =
+            VehiclePartRequest::where(
+                'status',
+                VehiclePartRequest::STATUS_SEARCHING
+            )->count();
+
+        $orderedPartRequests =
+            VehiclePartRequest::where(
+                'status',
+                VehiclePartRequest::STATUS_ORDERED
+            )->count();
+
+        $receivedPartRequests =
+            VehiclePartRequest::where(
+                'status',
+                VehiclePartRequest::STATUS_RECEIVED
+            )->count();
+
+        $notFoundPartRequests =
+            VehiclePartRequest::where(
+                'status',
+                VehiclePartRequest::STATUS_NOT_FOUND
+            )->count();
 
         /*
         |--------------------------------------------------------------------------
@@ -349,6 +386,10 @@ class DashboardController extends Controller
                     'soldProducts',
                     'lowStock',
                     'outOfStock',
+                    'notFoundPartRequests',
+                    'receivedPartRequests',
+                    'orderedPartRequests',
+                    'searchingPartRequests',
                     'stockValue',
                     'totalSoldAmount',
                     'totalEntriesAmount',

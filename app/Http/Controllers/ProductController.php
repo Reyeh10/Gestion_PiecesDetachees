@@ -190,27 +190,19 @@ class ProductController extends Controller
         */
 
         $request->validate([
-
-            'file' =>
-                'required|mimes:xlsx,xls,csv',
-
-           'supplier_id' =>
-                'required|exists:suppliers,id',
-
-            'depot_id' =>
-                'required|exists:depots,id',
-
+            'file' => 'required|mimes:xlsx,xls,csv',
+            'supplier_id' => 'required|exists:suppliers,id',
+            'depot_id' => 'required|exists:depots,id',
         ]);
 
         /*
         |--------------------------------------------------------------------------
-        | RECUPERATION FOURNISSEUR
+        | FOURNISSEUR / DEPOT
         |--------------------------------------------------------------------------
         */
 
-        $supplier = Supplier::findOrFail(
-            $request->supplier_id
-        );
+        $supplier = Supplier::findOrFail($request->supplier_id);
+        $depot = Depot::findOrFail($request->depot_id);
 
         /*
         |--------------------------------------------------------------------------
@@ -239,42 +231,84 @@ class ProductController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        foreach ($rows as $row) {
+        foreach ($rows as $index => $row) {
 
             /*
             |--------------------------------------------------------------------------
-            | IGNORER LIGNES VIDES
+            | NUMERO REEL DE LA LIGNE EXCEL
             |--------------------------------------------------------------------------
             */
 
-            if (
+            $excelLine = $index + 1;
 
-                empty($row[0]) &&
-                empty($row[1]) &&
-                empty($row[2]) &&
-                empty($row[3])
+            /*
+            |--------------------------------------------------------------------------
+            | IGNORER LES LIGNES COMPLETEMENT VIDES
+            |--------------------------------------------------------------------------
+            */
 
-            ) {
+            $allEmpty = true;
 
+            for ($i = 0; $i <= 14; $i++) {
+                if (trim((string) ($row[$i] ?? '')) !== '') {
+                    $allEmpty = false;
+                    break;
+                }
+            }
+
+            if ($allEmpty) {
                 continue;
             }
 
-            $errors = [];
-
             /*
             |--------------------------------------------------------------------------
-            | VALIDATIONS
+            | CHAMPS OBLIGATOIRES
             |--------------------------------------------------------------------------
             */
 
-            if (empty($row[0])) {
+            $errors = [];
 
-                $errors[] = 'Référence manquante';
+            if (trim((string) ($row[0] ?? '')) === '') {
+                $errors[] = 'REFERENCE';
             }
 
-            if (empty($row[1])) {
+            if (trim((string) ($row[1] ?? '')) === '') {
+                $errors[] = 'DESIGNATION';
+            }
 
-                $errors[] = 'Désignation manquante';
+            if (trim((string) ($row[2] ?? '')) === '') {
+                $errors[] = 'MARQUE';
+            }
+
+            if (trim((string) ($row[3] ?? '')) === '') {
+                $errors[] = 'MODELE';
+            }
+
+            if (
+                !isset($row[11]) ||
+                trim((string) $row[11]) === '' ||
+                !is_numeric($row[11]) ||
+                (float) $row[11] < 0
+            ) {
+                $errors[] = 'PRIX_ACHAT';
+            }
+
+            if (
+                !isset($row[12]) ||
+                trim((string) $row[12]) === '' ||
+                !is_numeric($row[12]) ||
+                (float) $row[12] < 0
+            ) {
+                $errors[] = 'COEF_ACHAT';
+            }
+
+            if (
+                !isset($row[13]) ||
+                trim((string) $row[13]) === '' ||
+                !is_numeric($row[13]) ||
+                (float) $row[13] < 0
+            ) {
+                $errors[] = 'COEF_VENTE';
             }
 
             /*
@@ -284,13 +318,19 @@ class ProductController extends Controller
             */
 
             $purchasePrice =
-                (float) ($row[11] ?? 0);
+                isset($row[11]) && is_numeric($row[11])
+                    ? (float) $row[11]
+                    : 0;
 
             $coefPurchase =
-                (float) ($row[12] ?? 1);
+                isset($row[12]) && is_numeric($row[12])
+                    ? (float) $row[12]
+                    : 0;
 
             $coefSale =
-                (float) ($row[13] ?? 1);
+                isset($row[13]) && is_numeric($row[13])
+                    ? (float) $row[13]
+                    : 0;
 
             $costPrice =
                 $purchasePrice * $coefPurchase;
@@ -300,90 +340,101 @@ class ProductController extends Controller
 
             /*
             |--------------------------------------------------------------------------
+            | UNITES
+            |--------------------------------------------------------------------------
+            */
+
+            $unitType = strtolower(
+                trim((string) ($row[14] ?? 'piece'))
+            );
+
+            if ($unitType === '') {
+                $unitType = 'piece';
+            }
+
+            $unitLabel =
+                in_array($unitType, ['litre', 'liter', 'l'])
+                    ? 'L'
+                    : (
+                        in_array($unitType, ['kg', 'kilogramme', 'kilogram'])
+                            ? 'Kg'
+                            : (
+                                $unitType === 'carton'
+                                    ? 'Carton'
+                                    : 'Pièce'
+                            )
+                    );
+
+            /*
+            |--------------------------------------------------------------------------
             | DATA
             |--------------------------------------------------------------------------
             */
 
             $data[] = [
 
+                'excel_line' =>
+                    $excelLine,
+
                 'reference' =>
-                    $row[0] ?? '',
+                    trim((string) ($row[0] ?? '')),
 
                 'designation' =>
-                    $row[1] ?? '',
+                    trim((string) ($row[1] ?? '')),
 
                 'brand_name' =>
-                    $row[2] ?? '',
+                    trim((string) ($row[2] ?? '')),
 
                 'model_name' =>
-                    $row[3] ?? '',
+                    trim((string) ($row[3] ?? '')),
 
                 'family_name' =>
-                    $row[4] ?? '',
+                    trim((string) ($row[4] ?? '')),
 
                 'subfamily_name' =>
-                    $row[5] ?? '',
+                    trim((string) ($row[5] ?? '')),
 
                 'rayon_name' =>
-                    $row[6] ?? '',
+                    trim((string) ($row[6] ?? '')),
 
                 'location_name' =>
-                    $row[7] ?? '',
-
-                /*
-                |--------------------------------------------------------------------------
-                | STOCK
-                |--------------------------------------------------------------------------
-                */
+                    trim((string) ($row[7] ?? '')),
 
                 'quantity' =>
-                    (int) ($row[8] ?? 0),
+                    is_numeric($row[8] ?? null)
+                        ? (float) $row[8]
+                        : 0,
 
                 'min_stock' =>
-                    (int) ($row[9] ?? 0),
+                    is_numeric($row[9] ?? null)
+                        ? (float) $row[9]
+                        : 0,
 
                 'max_stock' =>
-                    (int) ($row[10] ?? 0),
-
-                /*
-                |--------------------------------------------------------------------------
-                | PRIX
-                |--------------------------------------------------------------------------
-                */
+                    is_numeric($row[10] ?? null)
+                        ? (float) $row[10]
+                        : 0,
 
                 'purchase_price' =>
-                    (float) ($row[11] ?? 0),
+                    $purchasePrice,
 
                 'coef_purchase' =>
-                    (float) ($row[12] ?? 1),
+                    $coefPurchase,
 
                 'cost_price' =>
                     $costPrice,
 
                 'coef_sale' =>
-                    (float) ($row[13] ?? 1),
+                    $coefSale,
 
                 'sale_price' =>
                     $salePrice,
 
-                /*
-                |--------------------------------------------------------------------------
-                | UNITES
-                |--------------------------------------------------------------------------
-                */
-
                 'unit_type' =>
-                    strtolower($row[14] ?? 'piece'),
+                    $unitType,
 
                 'unit_label' =>
-                    strtolower($row[14] ?? 'piece') == 'litre'
-                        ? 'L'
-                        : 'Pièce',
-                /*
-                |--------------------------------------------------------------------------
-                | STATUS
-                |--------------------------------------------------------------------------
-                */
+                    $unitLabel,
 
                 'status' =>
                     'disponible',
@@ -398,12 +449,6 @@ class ProductController extends Controller
         | RETURN VIEW
         |--------------------------------------------------------------------------
         */
-
-            $depot = Depot::findOrFail(
-            $request->depot_id
-        );
-
-       // dd($data);
 
         return view(
             'products.import_preview',
@@ -426,44 +471,31 @@ class ProductController extends Controller
     {
         /*
         |--------------------------------------------------------------------------
-        | RECUPERATION DONNEES
+        | VALIDATION GENERALE
         |--------------------------------------------------------------------------
         */
-        //dd($request->all());
 
-        //dd($request->products);
+        $request->validate([
+            'supplier_id' => 'required|exists:suppliers,id',
+            'depot_id' => 'required|exists:depots,id',
+            'products' => 'required|array|min:1',
+        ]);
+
         $products = $request->products;
-
-
 
         /*
         |--------------------------------------------------------------------------
-        | FOURNISSEUR SELECTIONNE
+        | FOURNISSEUR / DEPOT
         |--------------------------------------------------------------------------
         */
 
         $supplier = Supplier::findOrFail(
             $request->supplier_id
-            );
-            $depot = Depot::findOrFail(
-                $request->depot_id
-            );
+        );
 
-        /*
-        |--------------------------------------------------------------------------
-        | VALIDATION
-        |--------------------------------------------------------------------------
-        */
-
-        if (!$products || count($products) == 0) {
-
-            return redirect()
-                ->back()
-                ->with(
-                    'error',
-                    'Aucun produit à importer.'
-                );
-        }
+        $depot = Depot::findOrFail(
+            $request->depot_id
+        );
 
         /*
         |--------------------------------------------------------------------------
@@ -473,42 +505,63 @@ class ProductController extends Controller
 
         foreach ($products as $index => $product) {
 
+            $excelLine = (int) (
+                $product['excel_line']
+                ?? ($index + 2)
+            );
+
             $requiredFields = [
-                'reference',
-                'designation',
-                'brand_name',
-                'model_name',
-                'family_name',
-                'subfamily_name',
-                'rayon_name',
-                'location_name',
+                'reference' => 'REFERENCE',
+                'designation' => 'DESIGNATION',
+                'brand_name' => 'MARQUE',
+                'model_name' => 'MODELE',
+                'purchase_price' => 'PRIX_ACHAT',
+                'coef_purchase' => 'COEF_ACHAT',
+                'coef_sale' => 'COEF_VENTE',
             ];
 
-           /*8 foreach ($requiredFields as $field) {
+            foreach ($requiredFields as $field => $label) {
 
-                if (!array_key_exists($field, $product)) {
-
-                    dd(
-                        'Champ manquant',
-                        $field,
-                        'Produit index',
-                        $index,
-                        $product
-                    );
+                if (
+                    !array_key_exists($field, $product) ||
+                    trim((string) ($product[$field] ?? '')) === ''
+                ) {
+                    return redirect()
+                        ->back()
+                        ->withInput()
+                        ->with(
+                            'error',
+                            'Ligne ' .
+                            $excelLine .
+                            ' : ' .
+                            $label
+                        );
                 }
-            }*/
+            }
 
-            if (
-                empty($product['reference']) ||
-                empty($product['designation'])
-            ) {
+            $numericRequiredFields = [
+                'purchase_price' => 'PRIX_ACHAT',
+                'coef_purchase' => 'COEF_ACHAT',
+                'coef_sale' => 'COEF_VENTE',
+            ];
 
-                return redirect()
-                    ->route('products.index')
-                    ->with(
-                        'error',
-                        'Impossible d’importer. Certains produits ont des champs obligatoires manquants.'
-                    );
+            foreach ($numericRequiredFields as $field => $label) {
+
+                if (
+                    !is_numeric($product[$field]) ||
+                    (float) $product[$field] < 0
+                ) {
+                    return redirect()
+                        ->back()
+                        ->withInput()
+                        ->with(
+                            'error',
+                            'Ligne ' .
+                            $excelLine .
+                            ' : ' .
+                            $label
+                        );
+                }
             }
         }
 
@@ -522,105 +575,74 @@ class ProductController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | CREATION RELATIONS
+            | RELATIONS
             |--------------------------------------------------------------------------
             */
 
-            $brandName = trim($product['brand_name'] ?? '');
-            $modelName = trim($product['model_name'] ?? '');
-            $familyName = trim($product['family_name'] ?? '');
-            $subfamilyName = trim($product['subfamily_name'] ?? '');
-            $rayonName = trim($product['rayon_name'] ?? '');
-            $locationName = trim($product['location_name'] ?? '');
+            $brandName =
+                trim((string) $product['brand_name']);
 
-            $brandName = $brandName !== '' ? $brandName : 'Non défini';
-            $modelName = $modelName !== '' ? $modelName : 'Non défini';
-            $familyName = $familyName !== '' ? $familyName : 'Non défini';
-            $subfamilyName = $subfamilyName !== '' ? $subfamilyName : 'Non défini';
-            $rayonName = $rayonName !== '' ? $rayonName : 'Non défini';
-            $locationName = $locationName !== '' ? $locationName : 'Non défini';
+            $modelName =
+                trim((string) $product['model_name']);
 
-           /* $brand = Brand::firstOrCreate([
+            $familyName =
+                trim((string) ($product['family_name'] ?? ''));
 
-                'name' =>
-                    $product['brand_name']
+            $subfamilyName =
+                trim((string) ($product['subfamily_name'] ?? ''));
 
-            ]);*/
+            $rayonName =
+                trim((string) ($product['rayon_name'] ?? ''));
 
-           // dd($product);
+            $locationName =
+                trim((string) ($product['location_name'] ?? ''));
+
+            $familyName =
+                $familyName !== ''
+                    ? $familyName
+                    : 'Non défini';
+
+            $subfamilyName =
+                $subfamilyName !== ''
+                    ? $subfamilyName
+                    : 'Non défini';
+
+            $rayonName =
+                $rayonName !== ''
+                    ? $rayonName
+                    : 'Non défini';
+
+            $locationName =
+                $locationName !== ''
+                    ? $locationName
+                    : 'Non défini';
+
             $brand = Brand::firstOrCreate([
-                'name' => $brandName
+                'name' => $brandName,
             ]);
-
-            /*$model = CarModel::firstOrCreate([
-
-                'name' =>
-                    $product['model_name'],
-
-                'brand_id' =>
-                    $brand->id,
-
-            ]);*/
 
             $model = CarModel::firstOrCreate([
                 'name' => $modelName,
                 'brand_id' => $brand->id,
             ]);
 
-
-            /*$family = FamilyModel::firstOrCreate([
-
-                'name' =>
-                    $product['family_name']
-
-            ]);*/
-
             $family = FamilyModel::firstOrCreate([
-                'name' => $familyName
+                'name' => $familyName,
             ]);
-
-            /*$subfamily = Subfamily::firstOrCreate([
-
-                'name' =>
-                    $product['subfamily_name'],
-
-                'family_id' =>
-                    $family->id,
-
-            ]);*/
 
             $subfamily = Subfamily::firstOrCreate([
                 'name' => $subfamilyName,
                 'family_id' => $family->id,
             ]);
 
-           /* $rayon = Rayon::firstOrCreate([
+            $rayon = Rayon::firstOrCreate([
+                'name' => $rayonName,
+            ]);
 
-                'name' =>
-                    $product['rayon_name']
-
-            ]);*/
-
-           //$rayonName = $product['rayon_name'] ?? 'Non défini';
-
-                $rayon = Rayon::firstOrCreate([
-                    'name' => $rayonName,
-                ]);
-
-           /* $location = Location::firstOrCreate([
-
-                'name' =>
-                    $product['location_name']
-
-            ]);*/
-
-            //$locationName = $product['location_name'] ?? 'Non défini';
-
-                $location = Location::firstOrCreate([
-                    //'name' => $locationName ?: 'Non défini',
-                    'name' => $locationName,
-                    'rayon_id' => $rayon->id,
-                ]);
+            $location = Location::firstOrCreate([
+                'name' => $locationName,
+                'rayon_id' => $rayon->id,
+            ]);
 
             /*
             |--------------------------------------------------------------------------
@@ -629,13 +651,13 @@ class ProductController extends Controller
             */
 
             $purchasePrice =
-                (float) ($product['purchase_price'] ?? 0);
+                (float) $product['purchase_price'];
 
             $coefPurchase =
-                (float) ($product['coef_purchase'] ?? 1);
+                (float) $product['coef_purchase'];
 
             $coefSale =
-                (float) ($product['coef_sale'] ?? 1);
+                (float) $product['coef_sale'];
 
             $costPrice =
                 $purchasePrice * $coefPurchase;
@@ -645,32 +667,127 @@ class ProductController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | CREATE PRODUCT
+            | PRODUIT EXISTANT / CREATION
             |--------------------------------------------------------------------------
             */
 
-           $existingProduct = Product::where('reference', $product['reference'])->first();
+            $existingProduct = Product::where(
+                'reference',
+                $product['reference']
+            )->first();
 
             if ($existingProduct) {
 
-                $newQuantity = (float) ($product['quantity'] ?? 0);
+                $newQuantity =
+                    (float) ($product['quantity'] ?? 0);
 
                 $highestPurchasePrice = max(
                     (float) $existingProduct->purchase_price,
-                    (float) $purchasePrice
+                    $purchasePrice
                 );
 
-                $costPrice = $highestPurchasePrice * $coefPurchase;
-                $salePrice = $costPrice * $coefSale;
+                $costPrice =
+                    $highestPurchasePrice * $coefPurchase;
+
+                $salePrice =
+                    $costPrice * $coefSale;
 
                 $existingProduct->update([
-                    'quantity' => $existingProduct->quantity + $newQuantity,
-                    'purchase_price' => $highestPurchasePrice,
-                    'coef_purchase' => $coefPurchase,
-                    'cost_price' => $costPrice,
-                    'coef_sale' => $coefSale,
-                    'sale_price' => $salePrice,
-                    'status' => 'disponible',
+
+                    'designation' =>
+                        $product['designation'],
+
+                    'brand_id' =>
+                        $brand->id,
+
+                    'model_id' =>
+                        $model->id,
+
+                    'family_id' =>
+                        $family->id,
+
+                    'subfamily_id' =>
+                        $subfamily->id,
+
+                    'rayon_id' =>
+                        $rayon->id,
+
+                    'location_id' =>
+                        $location->id,
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | STOCK DISPONIBLE
+                    |--------------------------------------------------------------------------
+                    |
+                    | Un import Excel représente une nouvelle entrée réelle de stock.
+                    | On augmente donc la quantité disponible.
+                    |
+                    */
+                    'quantity' =>
+                        (float) $existingProduct->quantity +
+                        $newQuantity,
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | QUANTITÉ INITIALE
+                    |--------------------------------------------------------------------------
+                    |
+                    | Contrairement à un ajustement inventaire, une nouvelle arrivée
+                    | de stock doit augmenter la quantité initiale cumulée.
+                    |
+                    | Exemple :
+                    | initiale actuelle = 50
+                    | nouvel arrivage   = 10
+                    | nouvelle initiale = 60
+                    |
+                    */
+                    'initial_quantity' =>
+                        (float) $existingProduct->initial_quantity +
+                        $newQuantity,
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | QUANTITÉ REÇUE
+                    |--------------------------------------------------------------------------
+                    |
+                    | Un import Excel représente un stock réellement arrivé.
+                    | La quantité reçue doit donc augmenter avec l'arrivage.
+                    |
+                    */
+                    'received_quantity' =>
+                        (float) ($existingProduct->received_quantity ?? 0) +
+                        $newQuantity,
+
+                    'min_stock' =>
+                        (float) ($product['min_stock'] ?? 0),
+
+                    'max_stock' =>
+                        (float) ($product['max_stock'] ?? 0),
+
+                    'purchase_price' =>
+                        $highestPurchasePrice,
+
+                    'coef_purchase' =>
+                        $coefPurchase,
+
+                    'cost_price' =>
+                        $costPrice,
+
+                    'coef_sale' =>
+                        $coefSale,
+
+                    'sale_price' =>
+                        $salePrice,
+
+                    'unit_type' =>
+                        $product['unit_type'] ?? 'piece',
+
+                    'unit_label' =>
+                        $product['unit_label'] ?? 'Pièce',
+
+                   'status' =>
+                         'disponible',
                 ]);
 
                 $createdProduct = $existingProduct;
@@ -678,49 +795,113 @@ class ProductController extends Controller
             } else {
 
                 $createdProduct = Product::create([
-                    'reference' => $product['reference'] ?? '',
-                    'designation' => $product['designation'] ?? '',
-                    'unit_type' => $product['unit_type'] ?? 'piece',
-                    'unit_label' => $product['unit_label'] ?? 'Pièce',
-                    'brand_id' => $brand->id,
-                    'model_id' => $model->id,
-                    'family_id' => $family->id,
-                    'subfamily_id' => $subfamily->id,
-                    'rayon_id' => $rayon->id,
-                    'location_id' => $location->id,
-                    'quantity' => (float) ($product['quantity'] ?? 0),
-                    'min_stock' => (float) ($product['min_stock'] ?? 0),
-                    'max_stock' => (float) ($product['max_stock'] ?? 0),
-                    'purchase_price' => $purchasePrice,
-                    'coef_purchase' => $coefPurchase,
-                    'cost_price' => $costPrice,
-                    'coef_sale' => $coefSale,
-                    'sale_price' => $salePrice,
-                    'status' => 'disponible',
+
+                    'reference' =>
+                        $product['reference'],
+
+                    'designation' =>
+                        $product['designation'],
+
+                    'unit_type' =>
+                        $product['unit_type'] ?? 'piece',
+
+                    'unit_label' =>
+                        $product['unit_label'] ?? 'Pièce',
+
+                    'brand_id' =>
+                        $brand->id,
+
+                    'model_id' =>
+                        $model->id,
+
+                    'family_id' =>
+                        $family->id,
+
+                    'subfamily_id' =>
+                        $subfamily->id,
+
+                    'rayon_id' =>
+                        $rayon->id,
+
+                    'location_id' =>
+                        $location->id,
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | STOCK À LA CRÉATION
+                    |--------------------------------------------------------------------------
+                    |
+                    | Pour un nouveau produit :
+                    |
+                    | quantité initiale = quantité disponible
+                    |
+                    */
+                    'quantity' =>
+                        (float) ($product['quantity'] ?? 0),
+
+                    'initial_quantity' =>
+                        (float) ($product['quantity'] ?? 0),
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | QUANTITÉ REÇUE
+                    |--------------------------------------------------------------------------
+                    |
+                    | Le fichier Excel représente un arrivage réel.
+                    |
+                    */
+                    'received_quantity' =>
+                        (float) ($product['quantity'] ?? 0),
+
+                    'min_stock' =>
+                        (float) ($product['min_stock'] ?? 0),
+
+                    'max_stock' =>
+                        (float) ($product['max_stock'] ?? 0),
+
+                    'purchase_price' =>
+                        $purchasePrice,
+
+                    'coef_purchase' =>
+                        $coefPurchase,
+
+                    'cost_price' =>
+                        $costPrice,
+
+                    'coef_sale' =>
+                        $coefSale,
+
+                    'sale_price' =>
+                        $salePrice,
+
+                  'status' =>
+                    'disponible',
                 ]);
             }
+
             /*
-                |--------------------------------------------------------------------------
-                | STOCK DEPOT
-                |--------------------------------------------------------------------------
-                */
+            |--------------------------------------------------------------------------
+            | STOCK DEPOT
+            |--------------------------------------------------------------------------
+            */
 
-                $depotStock = ProductDepotStock::firstOrCreate(
+            $depotStock = ProductDepotStock::firstOrCreate(
+                [
+                    'product_id' =>
+                        $createdProduct->id,
 
-                    [
-                        'product_id' => $createdProduct->id,
-                        'depot_id'   => $depot->id,
-                    ],
+                    'depot_id' =>
+                        $depot->id,
+                ],
+                [
+                    'quantity' => 0,
+                ]
+            );
 
-                    [
-                        'quantity' => 0,
-                    ]
-                );
+            $depotStock->quantity +=
+                (float) ($product['quantity'] ?? 0);
 
-                $depotStock->quantity +=
-                    (float) ($product['quantity'] ?? 0);
-
-                $depotStock->save();
+            $depotStock->save();
 
             /*
             |--------------------------------------------------------------------------
@@ -737,7 +918,7 @@ class ProductController extends Controller
                     'in',
 
                 'quantity' =>
-                    (int) ($product['quantity'] ?? 0),
+                    (float) ($product['quantity'] ?? 0),
 
                 'source' =>
                     'Import Excel',
@@ -751,20 +932,15 @@ class ProductController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | LINK PRODUCT -> SUPPLIER
+            | FOURNISSEUR
             |--------------------------------------------------------------------------
             */
 
-            $createdProduct->suppliers()
+            $createdProduct
+                ->suppliers()
                 ->syncWithoutDetaching([
 
                     $supplier->id => [
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | INFORMATIONS FOURNISSEUR
-                        |--------------------------------------------------------------------------
-                        */
 
                         'supplier_reference' =>
                             $createdProduct->reference,
@@ -775,18 +951,12 @@ class ProductController extends Controller
                         'delivery_delay' =>
                             3,
 
-                        /*
-                        |--------------------------------------------------------------------------
-                        | STATUS
-                        |--------------------------------------------------------------------------
-                        */
-
                         'is_primary' =>
                             true,
 
                         'active' =>
                             true,
-                    ]
+                    ],
                 ]);
         }
 
@@ -819,56 +989,114 @@ class ProductController extends Controller
         */
 
         $query = Product::with([
-
-    'brand',
-    'model',
-    'family',
-    'subfamily',
-    'rayon',
-    'location',
-    'stockMovements',
-
-]);
+            'brand',
+            'model',
+            'family',
+            'subfamily',
+            'rayon',
+            'location',
+            'stockMovements',
+        ]);
 
         /*
         |--------------------------------------------------------------------------
-        | SEARCH
+        | RECHERCHE
         |--------------------------------------------------------------------------
         */
 
-        if ($request->search) {
+        if ($request->filled('search')) {
 
-            $query->where(function ($q) use ($request) {
+            $search = trim(
+                (string) $request->input('search')
+            );
+
+            $query->where(function ($q) use ($search) {
 
                 $q->where(
                     'designation',
                     'like',
-                    '%' . $request->search . '%'
+                    '%' . $search . '%'
                 )
 
                 ->orWhere(
                     'reference',
                     'like',
-                    '%' . $request->search . '%'
+                    '%' . $search . '%'
+                )
+
+                ->orWhereHas(
+                    'brand',
+                    function ($brandQuery) use ($search) {
+
+                        $brandQuery->where(
+                            'name',
+                            'like',
+                            '%' . $search . '%'
+                        );
+                    }
+                )
+
+                ->orWhereHas(
+                    'model',
+                    function ($modelQuery) use ($search) {
+
+                        $modelQuery->where(
+                            'name',
+                            'like',
+                            '%' . $search . '%'
+                        );
+                    }
                 );
-
             });
-
         }
 
         /*
         |--------------------------------------------------------------------------
-        | PRODUITS DISPONIBLES
+        | UNIQUEMENT LES PRODUITS RÉELLEMENT DISPONIBLES
         |--------------------------------------------------------------------------
+        |
+        | Un produit apparaît ici seulement lorsque :
+        |
+        | 1. son statut = disponible
+        | 2. sa quantité physique disponible > 0
+        |
+        | Exemple :
+        |
+        | initial_quantity  = 5
+        | received_quantity = 3
+        | quantity          = 3
+        | status            = disponible
+        |
+        | => le produit apparaît dans cette liste.
+        |
         */
 
         $products = $query
-
-            ->where('status', '!=', 'vendu')
-
+            ->where(
+                'status',
+                'disponible'
+            )
+            ->where(
+                'quantity',
+                '>',
+                0
+            )
             ->latest()
-
             ->paginate(10);
+
+        /*
+        |--------------------------------------------------------------------------
+        | CONSERVATION DE LA RECHERCHE DANS LA PAGINATION
+        |--------------------------------------------------------------------------
+        |
+        | On utilise appends() au lieu de withQueryString().
+        | Cela évite également l'avertissement Intelephense.
+        |
+        */
+
+        $products->appends(
+            $request->query()
+        );
 
         /*
         |--------------------------------------------------------------------------
@@ -876,56 +1104,225 @@ class ProductController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        $suppliers = Supplier::orderBy('name')
-            ->get();
-
-        /*
-        |--------------------------------------------------------------------------
-        | DEPOTS
-        |--------------------------------------------------------------------------
-        */
-
-        $depots = Depot::where('is_active', true)
+        $suppliers = Supplier::query()
             ->orderBy('name')
             ->get();
 
         /*
         |--------------------------------------------------------------------------
-        | RETURN VIEW
+        | DÉPÔTS
         |--------------------------------------------------------------------------
         */
 
-        return view('products.index', [
+        $depots = Depot::query()
+            ->where(
+                'is_active',
+                true
+            )
+            ->orderBy('name')
+            ->get();
 
-            'products' =>
-                $products,
+        /*
+        |--------------------------------------------------------------------------
+        | RETOUR VIEW
+        |--------------------------------------------------------------------------
+        */
 
-            'suppliers' =>
-                $suppliers,
+        return view(
+            'products.index',
+            [
+                'products' =>
+                    $products,
 
-            'depots' =>
-                $depots,
+                'suppliers' =>
+                    $suppliers,
 
-            'pageTitle' =>
-                'Produits disponibles',
+                'depots' =>
+                    $depots,
 
-            'hideButtons' =>
-                false,
+                'pageTitle' =>
+                    'Produits disponibles',
 
-        ]);
+                'hideButtons' =>
+                    false,
+            ]
+        );
+    }
+
+   /*
+    |--------------------------------------------------------------------------
+    | PRODUITS NON DISPONIBLES
+    |--------------------------------------------------------------------------
+    |
+    | Un produit est considéré comme non totalement disponible lorsque :
+    |
+    | received_quantity < initial_quantity
+    |
+    | Exemple :
+    |
+    | initial_quantity  = 5
+    | received_quantity = 3
+    |
+    | quantité non disponible = 2
+    |
+    */
+
+    public function unavailable(Request $request)
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | QUERY
+        |--------------------------------------------------------------------------
+        */
+
+        $query = Product::query()
+            ->with([
+                'brand',
+                'model',
+                'family',
+                'subfamily',
+                'rayon',
+                'location',
+                'stockMovements',
+            ])
+            ->whereColumn(
+                'received_quantity',
+                '<',
+                'initial_quantity'
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | RECHERCHE
+        |--------------------------------------------------------------------------
+        */
+
+        if ($request->filled('search')) {
+
+            $search = trim(
+                (string) $request->input('search')
+            );
+
+            $query->where(
+                function ($q) use ($search) {
+
+                    $q->where(
+                        'reference',
+                        'like',
+                        '%' . $search . '%'
+                    )
+
+                    ->orWhere(
+                        'designation',
+                        'like',
+                        '%' . $search . '%'
+                    )
+
+                    ->orWhereHas(
+                        'brand',
+                        function ($brandQuery) use ($search) {
+
+                            $brandQuery->where(
+                                'name',
+                                'like',
+                                '%' . $search . '%'
+                            );
+                        }
+                    )
+
+                    ->orWhereHas(
+                        'model',
+                        function ($modelQuery) use ($search) {
+
+                            $modelQuery->where(
+                                'name',
+                                'like',
+                                '%' . $search . '%'
+                            );
+                        }
+                    );
+                }
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | PAGINATION
+        |--------------------------------------------------------------------------
+        */
+
+        $products = $query
+            ->latest()
+            ->paginate(10);
+
+        $products->appends(
+            $request->query()
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | FOURNISSEURS
+        |--------------------------------------------------------------------------
+        */
+
+        $suppliers = Supplier::query()
+            ->orderBy('name')
+            ->get();
+
+        /*
+        |--------------------------------------------------------------------------
+        | DÉPÔTS
+        |--------------------------------------------------------------------------
+        */
+
+        $depots = Depot::query()
+            ->where(
+                'is_active',
+                true
+            )
+            ->orderBy('name')
+            ->get();
+
+        /*
+        |--------------------------------------------------------------------------
+        | RETOUR
+        |--------------------------------------------------------------------------
+        |
+        | IMPORTANT :
+        | On réutilise products.index.
+        | Il ne faut PAS retourner products.unavailable.
+        |
+        */
+
+        return view(
+            'products.index',
+            [
+                'products' =>
+                    $products,
+
+                'suppliers' =>
+                    $suppliers,
+
+                'depots' =>
+                    $depots,
+
+                'pageTitle' =>
+                    'Pièces non disponibles',
+
+                'hideButtons' =>
+                    true,
+
+                'isUnavailablePage' =>
+                    true,
+            ]
+        );
     }
 
     /*
-|--------------------------------------------------------------------------
-| PRODUITS VENDUS
-|--------------------------------------------------------------------------
-*/
-
-/*
-|--------------------------------------------------------------------------
-| PRODUITS VENDUS
-|--------------------------------------------------------------------------
-*/
+    |--------------------------------------------------------------------------
+    | PRODUITS VENDUS
+    |--------------------------------------------------------------------------
+    */
 
     public function sold(Request $request)
     {
@@ -1017,6 +1414,148 @@ class ProductController extends Controller
         ]);
     }
 
+    /**
+     * Liste des pièces à commander.
+     *
+     * Une pièce doit être commandée lorsque :
+     *
+     * quantité disponible <= stock minimum
+     *
+     * Cela inclut :
+     * - les produits en rupture
+     * - les produits avec stock faible
+     */
+    public function toOrder(Request $request)
+    {
+        $search = trim((string) $request->input('search'));
+
+        $products = Product::query()
+
+            /*
+            |--------------------------------------------------------------------------
+            | Relations nécessaires pour afficher Marque et Modèle
+            |--------------------------------------------------------------------------
+            */
+
+            ->with([
+                'brand',
+                'model',
+            ])
+
+            /*
+            |--------------------------------------------------------------------------
+            | Seulement les produits à réapprovisionner
+            |--------------------------------------------------------------------------
+            |
+            | quantity = quantité actuellement disponible
+            | min_stock = seuil minimum défini pour le produit
+            |
+            */
+
+            ->whereColumn('quantity', '<=', 'min_stock')
+
+            /*
+            |--------------------------------------------------------------------------
+            | Recherche
+            |--------------------------------------------------------------------------
+            */
+
+            ->when($search !== '', function ($query) use ($search) {
+
+                $query->where(function ($q) use ($search) {
+
+                    /*
+                    |--------------------------------------------------------------
+                    | Référence
+                    |--------------------------------------------------------------
+                    */
+
+                    $q->where(
+                        'reference',
+                        'like',
+                        '%' . $search . '%'
+                    )
+
+                    /*
+                    |--------------------------------------------------------------
+                    | Désignation
+                    |--------------------------------------------------------------
+                    */
+
+                    ->orWhere(
+                        'designation',
+                        'like',
+                        '%' . $search . '%'
+                    )
+
+                    /*
+                    |--------------------------------------------------------------
+                    | Marque
+                    |--------------------------------------------------------------
+                    */
+
+                    ->orWhereHas(
+                        'brand',
+                        function ($brandQuery) use ($search) {
+
+                            $brandQuery->where(
+                                'name',
+                                'like',
+                                '%' . $search . '%'
+                            );
+                        }
+                    )
+
+                    /*
+                    |--------------------------------------------------------------
+                    | Modèle
+                    |--------------------------------------------------------------
+                    */
+
+                    ->orWhereHas(
+                        'model',
+                        function ($modelQuery) use ($search) {
+
+                            $modelQuery->where(
+                                'name',
+                                'like',
+                                '%' . $search . '%'
+                            );
+                        }
+                    );
+
+                });
+
+            })
+
+            /*
+            |--------------------------------------------------------------------------
+            | Priorité
+            |--------------------------------------------------------------------------
+            |
+            | Les quantités les plus faibles apparaissent en premier.
+            |
+            */
+
+            ->orderBy('quantity', 'asc')
+            ->orderBy('designation', 'asc')
+
+            /*
+            |--------------------------------------------------------------------------
+            | Pagination
+            |--------------------------------------------------------------------------
+            */
+
+            ->paginate(20)
+            ->withQueryString();
+
+
+        return view(
+            'products.to-order',
+            compact('products')
+        );
+    }
+
    /*
 |--------------------------------------------------------------------------
 | SHOW
@@ -1054,8 +1593,22 @@ public function show(Product $product)
     |--------------------------------------------------------------------------
     */
 
-    $soldQuantity = $product->stockMovements()
-        ->where('type', 'out')
+    /*
+    |--------------------------------------------------------------------------
+    | QUANTITÉ VENDUE RÉELLE
+    |--------------------------------------------------------------------------
+    |
+    | Ne pas utiliser tous les mouvements "out", car un ajustement inventaire
+    | négatif crée lui aussi un mouvement "out" sans être une vente.
+    |
+    */
+    $soldQuantity = $product->saleItems()
+        ->whereHas('sale', function ($query) {
+            $query->whereNotIn(
+                'status',
+                ['cancelled', 'annulé', 'annule']
+            );
+        })
         ->sum('quantity');
 
     /*
@@ -1111,81 +1664,419 @@ public function create()
 
 /*
 |--------------------------------------------------------------------------
-| Store
+| STORE
 |--------------------------------------------------------------------------
+|
+| Création manuelle d'un produit.
+|
+| IMPORTANT :
+|
+| La colonne products.status accepte uniquement :
+|
+| - disponible
+| - vendu
+| - retourne
+|
+| On ne stocke donc JAMAIS "non_disponible" dans status.
+|
+| La disponibilité physique est déterminée par :
+|
+| quantity
+| received_quantity
+| initial_quantity
+|
 */
+
 public function store(Request $request)
 {
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATION
+    |--------------------------------------------------------------------------
+    */
+
     $request->validate([
-        'reference' => 'required|string|max:255|unique:products,reference',
-        'designation' => 'required|string|max:255',
 
-        'brand_id' => 'nullable|exists:brands,id',
-        'model_id' => 'nullable|exists:models,id',
+        'reference' => [
+            'required',
+            'string',
+            'max:255',
+            'unique:products,reference',
+        ],
 
-        'family_id' => 'nullable|exists:families,id',
-        'subfamily_id' => 'nullable|exists:subfamilies,id',
+        'designation' => [
+            'required',
+            'string',
+            'max:255',
+        ],
 
-        'rayon_id' => 'nullable|exists:rayons,id',
-        'location_id' => 'nullable|exists:locations,id',
+        'brand_id' => [
+            'required',
+            'exists:brands,id',
+        ],
 
-        'quantity' => 'required|numeric|min:0',
+        'model_id' => [
+            'required',
+            'exists:models,id',
+        ],
 
-        'min_stock' => 'nullable|numeric|min:0',
-        'max_stock' => 'nullable|numeric|min:0',
+        'family_id' => [
+            'nullable',
+            'exists:families,id',
+        ],
 
-        'purchase_price' => 'required|numeric|min:0',
-        'coef_purchase' => 'nullable|numeric|min:0',
+        'subfamily_id' => [
+            'nullable',
+            'exists:subfamilies,id',
+        ],
 
-        'cost_price' => 'nullable|numeric|min:0',
+        'rayon_id' => [
+            'nullable',
+            'exists:rayons,id',
+        ],
 
-        'coef_sale' => 'nullable|numeric|min:0',
-        'sale_price' => 'required|numeric|min:0',
+        'location_id' => [
+            'nullable',
+            'exists:locations,id',
+        ],
 
-        'status' => 'nullable|string',
+        /*
+        |--------------------------------------------------------------------------
+        | QUANTITÉ INITIALE
+        |--------------------------------------------------------------------------
+        */
 
-        'unit_type' => 'nullable|string',
-        'unit_label' => 'nullable|string|max:50',
+        'quantity' => [
+            'required',
+            'numeric',
+            'min:0',
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
+        | ÉTAT DE STOCK
+        |--------------------------------------------------------------------------
+        |
+        | Ce champ vient du formulaire.
+        |
+        | Il ne correspond PAS directement à products.status.
+        |
+        */
+
+        'stock_state' => [
+            'required',
+            'in:available,unavailable',
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
+        | SEUILS
+        |--------------------------------------------------------------------------
+        */
+
+        'min_stock' => [
+            'nullable',
+            'numeric',
+            'min:0',
+        ],
+
+        'max_stock' => [
+            'nullable',
+            'numeric',
+            'min:0',
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRIX
+        |--------------------------------------------------------------------------
+        */
+
+        'purchase_price' => [
+            'required',
+            'numeric',
+            'min:0',
+        ],
+
+        'coef_purchase' => [
+            'required',
+            'numeric',
+            'min:0',
+        ],
+
+        'cost_price' => [
+            'nullable',
+            'numeric',
+            'min:0',
+        ],
+
+        'coef_sale' => [
+            'required',
+            'numeric',
+            'min:0',
+        ],
+
+        'sale_price' => [
+            'required',
+            'numeric',
+            'min:0',
+        ],
+
+        /*
+        |--------------------------------------------------------------------------
+        | UNITÉ
+        |--------------------------------------------------------------------------
+        */
+
+        'unit_type' => [
+            'nullable',
+            'string',
+        ],
+
+        'unit_label' => [
+            'nullable',
+            'string',
+            'max:50',
+        ],
     ]);
+
+    /*
+    |--------------------------------------------------------------------------
+    | QUANTITÉ SAISIE
+    |--------------------------------------------------------------------------
+    |
+    | Cette quantité représente toujours la quantité initiale.
+    |
+    */
+
+    $initialQuantity =
+        (float) $request->quantity;
+
+    /*
+    |--------------------------------------------------------------------------
+    | ÉTAT DU STOCK
+    |--------------------------------------------------------------------------
+    */
+
+    $isUnavailable =
+        $request->input('stock_state')
+        === 'unavailable';
+
+    /*
+    |--------------------------------------------------------------------------
+    | QUANTITÉ DISPONIBLE
+    |--------------------------------------------------------------------------
+    |
+    | Produit disponible :
+    |
+    | quantity = quantité saisie
+    |
+    | Produit non disponible :
+    |
+    | quantity = 0
+    |
+    */
+
+    $availableQuantity =
+        $isUnavailable
+            ? 0
+            : $initialQuantity;
+
+    /*
+    |--------------------------------------------------------------------------
+    | QUANTITÉ REÇUE
+    |--------------------------------------------------------------------------
+    |
+    | Produit disponible :
+    |
+    | received_quantity = quantité saisie
+    |
+    | Produit non disponible :
+    |
+    | received_quantity = 0
+    |
+    */
+
+    $receivedQuantity =
+        $isUnavailable
+            ? 0
+            : $initialQuantity;
+
+   /*
+    |--------------------------------------------------------------------------
+    | CALCUL PRIX DE REVIENT
+    |--------------------------------------------------------------------------
+    */
+
+    $purchasePrice =
+        (float) $request->purchase_price;
+
+    $coefPurchase =
+        (float) $request->coef_purchase;
+
+    $costPrice =
+        $purchasePrice * $coefPurchase;
+
+    /*
+    |--------------------------------------------------------------------------
+    | CALCUL PRIX DE VENTE
+    |--------------------------------------------------------------------------
+    */
+
+    $coefSale =
+        (float) $request->coef_sale;
+
+    $salePrice =
+        $costPrice * $coefSale;
+
+    /*
+    |--------------------------------------------------------------------------
+    | UTILISER LE PRIX SAISI
+    |--------------------------------------------------------------------------
+    |
+    | On conserve votre fonctionnement actuel.
+    |
+    */
+
+    $salePrice =
+        (float) $request->sale_price;
+
+    /*
+    |--------------------------------------------------------------------------
+    | CRÉATION PRODUIT
+    |--------------------------------------------------------------------------
+    */
 
     Product::create([
 
-        'reference' => $request->reference,
-        'designation' => $request->designation,
+        /*
+        |--------------------------------------------------------------------------
+        | INFORMATIONS
+        |--------------------------------------------------------------------------
+        */
 
-        'brand_id' => $request->brand_id,
-        'model_id' => $request->model_id,
+        'reference' =>
+            $request->reference,
 
-        'family_id' => $request->family_id,
-        'subfamily_id' => $request->subfamily_id,
+        'designation' =>
+            $request->designation,
 
-        'rayon_id' => $request->rayon_id,
-        'location_id' => $request->location_id,
+        /*
+        |--------------------------------------------------------------------------
+        | RELATIONS
+        |--------------------------------------------------------------------------
+        */
 
-        'quantity' => $request->quantity,
+        'brand_id' =>
+            $request->brand_id,
 
-        'min_stock' => $request->min_stock ?? 0,
-        'max_stock' => $request->max_stock ?? 0,
+        'model_id' =>
+            $request->model_id,
 
-        'purchase_price' => $request->purchase_price,
-        'coef_purchase' => $request->coef_purchase ?? 1,
+        'family_id' =>
+            $request->family_id,
 
-        'cost_price' => $request->cost_price,
+        'subfamily_id' =>
+            $request->subfamily_id,
 
-        'coef_sale' => $request->coef_sale ?? 1,
-        'sale_price' => $request->sale_price,
+        'rayon_id' =>
+            $request->rayon_id,
 
-        'status' => $request->status ?? 'disponible',
+        'location_id' =>
+            $request->location_id,
 
-        'unit_type' => $request->unit_type ?? 'piece',
-        'unit_label' => $request->unit_label ?? 'Pièce',
+        /*
+        |--------------------------------------------------------------------------
+        | STOCK
+        |--------------------------------------------------------------------------
+        */
+
+        'quantity' =>
+            $availableQuantity,
+
+        'initial_quantity' =>
+            $initialQuantity,
+
+        'received_quantity' =>
+            $receivedQuantity,
+
+        'min_stock' =>
+            $request->min_stock ?? 0,
+
+        'max_stock' =>
+            $request->max_stock ?? 0,
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRIX
+        |--------------------------------------------------------------------------
+        */
+
+        'purchase_price' =>
+            $purchasePrice,
+
+        'coef_purchase' =>
+            $coefPurchase,
+
+        'cost_price' =>
+            $costPrice,
+
+        'coef_sale' =>
+            $coefSale,
+
+        'sale_price' =>
+            $salePrice,
+
+        /*
+        |--------------------------------------------------------------------------
+        | STATUS
+        |--------------------------------------------------------------------------
+        |
+        | IMPORTANT :
+        |
+        | On reste volontairement sur "disponible".
+        |
+        | Ce champ appartient au cycle de vie historique du produit.
+        |
+        | Une pièce physiquement absente sera reconnue grâce à quantity = 0.
+        |
+        | On ne met jamais :
+        |
+        | non_disponible
+        |
+        | car cette valeur n'existe pas dans votre ENUM MySQL.
+        |
+        */
+
+        'status' =>
+            'disponible',
+
+        /*
+        |--------------------------------------------------------------------------
+        | UNITÉ
+        |--------------------------------------------------------------------------
+        */
+
+        'unit_type' =>
+            $request->unit_type ?? 'piece',
+
+        'unit_label' =>
+            $request->unit_label ?? 'Pièce',
     ]);
+
+    /*
+    |--------------------------------------------------------------------------
+    | REDIRECTION
+    |--------------------------------------------------------------------------
+    */
 
     return redirect()
         ->route('products.index')
         ->with(
             'success',
-            'Produit créé avec succès.'
+            $isUnavailable
+                ? 'Produit créé avec succès. La pièce est enregistrée comme non disponible et reste à recevoir.'
+                : 'Produit créé avec succès et disponible en stock.'
         );
 }
 
@@ -1302,16 +2193,16 @@ public function exportExcel()
         $request->validate([
 
             'reference' =>
-                'required|string|max:255',
+                'required|string|max:255|unique:products,reference,' . $product->id,
 
             'designation' =>
                 'required|string|max:255',
 
             'brand_id' =>
-                'nullable|exists:brands,id',
+                'required|exists:brands,id',
 
             'model_id' =>
-                'nullable|exists:models,id',
+                'required|exists:models,id',
 
             'family_id' =>
                 'nullable|exists:families,id',
@@ -1325,6 +2216,15 @@ public function exportExcel()
             'location_id' =>
                 'nullable|exists:locations,id',
 
+            /*
+            |--------------------------------------------------------------------------
+            | QUANTITÉ
+            |--------------------------------------------------------------------------
+            |
+            | Le champ peut encore exister dans edit.blade.php pour compatibilité,
+            | mais sa valeur est volontairement ignorée dans l'UPDATE.
+            |
+            */
             'quantity' =>
                 'nullable|numeric|min:0',
 
@@ -1335,13 +2235,13 @@ public function exportExcel()
                 'nullable|numeric|min:0',
 
             'purchase_price' =>
-                'nullable|numeric|min:0',
+                'required|numeric|min:0',
 
             'coef_purchase' =>
-                'nullable|numeric|min:0',
+                'required|numeric|min:0',
 
             'coef_sale' =>
-                'nullable|numeric|min:0',
+                'required|numeric|min:0',
         ]);
 
         /*
@@ -1397,8 +2297,25 @@ public function exportExcel()
             'location_id' =>
                 $request->location_id,
 
-            'quantity' =>
-                $request->quantity,
+            /*
+            |--------------------------------------------------------------------------
+            | NE PAS MODIFIER LE STOCK ICI
+            |--------------------------------------------------------------------------
+            |
+            | IMPORTANT :
+            | - quantity = quantité disponible
+            | - initial_quantity = quantité initiale historique
+            |
+            | La modification de la fiche produit ne doit modifier AUCUNE
+            | de ces deux valeurs.
+            |
+            | Pour corriger le stock disponible, utiliser :
+            | Ajustements inventaire.
+            |
+            | Pour ajouter un nouvel arrivage, utiliser :
+            | Import / entrée de stock.
+            |
+            */
 
             'min_stock' =>
                 $request->min_stock,

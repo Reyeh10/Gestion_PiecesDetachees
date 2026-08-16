@@ -2,7 +2,175 @@
 
 @section('content')
 
-<div class="card border-0 shadow-sm rounded-4">
+@push('styles')
+<style>
+    /* ============================================================
+       PAGE LISTE DES VENTES
+    ============================================================ */
+
+    .sales-page-card {
+        overflow: hidden;
+    }
+
+    .sales-header-title {
+        font-size: 2rem;
+        line-height: 1.15;
+    }
+
+    .sales-header-actions .btn {
+        min-height: 46px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        white-space: nowrap;
+        font-weight: 600;
+    }
+
+    /* ============================================================
+       FILTRES
+    ============================================================ */
+
+    .sales-filters {
+        display: grid;
+        grid-template-columns:
+            minmax(280px, 1fr)
+            minmax(180px, 220px)
+            minmax(150px, 170px)
+            minmax(160px, 180px);
+        gap: 14px;
+        align-items: end;
+        margin-bottom: 24px;
+    }
+
+    .sales-filter-group {
+        min-width: 0;
+    }
+
+    .sales-filter-group label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: .8rem;
+        font-weight: 700;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+
+    .sales-filter-control,
+    .sales-filter-btn {
+        min-height: 44px;
+        height: 44px;
+        border-radius: 10px !important;
+    }
+
+    .sales-filter-control {
+        width: 100%;
+    }
+
+    .sales-filter-btn {
+        width: 100%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        white-space: nowrap;
+        font-weight: 700;
+        padding-left: 16px;
+        padding-right: 16px;
+        line-height: 1;
+    }
+
+    .sales-filter-btn i {
+        font-size: 1.1rem;
+        flex: 0 0 auto;
+    }
+
+    /* ============================================================
+       TABLE
+    ============================================================ */
+
+    .sales-table th {
+        white-space: nowrap;
+        font-size: .78rem;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: #475569;
+        vertical-align: middle;
+    }
+
+    .sales-table td {
+        vertical-align: middle;
+    }
+
+    .sales-table .invoice-link {
+        white-space: nowrap;
+        font-weight: 700;
+    }
+
+    .sales-table .amount-value {
+        white-space: nowrap;
+    }
+
+    .sales-action-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: nowrap;
+    }
+
+    .sales-action-group .btn {
+        min-width: 78px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        white-space: nowrap;
+    }
+
+    /* ============================================================
+       RESPONSIVE
+    ============================================================ */
+
+    @media (max-width: 1199.98px) {
+        .sales-filters {
+            grid-template-columns:
+                minmax(240px, 1fr)
+                minmax(180px, 220px)
+                minmax(150px, 1fr)
+                minmax(160px, 1fr);
+        }
+    }
+
+    @media (max-width: 991.98px) {
+        .sales-filters {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .sales-filter-btn {
+            width: 100%;
+        }
+    }
+
+    @media (max-width: 575.98px) {
+        .sales-filters {
+            grid-template-columns: 1fr;
+        }
+
+        .sales-header-actions {
+            width: 100%;
+        }
+
+        .sales-header-actions .btn {
+            width: 100%;
+        }
+    }
+</style>
+@endpush
+
+
+
+<div class="card border-0 shadow-sm rounded-4 sales-page-card">
 
     {{-- HEADER --}}
     <div class="card-header bg-white border-0 py-4">
@@ -11,7 +179,7 @@
 
             <div>
 
-                <h3 class="fw-bold text-dark mb-1">
+                <h3 class="fw-bold text-dark mb-1 sales-header-title">
                     Liste des ventes
                 </h3>
 
@@ -28,7 +196,8 @@
 
                 Nouvelle vente
 
-            </a>
+                </a>
+            </div>
 
         </div>
 
@@ -39,80 +208,97 @@
 
 
         {{-- SEARCH BAR --}}
-        <form method="GET"
+        <form
+            method="GET"
             action="{{ route('sales.index') }}"
-            class="mb-4">
+            class="sales-filters"
+        >
 
-            <div class="row g-2 align-items-center">
+            {{-- CLIENT / FACTURE --}}
+            <div class="sales-filter-group">
 
-                <div class="col-md-3">
-                    <div class="input-group">
-                        <span class="input-group-text bg-light border-0">
-                            <i class="bx bx-user"></i>
-                        </span>
-                        <input type="text"
-                            name="client"
-                            class="form-control border-0 bg-light shadow-none"
-                            placeholder="Client ou facture..."
-                            value="{{ request('client') }}">
-                    </div>
-                </div>
+                <label for="filter_client">
+                    Client ou facture
+                </label>
 
-                <!--div class="col-md-2">
-                    <div class="input-group">
-                        <span class="input-group-text bg-light border-0">
-                            <i class="bx bx-barcode"></i>
-                        </span>
-                        <input type="text"
-                            name="reference"
-                            class="form-control border-0 bg-light shadow-none"
-                            placeholder="Référence..."
-                            value="{ { request('reference') }}">
-                    </div>
-                </div-->
+                <div class="input-group">
 
-                <!--div class="col-md-3">
-                    <div class="input-group">
-                        <span class="input-group-text bg-light border-0">
-                            <i class="bx bx-package"></i>
-                        </span>
-                        <input type="text"
-                            name="designation"
-                            class="form-control border-0 bg-light shadow-none"
-                            placeholder="Désignation..."
-                            value="{ { request('designation') }}">
-                    </div>
-                </div-->
+                    <span class="input-group-text bg-light border-0">
+                        <i class="bx bx-user"></i>
+                    </span>
 
-                <div class="col-md-2">
-                    <input type="date"
-                        name="date"
-                        class="form-control bg-light border-0 shadow-none"
-                        value="{{ request('date') }}">
-                </div>
+                    <input
+                        type="text"
+                        id="filter_client"
+                        name="client"
+                        class="form-control bg-light border-0 shadow-none sales-filter-control"
+                        placeholder="Client ou facture..."
+                        value="{{ request('client') }}"
+                    >
 
-                <div class="col-md-1">
-                    <button type="submit"
-                            class="btn btn-primary w-100 fw-bold shadow-sm"
-                            style="height:42px;border-radius:10px;">
-                        Rechercher
-                    </button>
-                </div>
-
-                <div class="col-md-1">
-                    <a href="{{ route('sales.index') }}"
-                    class="btn btn-secondary w-100 fw-bold shadow-sm d-flex align-items-center justify-content-center"
-                    style="height:42px;border-radius:10px;">
-                        Reset
-                    </a>
                 </div>
 
             </div>
+
+
+            {{-- DATE --}}
+            <div class="sales-filter-group">
+
+                <label for="filter_date">
+                    Date
+                </label>
+
+                <input
+                    type="date"
+                    id="filter_date"
+                    name="date"
+                    class="form-control bg-light border-0 shadow-none sales-filter-control"
+                    value="{{ request('date') }}"
+                >
+
+            </div>
+
+
+            {{-- RECHERCHER --}}
+            <div class="sales-filter-group">
+
+                <label class="d-none d-lg-block">
+                    &nbsp;
+                </label>
+
+                <button
+                    type="submit"
+                    class="btn btn-primary sales-filter-btn shadow-sm"
+                >
+                    <i class="bx bx-search"></i>
+                    Rechercher
+                </button>
+
+            </div>
+
+
+            {{-- RÉINITIALISER --}}
+            <div class="sales-filter-group">
+
+                <label class="d-none d-lg-block">
+                    &nbsp;
+                </label>
+
+                <a
+                    href="{{ route('sales.index') }}"
+                    class="btn btn-secondary sales-filter-btn shadow-sm"
+                >
+                    <i class="bx bx-reset"></i>
+                    Réinitialiser
+                </a>
+
+            </div>
+
         </form>
 
         {{-- TABLE --}}
         <div class="table-responsive">
-            <table class="table table-hover align-middle">
+            <table class="table table-hover align-middle sales-table">
 
                 <thead class="table-light">
 
@@ -170,7 +356,7 @@
                             {{-- REFERENCE --}}
                             <td>
 
-                                <strong class="text-primary">
+                                <strong class="text-primary invoice-link">
 
                                     {{ $sale->invoice_number }}
 
@@ -194,7 +380,7 @@
                             {{-- TOTAL --}}
                             <td>
 
-                                <strong class="text-success">
+                                <strong class="text-success amount-value">
 
                                  {{ number_format(round($sale->total), 0, ',', ' ') }}
 
@@ -257,7 +443,7 @@
                             {{-- ACTIONS --}}
                             <td>
 
-                                <div class="d-flex gap-2">
+                                <div class="sales-action-group">
 
                                     {{-- VOIR --}}
                                     <a href="{{ route('sales.show', $sale->id) }}"
@@ -337,20 +523,20 @@
 
 document.addEventListener('DOMContentLoaded', function () {
 
-    /*
-    |--------------------------------------------------------------------------
-    | GET DELETE FORMS
-    |--------------------------------------------------------------------------
-    */
+    /**
+*    |--------------------------------------------------------------------------*
+*    | GET DELETE FORMS*
+*    |--------------------------------------------------------------------------*
+*    */
 
     const forms =
         document.querySelectorAll('.delete-sale-form');
 
-    /*
-    |--------------------------------------------------------------------------
-    | LOOP FORMS
-    |--------------------------------------------------------------------------
-    */
+    /**
+*    |--------------------------------------------------------------------------*
+*    | LOOP FORMS*
+*    |--------------------------------------------------------------------------*
+*    */
 
     forms.forEach(form => {
 
@@ -358,17 +544,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
             e.preventDefault();
 
-            /*
-            |--------------------------------------------------------------------------
-            | CONFIRM DELETE
-            |--------------------------------------------------------------------------
-            */
+            /**
+*            |--------------------------------------------------------------------------*
+*            | CONFIRM DELETE*
+*            |--------------------------------------------------------------------------*
+*            */
 
            Swal.fire({
 
             title: 'Supprimer cette vente ?',
 
-            html: `
+            html: \`
                 <div style="
                     font-size:16px;
                     color:#94a3b8;
@@ -376,7 +562,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 ">
                     Cette action est irréversible.
                 </div>
-            `,
+            \`,
 
             icon: 'warning',
 
@@ -402,9 +588,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
             cancelButtonColor: '#475569',
 
-            backdrop: `
+            backdrop: \`
                 rgba(15,23,42,0.82)
-            `,
+            \`,
 
             buttonsStyling: false,
 
@@ -437,11 +623,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
         }).then((result) => {
 
-                /*
-                |--------------------------------------------------------------------------
-                | DELETE
-                |--------------------------------------------------------------------------
-                */
+                /**
+*                |--------------------------------------------------------------------------*
+*                | DELETE*
+*                |--------------------------------------------------------------------------*
+*                */
 
                 if (result.isConfirmed) {
 

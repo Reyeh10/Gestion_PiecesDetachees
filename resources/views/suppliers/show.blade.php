@@ -2,47 +2,103 @@
 
 @section('content')
 
-<div class="card">
+@php
 
-    {{-- HEADER --}}
-    <div class="card-header d-flex justify-content-between align-items-center">
+    $user = auth()->user();
 
-        <div>
-            <h3 class="mb-1">
-                Compte fournisseur
-            </h3>
+    /*
+    |--------------------------------------------------------------------------
+    | DROITS
+    |--------------------------------------------------------------------------
+    |
+    | Modification autorisée uniquement à :
+    | - admin
+    | - chef_magasinier
+    |
+    */
 
-            <small class="text-muted">
-                Informations et historique fournisseur
-            </small>
-        </div>
+    $canEditSupplier = $user && in_array(
+        $user->role,
+        [
+            'admin',
+            'chef_magasinier',
+        ],
+        true
+    );
 
-        <div class="d-flex gap-2">
+@endphp
 
-            <a href="{{ route('suppliers.edit', $supplier->id) }}"
-               class="btn btn-warning">
 
-                <i class="bx bx-edit"></i>
-                Modifier
+<div class="card shadow-sm border-0">
 
-            </a>
+    {{-- =========================================================
+        HEADER
+    ========================================================= --}}
+    <div class="card-header bg-white border-bottom">
 
-            <a href="{{ route('suppliers.index') }}"
-               class="btn btn-secondary">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
 
-                Retour
+            <div>
 
-            </a>
+                <h3 class="mb-1 fw-bold">
+                    Compte fournisseur
+                </h3>
+
+                <small class="text-muted">
+                    Informations et historique fournisseur
+                </small>
+
+            </div>
+
+
+            <div class="d-flex gap-2">
+
+                {{-- =================================================
+                    MODIFIER
+                    ADMIN + CHEF MAGASINIER UNIQUEMENT
+                ================================================= --}}
+
+                @if($canEditSupplier)
+
+                    <a
+                        href="{{ route('suppliers.edit', $supplier->id) }}"
+                        class="btn btn-warning"
+                    >
+
+                        <i class="bx bx-edit me-1"></i>
+
+                        Modifier
+
+                    </a>
+
+                @endif
+
+
+                {{-- RETOUR --}}
+
+                <a
+                    href="{{ route('suppliers.index') }}"
+                    class="btn btn-secondary"
+                >
+
+                    <i class="bx bx-arrow-back me-1"></i>
+
+                    Retour
+
+                </a>
+
+            </div>
 
         </div>
 
     </div>
 
+
     <div class="card-body">
 
-        {{-- ========================================================= --}}
-        {{-- INFOS FOURNISSEUR --}}
-        {{-- ========================================================= --}}
+        {{-- =========================================================
+            INFORMATIONS FOURNISSEUR
+        ========================================================= --}}
 
         <div class="row">
 
@@ -53,24 +109,30 @@
                     Nom fournisseur
                 </label>
 
-                <div class="form-control">
+                <div class="form-control bg-light">
+
                     {{ $supplier->name }}
+
                 </div>
 
             </div>
 
-            {{-- TELEPHONE --}}
+
+            {{-- TÉLÉPHONE --}}
             <div class="col-md-6 mb-4">
 
                 <label class="fw-bold">
                     Téléphone
                 </label>
 
-                <div class="form-control">
+                <div class="form-control bg-light">
+
                     {{ $supplier->phone ?? '-' }}
+
                 </div>
 
             </div>
+
 
             {{-- EMAIL --}}
             <div class="col-md-6 mb-4">
@@ -79,11 +141,14 @@
                     Email
                 </label>
 
-                <div class="form-control">
+                <div class="form-control bg-light">
+
                     {{ $supplier->email ?? '-' }}
+
                 </div>
 
             </div>
+
 
             {{-- DEVISE --}}
             <div class="col-md-6 mb-4">
@@ -92,11 +157,14 @@
                     Devise
                 </label>
 
-                <div class="form-control">
+                <div class="form-control bg-light">
+
                     {{ $supplier->currency ?? 'USD' }}
+
                 </div>
 
             </div>
+
 
             {{-- ADRESSE --}}
             <div class="col-md-12 mb-4">
@@ -105,8 +173,10 @@
                     Adresse
                 </label>
 
-                <div class="form-control"
-                     style="min-height:100px;">
+                <div
+                    class="form-control bg-light"
+                    style="min-height:100px;"
+                >
 
                     {{ $supplier->address ?? '-' }}
 
@@ -116,9 +186,10 @@
 
         </div>
 
-        {{-- ========================================================= --}}
-        {{-- STATISTIQUES --}}
-        {{-- ========================================================= --}}
+
+        {{-- =========================================================
+            STATISTIQUES
+        ========================================================= --}}
 
         <div class="row mt-4">
 
@@ -145,6 +216,7 @@
 
             </div>
 
+
             {{-- NOMBRE ACHATS --}}
             <div class="col-md-4 mb-3">
 
@@ -168,6 +240,7 @@
 
             </div>
 
+
             {{-- TOTAL ACHATS --}}
             <div class="col-md-4 mb-3">
 
@@ -181,7 +254,10 @@
 
                         <h2 class="text-danger">
 
-                            {{ number_format($supplier->purchases->sum('total'), 2) }}
+                            {{ number_format(
+                                $supplier->purchases->sum('total'),
+                                2
+                            ) }}
                             $
 
                         </h2>
@@ -194,9 +270,10 @@
 
         </div>
 
-        {{-- ========================================================= --}}
-        {{-- PRODUITS FOURNIS --}}
-        {{-- ========================================================= --}}
+
+        {{-- =========================================================
+            PRODUITS FOURNIS
+        ========================================================= --}}
 
         <div class="mt-5">
 
@@ -204,24 +281,43 @@
                 Produits fournis
             </h4>
 
+
             <div class="table-responsive">
 
-                <table class="table table-bordered align-middle">
+                <table class="table table-bordered table-hover align-middle">
 
                     <thead class="table-light">
 
                         <tr>
 
-                            <th>Référence</th>
-                            <th>Produit</th>
-                            <th>Marque</th>
-                            <th>Modèle</th>
-                            <th>Prix achat</th>
-                            <th>Stock</th>
+                            <th>
+                                Référence
+                            </th>
+
+                            <th>
+                                Produit
+                            </th>
+
+                            <th>
+                                Marque
+                            </th>
+
+                            <th>
+                                Modèle
+                            </th>
+
+                            <th>
+                                Prix achat
+                            </th>
+
+                            <th>
+                                Stock
+                            </th>
 
                         </tr>
 
                     </thead>
+
 
                     <tbody>
 
@@ -230,43 +326,79 @@
                             <tr>
 
                                 <td>
-                                    {{ $product->reference }}
+
+                                    <strong>
+                                        {{ $product->reference }}
+                                    </strong>
+
                                 </td>
 
+
                                 <td>
+
                                     {{ $product->designation }}
+
                                 </td>
 
+
                                 <td>
+
                                     {{ $product->brand->name ?? '-' }}
+
                                 </td>
 
+
                                 <td>
+
                                     {{ $product->model->name ?? '-' }}
+
                                 </td>
+
 
                                 <td>
 
                                     {{ number_format(
                                         $product->pivot->purchase_price
-                                        ??
-                                        $product->purchase_price
-                                        ??
-                                        0,
+                                            ?? $product->purchase_price
+                                            ?? 0,
                                         2
                                     ) }}
-
                                     $
 
                                 </td>
 
+
                                 <td>
 
-                                    <span class="badge bg-label-success">
+                                    @php
+                                        $quantity = (float) ($product->quantity ?? 0);
+                                    @endphp
 
-                                        {{ $product->quantity }}
+                                    @if($quantity <= 0)
 
-                                    </span>
+                                        <span class="badge bg-danger">
+
+                                            {{ number_format($quantity, 2) }}
+
+                                        </span>
+
+                                    @elseif($quantity <= 5)
+
+                                        <span class="badge bg-warning text-dark">
+
+                                            {{ number_format($quantity, 2) }}
+
+                                        </span>
+
+                                    @else
+
+                                        <span class="badge bg-success">
+
+                                            {{ number_format($quantity, 2) }}
+
+                                        </span>
+
+                                    @endif
 
                                 </td>
 
@@ -276,8 +408,10 @@
 
                             <tr>
 
-                                <td colspan="6"
-                                    class="text-center text-muted">
+                                <td
+                                    colspan="6"
+                                    class="text-center text-muted py-4"
+                                >
 
                                     Aucun produit associé
 
@@ -295,9 +429,10 @@
 
         </div>
 
-        {{-- ========================================================= --}}
-        {{-- HISTORIQUE ACHATS --}}
-        {{-- ========================================================= --}}
+
+        {{-- =========================================================
+            HISTORIQUE ACHATS
+        ========================================================= --}}
 
         <div class="mt-5">
 
@@ -305,23 +440,39 @@
                 Historique des achats
             </h4>
 
+
             <div class="table-responsive">
 
-                <table class="table table-bordered align-middle">
+                <table class="table table-bordered table-hover align-middle">
 
                     <thead class="table-light">
 
                         <tr>
 
-                            <th>Référence</th>
-                            <th>Date</th>
-                            <th>Total</th>
-                            <th>Statut</th>
-                            <th>Livraison</th>
+                            <th>
+                                Référence
+                            </th>
+
+                            <th>
+                                Date
+                            </th>
+
+                            <th>
+                                Total
+                            </th>
+
+                            <th>
+                                Statut
+                            </th>
+
+                            <th>
+                                Livraison
+                            </th>
 
                         </tr>
 
                     </thead>
+
 
                     <tbody>
 
@@ -331,54 +482,96 @@
 
                                 <td>
 
-                                    <a href="{{ route('purchases.show', $purchase->id) }}"
-                                       class="fw-bold text-primary">
+                                    @if(Route::has('purchases.show'))
 
-                                        {{ $purchase->reference }}
+                                        <a
+                                            href="{{ route(
+                                                'purchases.show',
+                                                $purchase->id
+                                            ) }}"
+                                            class="fw-bold text-primary"
+                                        >
 
-                                    </a>
+                                            {{ $purchase->reference }}
+
+                                        </a>
+
+                                    @else
+
+                                        <strong>
+                                            {{ $purchase->reference }}
+                                        </strong>
+
+                                    @endif
 
                                 </td>
 
+
                                 <td>
-                                    {{ $purchase->created_at->format('d/m/Y') }}
+
+                                    {{ optional(
+                                        $purchase->created_at
+                                    )->format('d/m/Y') }}
+
                                 </td>
 
+
                                 <td>
 
-                                    {{ number_format($purchase->total, 2) }}
+                                    {{ number_format(
+                                        $purchase->total ?? 0,
+                                        2
+                                    ) }}
                                     $
 
                                 </td>
 
+
                                 <td>
+
+                                    @php
+                                        $status = $purchase->status ?? 'inconnu';
+                                    @endphp
 
                                     <span class="badge bg-label-success">
 
-                                        {{ ucfirst($purchase->status) }}
+                                        {{ ucfirst($status) }}
 
                                     </span>
 
                                 </td>
 
+
                                 <td>
 
-                                    @if($purchase->delivery_status == 'received')
+                                    @if(
+                                        $purchase->delivery_status
+                                        === 'received'
+                                    )
 
                                         <span class="badge bg-success">
+
                                             Reçu
+
                                         </span>
 
-                                    @elseif($purchase->delivery_status == 'partial_received')
+                                    @elseif(
+                                        $purchase->delivery_status
+                                        === 'partial_received'
+                                    )
 
-                                        <span class="badge bg-warning">
+                                        <span class="badge bg-warning text-dark">
+
                                             Partiel
+
                                         </span>
 
                                     @else
 
                                         <span class="badge bg-secondary">
+
                                             En attente
+
                                         </span>
 
                                     @endif
@@ -391,8 +584,10 @@
 
                             <tr>
 
-                                <td colspan="5"
-                                    class="text-center text-muted">
+                                <td
+                                    colspan="5"
+                                    class="text-center text-muted py-4"
+                                >
 
                                     Aucun achat trouvé
 

@@ -20,8 +20,11 @@ use App\Http\Controllers\SaleController;
 use App\Http\Controllers\ProformaController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\DepotTransferController;
+use App\Http\Controllers\VehiclePartRequestController;
 use App\Http\Controllers\VehicleHistoryController;
 use App\Http\Controllers\VehicleController;
+use App\Http\Controllers\FournisseurCommandeController;
+
 
 //use Illuminate\Http\Request;
 //use Illuminate\Support\Facades\Auth;
@@ -189,6 +192,26 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
+    | PIÈCES À COMMANDER
+    |--------------------------------------------------------------------------
+    |
+    | Accessible à :
+    | - admin
+    | - chef_magasinier
+    | - magasinier
+    | - vendeur
+    | - caissier
+    |
+    */
+
+    Route::get(
+        '/products/to-order',
+        [ProductController::class, 'toOrder']
+    )->name('products.to-order');
+
+
+    /*
+    |--------------------------------------------------------------------------
     | PRODUITS DISPONIBLES
     |--------------------------------------------------------------------------
     */
@@ -197,6 +220,7 @@ Route::middleware([
         '/products/available',
         [ProductController::class, 'available']
     )->name('products.available');
+
 
     /*
     |--------------------------------------------------------------------------
@@ -209,6 +233,17 @@ Route::middleware([
         [ProductController::class, 'sold']
     )->name('products.sold');
 
+    /*
+    |--------------------------------------------------------------------------
+    | PRODUITS non disponible
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+    '/products/unavailable',
+        [ProductController::class, 'unavailable']
+    )->name('products.unavailable');
+    
     /*
     |--------------------------------------------------------------------------
     | IMPORT
@@ -226,9 +261,10 @@ Route::middleware([
     )->name('products.preview');
 
     Route::post(
-    '/products/store-import',
-    [ProductController::class, 'storeImport']
+        '/products/store-import',
+        [ProductController::class, 'storeImport']
     )->name('products.import.store');
+
 
     /*
     |--------------------------------------------------------------------------
@@ -241,20 +277,10 @@ Route::middleware([
         [ProductController::class, 'exportExcel']
     )->name('products.export.excel');
 
-    /*
-    |--------------------------------------------------------------------------
-    | EXPORT PDF
-    |--------------------------------------------------------------------------
-    */
-
-   /* Route::get(
-        '/products/export/pdf',
-        [ProductController::class, 'exportPdf']
-    )->name('products.export.pdf');*/
 
     /*
     |--------------------------------------------------------------------------
-    | CRUD
+    | CRUD PRODUITS
     |--------------------------------------------------------------------------
     */
 
@@ -265,21 +291,26 @@ Route::middleware([
         'destroy'
     ]);
 
+
     /*
     |--------------------------------------------------------------------------
-    | DELETE
+    | SUPPRESSION
     |--------------------------------------------------------------------------
+    |
+    | Seuls admin et chef_magasinier peuvent supprimer.
+    |
     */
 
     Route::delete(
         '/products/{product}',
         [ProductController::class, 'destroy']
-    )->middleware(
+    )
+    ->middleware(
         'role:admin,chef_magasinier'
-    )->name('products.destroy');
+    )
+    ->name('products.destroy');
 
 });
-
 /*
 |--------------------------------------------------------------------------
 | CATEGORIES
@@ -517,6 +548,7 @@ Route::middleware([
         [DepotController::class, 'destroy']
     )->name('depots.destroy');
 
+
 });
 
 /*
@@ -556,100 +588,46 @@ Route::middleware([
 
 /*
 |--------------------------------------------------------------------------
-| ADMIN + CHEF MAGASINIER
+| TRANSFERTS ENTRE DÉPÔTS
 |--------------------------------------------------------------------------
+|
+| Règles :
+|
+| - Tous les utilisateurs autorisés peuvent consulter les transferts.
+| - Admin et chef magasinier peuvent créer un transfert.
+| - Le formulaire peut transférer plusieurs produits.
+| - Une route AJAX permet de récupérer le stock disponible
+|   d'un produit dans un dépôt source.
+| - Admin et chef magasinier peuvent modifier/supprimer
+|   un transfert si ces méthodes existent dans le contrôleur.
+|
+*/
+
+
+/*
+|--------------------------------------------------------------------------
+| CONSULTATION DES TRANSFERTS
+|--------------------------------------------------------------------------
+|
+| Accessible à :
+| - admin
+| - chef_magasinier
+| - magasinier
+| - vendeur
+| - caissier
+|
 */
 
 Route::middleware([
     'auth',
-    'role:admin,chef_magasinier'
-])->group(function () {
-
-    Route::get(
-        '/depots/create',
-        [DepotController::class, 'create']
-    )->name('depots.create');
-
-    Route::post(
-        '/depots',
-        [DepotController::class, 'store']
-    )->name('depots.store');
-
-    Route::get(
-        '/depots/{depot}/edit',
-        [DepotController::class, 'edit']
-    )->name('depots.edit');
-
-    Route::put(
-        '/depots/{depot}',
-        [DepotController::class, 'update']
-    )->name('depots.update');
-
-    Route::delete(
-        '/depots/{depot}',
-        [DepotController::class, 'destroy']
-    )->name('depots.destroy');
-
-});
-/*
-|--------------------------------------------------------------------------
-| TRANSFERTS DEPOTS
-|--------------------------------------------------------------------------
-*/
-/*
-
-
-/*
-|--------------------------------------------------------------------------
-| EDIT
-|--------------------------------------------------------------------------
-*/
-
-Route::get(
-    '/depot-transfers/{transfer}/edit',
-    [DepotTransferController::class, 'edit']
-)->name('depot-transfers.edit');
-
-/*
-|--------------------------------------------------------------------------
-| UPDATE
-|--------------------------------------------------------------------------
-*/
-
-Route::put(
-    '/depot-transfers/{transfer}',
-    [DepotTransferController::class, 'update']
-)->name('depot-transfers.update');
-
-/*
-|--------------------------------------------------------------------------
-| DELETE
-|--------------------------------------------------------------------------
-*/
-
-Route::delete(
-    '/depot-transfers/{transfer}',
-    [DepotTransferController::class, 'destroy']
-)->name('depot-transfers.destroy');
-/*
-|--------------------------------------------------------------------------
-| TOUS PEUVENT VOIR
-|--------------------------------------------------------------------------
-*/
-
-/*Route::middleware([
-    'auth',
     'role:admin,chef_magasinier,magasinier,vendeur,caissier'
 ])->group(function () {
 
-
-
-    Route::get(
-        '/transfers',
-        [DepotTransferController::class, 'index']
-    )->name('transfers.index');
-
-
+    /*
+    |--------------------------------------------------------------------------
+    | LISTE DES TRANSFERTS
+    |--------------------------------------------------------------------------
+    */
 
     Route::get(
         '/depot-transfers',
@@ -657,54 +635,60 @@ Route::delete(
     )->name('depot-transfers.index');
 
 
+    /*
+    |--------------------------------------------------------------------------
+    | STOCK DISPONIBLE D'UN PRODUIT DANS UN DÉPÔT
+    |--------------------------------------------------------------------------
+    |
+    | IMPORTANT :
+    |
+    | Cette route doit impérativement être placée AVANT :
+    |
+    | /depot-transfers/{depotTransfer}
+    |
+    | Sinon Laravel peut considérer "stock" comme l'identifiant
+    | d'un transfert.
+    |
+    | Exemple :
+    |
+    | /depot-transfers/stock/1/25
+    |
+    | 1  = ID du dépôt
+    | 25 = ID du produit
+    |
+    */
 
     Route::get(
-        '/depot-transfers/{transfer}',
+        '/depot-transfers/stock/{depot}/{product}',
+        [DepotTransferController::class, 'getAvailableStock']
+    )->name('depot-transfers.stock');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | AFFICHER UN TRANSFERT
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/depot-transfers/{depotTransfer}',
         [DepotTransferController::class, 'show']
-    )->name('depot-transfers.show');
-
-});*/
-
-
-/*
-|--------------------------------------------------------------------------
-| TOUS PEUVENT VOIR
-|--------------------------------------------------------------------------
-*/
-
-Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
-])->group(function () {
-
-    /*
-    |--------------------------------------------------------------------------
-    | INDEX
-    |--------------------------------------------------------------------------
-    */
-
-    Route::get(
-        '/transfers',
-        [DepotTransferController::class, 'index']
-    )->name('transfers.index');
-
-    /*
-    |--------------------------------------------------------------------------
-    | ALIAS INDEX
-    |--------------------------------------------------------------------------
-    */
-
-    Route::get(
-        '/depot-transfers',
-        [DepotTransferController::class, 'index']
-    )->name('depot-transfers.index');
+    )
+    ->whereNumber('depotTransfer')
+    ->name('depot-transfers.show');
 
 });
 
+
 /*
 |--------------------------------------------------------------------------
-| ADMIN + CHEF MAGASINIER SEULEMENT
+| CRÉATION / MODIFICATION DES TRANSFERTS
 |--------------------------------------------------------------------------
+|
+| Accessible uniquement à :
+| - admin
+| - chef_magasinier
+|
 */
 
 Route::middleware([
@@ -714,18 +698,7 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | CREATE
-    |--------------------------------------------------------------------------
-    */
-
-    Route::get(
-        '/transfers/create',
-        [DepotTransferController::class, 'create']
-    )->name('transfers.create');
-
-    /*
-    |--------------------------------------------------------------------------
-    | ALIAS CREATE
+    | FORMULAIRE DE CRÉATION
     |--------------------------------------------------------------------------
     */
 
@@ -737,19 +710,23 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | STORE
+    | ENREGISTRER UN TRANSFERT
     |--------------------------------------------------------------------------
-    */
-
-    Route::post(
-        '/transfers',
-        [DepotTransferController::class, 'store']
-    )->name('transfers.store');
-
-    /*
-    |--------------------------------------------------------------------------
-    | ALIAS STORE
-    |--------------------------------------------------------------------------
+    |
+    | Le contrôleur recevra :
+    |
+    | source_depot_id
+    | destination_depot_id
+    | note
+    |
+    | items[0][product_id]
+    | items[0][quantity]
+    |
+    | items[1][product_id]
+    | items[1][quantity]
+    |
+    | etc.
+    |
     */
 
     Route::post(
@@ -758,23 +735,58 @@ Route::middleware([
     )->name('depot-transfers.store');
 
 
-});
-
     /*
-|--------------------------------------------------------------------------
-| SHOW
-|--------------------------------------------------------------------------
-*/
-
-Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
-])->group(function () {
+    |--------------------------------------------------------------------------
+    | MODIFIER UN TRANSFERT
+    |--------------------------------------------------------------------------
+    |
+    | Gardez cette route uniquement si votre
+    | DepotTransferController possède une méthode edit().
+    |
+    */
 
     Route::get(
-        '/depot-transfers/{transfer}',
-        [DepotTransferController::class, 'show']
-    )->name('depot-transfers.show');
+        '/depot-transfers/{depotTransfer}/edit',
+        [DepotTransferController::class, 'edit']
+    )
+    ->whereNumber('depotTransfer')
+    ->name('depot-transfers.edit');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | METTRE À JOUR UN TRANSFERT
+    |--------------------------------------------------------------------------
+    |
+    | Gardez cette route uniquement si votre
+    | DepotTransferController possède une méthode update().
+    |
+    */
+
+    Route::put(
+        '/depot-transfers/{depotTransfer}',
+        [DepotTransferController::class, 'update']
+    )
+    ->whereNumber('depotTransfer')
+    ->name('depot-transfers.update');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | SUPPRIMER UN TRANSFERT
+    |--------------------------------------------------------------------------
+    |
+    | Gardez cette route uniquement si votre
+    | DepotTransferController possède une méthode destroy().
+    |
+    */
+
+    Route::delete(
+        '/depot-transfers/{depotTransfer}',
+        [DepotTransferController::class, 'destroy']
+    )
+    ->whereNumber('depotTransfer')
+    ->name('depot-transfers.destroy');
 
 });
 /*
@@ -952,6 +964,59 @@ Route::middleware([
     )->name('stock-movements.destroy');
 
 });
+
+Route::middleware(['auth'])->group(function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | Suivi des pièces liées aux véhicules
+    |--------------------------------------------------------------------------
+    */
+
+    // Toutes les pièces à rechercher, trouvées, commandées, reçues, etc.
+    Route::get(
+        '/vehicle-part-requests',
+        [VehiclePartRequestController::class, 'index']
+    )->name('vehicle-part-requests.index');
+
+    // Seulement les pièces commandées
+    Route::get(
+        '/vehicle-part-requests-ordered',
+        [VehiclePartRequestController::class, 'ordered']
+    )->name('vehicle-part-requests.ordered');
+
+    // Seulement les pièces reçues
+    Route::get(
+        '/vehicle-part-requests-received',
+        [VehiclePartRequestController::class, 'received']
+    )->name('vehicle-part-requests.received');
+
+    // Seulement les pièces non trouvées
+    Route::get(
+        '/vehicle-part-requests-not-found',
+        [VehiclePartRequestController::class, 'notFound']
+    )->name('vehicle-part-requests.not-found');
+
+    // Modification du statut d'une pièce
+    Route::patch(
+        '/vehicle-part-requests/{vehiclePartRequest}/status',
+        [VehiclePartRequestController::class, 'changeStatus']
+    )->name('vehicle-part-requests.change-status');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Autres routes CRUD
+    |--------------------------------------------------------------------------
+    |
+    | On exclut index parce que nous l'avons déclaré manuellement plus haut.
+    |
+    */
+
+    Route::resource(
+        'vehicle-part-requests',
+        VehiclePartRequestController::class
+    )->except(['index']);
+});
 /*
 |--------------------------------------------------------------------------
 | VÉHICULES
@@ -1042,11 +1107,11 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | VÉHICULES ASSOCIÉS À UN CLIENT (AJAX)
+    | VÉHICULES ASSOCIÉS À UN CLIENT
     |--------------------------------------------------------------------------
     |
-    | Cette route doit rester avant Route::resource('sales', ...)
-    | afin que Laravel ne considère pas "customers" comme la valeur de {sale}.
+    | IMPORTANT :
+    | cette route doit rester avant Route::resource('sales', ...)
     |
     */
 
@@ -1055,29 +1120,33 @@ Route::middleware([
         [SaleController::class, 'vehiclesByCustomer']
     )->name('sales.customers.vehicles');
 
-    /*
-    |--------------------------------------------------------------------------
-    | CRUD DES VENTES
-    |--------------------------------------------------------------------------
-    */
-
-    Route::resource(
-        'sales',
-        SaleController::class
-    )->except([
-        'destroy'
-    ]);
 
     /*
     |--------------------------------------------------------------------------
-    | FACTURE
+    | AFFICHER LA FACTURE
     |--------------------------------------------------------------------------
     */
 
     Route::get(
         '/sales/{sale}/invoice',
         [SaleController::class, 'invoice']
-    )->name('sales.invoice');
+    )
+    ->whereNumber('sale')
+    ->name('sales.invoice');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | TÉLÉCHARGER LA FACTURE PDF
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/sales/{sale}/invoice/download',
+        [SaleController::class, 'downloadInvoice']
+    )
+    ->whereNumber('sale')
+    ->name('sales.invoice.download');
 
     /*
     |--------------------------------------------------------------------------
@@ -1088,7 +1157,10 @@ Route::middleware([
     Route::post(
         '/sales/{sale}/payment',
         [SaleController::class, 'addPayment']
-    )->name('sales.payment');
+    )
+    ->whereNumber('sale')
+    ->name('sales.payment');
+
 
     /*
     |--------------------------------------------------------------------------
@@ -1099,22 +1171,49 @@ Route::middleware([
     Route::put(
         '/sales/{sale}/cancel',
         [SaleController::class, 'cancel']
-    )->name('sales.cancel');
+    )
+    ->whereNumber('sale')
+    ->name('sales.cancel');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CRUD DES VENTES
+    |--------------------------------------------------------------------------
+    |
+    | IMPORTANT :
+    | Les routes spécifiques ci-dessus sont placées avant la resource.
+    |
+    */
+
+    Route::resource(
+        'sales',
+        SaleController::class
+    )->except([
+        'destroy'
+    ]);
+
 
     /*
     |--------------------------------------------------------------------------
     | SUPPRESSION D'UNE VENTE
     |--------------------------------------------------------------------------
+    |
+    | Admin + chef magasinier uniquement.
+    |
     */
 
     Route::delete(
         '/sales/{sale}',
         [SaleController::class, 'destroy']
-    )->middleware(
+    )
+    ->whereNumber('sale')
+    ->middleware(
         'role:admin,chef_magasinier'
-    )->name('sales.destroy');
-});
+    )
+    ->name('sales.destroy');
 
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -1129,25 +1228,78 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | PDF PROFORMA
+    | VÉHICULES ASSOCIÉS À UN CLIENT
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/proformas/customers/{customer}/vehicles',
+        [ProformaController::class, 'vehiclesByCustomer']
+    )->name('proformas.customers.vehicles');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CRÉER UN PROFORMA À PARTIR D'UN VÉHICULE
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/proformas/create/vehicle/{vehicle}',
+        [ProformaController::class, 'createWithVehicle']
+    )
+    ->whereNumber('vehicle')
+    ->name('proformas.create.vehicle');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | TÉLÉCHARGER LE PDF DU PROFORMA
     |--------------------------------------------------------------------------
     */
 
     Route::get(
         '/proformas/{proforma}/pdf',
-        [ProformaController::class, 'pdf']
-    )->name('proformas.pdf');
+        [ProformaController::class, 'download']
+    )
+    ->whereNumber('proforma')
+    ->name('proformas.pdf');
+
 
     /*
     |--------------------------------------------------------------------------
-    | CONVERTIR PROFORMA EN VENTE
+    | CONVERTIR LE PROFORMA EN VENTE
+    |--------------------------------------------------------------------------
+    |
+    | Cette route crée la vente puis ProformaController doit rediriger vers :
+    |
+    | sales.invoice
+    |
+    | et NON sales.invoice.download.
+    |
+    */
+
+    Route::post(
+        '/proformas/{proforma}/convert-sale',
+        [ProformaController::class, 'convertToSale']
+    )
+    ->whereNumber('proforma')
+    ->name('proformas.convert-sale');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ANNULER LE PROFORMA
     |--------------------------------------------------------------------------
     */
 
     Route::post(
-        '/proformas/{id}/convert-sale',
-        [ProformaController::class, 'convertToSale']
-    )->name('proformas.convert-sale');
+        '/proformas/{proforma}/cancel',
+        [ProformaController::class, 'cancel']
+    )
+    ->whereNumber('proforma')
+    ->name('proformas.cancel');
+
 
     /*
     |--------------------------------------------------------------------------
@@ -1158,45 +1310,121 @@ Route::middleware([
     Route::resource(
         'proformas',
         ProformaController::class
-    )->except([
-        'destroy'
+    )->only([
+        'index',
+        'create',
+        'store',
+        'show',
     ]);
+
 
     /*
     |--------------------------------------------------------------------------
-    | DELETE
+    | SUPPRESSION
     |--------------------------------------------------------------------------
     */
 
     Route::delete(
         '/proformas/{proforma}',
         [ProformaController::class, 'destroy']
-    )->middleware(
+    )
+    ->whereNumber('proforma')
+    ->middleware(
         'role:admin,chef_magasinier'
-    )->name('proformas.destroy');
+    )
+    ->name('proformas.destroy');
 
 });
+
+
 /*
 |--------------------------------------------------------------------------
-| Redirect
+| COMMANDES REÇUES DEPUIS APP ATELIER
 |--------------------------------------------------------------------------
+|
+| Ces routes affichent et traitent les bons de commande reçus depuis
+| l'application App Atelier.
+|
+| - index        : liste des bons reçus
+| - show         : détail d'un bon
+| - updateLigne  : identification / disponibilité d'une ligne
+| - creerVente   : conversion du bon en vente
+|
 */
+
+Route::middleware([
+    'auth',
+    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+])->group(function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | LISTE DES BONS DE COMMANDE
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/fournisseur-commandes',
+        [FournisseurCommandeController::class, 'index']
+    )->name('fournisseur-commandes.index');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | DÉTAIL D'UN BON DE COMMANDE
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/fournisseur-commandes/{fournisseurCommande}',
+        [FournisseurCommandeController::class, 'show']
+    )
+    ->whereNumber('fournisseurCommande')
+    ->name('fournisseur-commandes.show');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | IDENTIFIER / METTRE À JOUR UNE LIGNE
+    |--------------------------------------------------------------------------
+    */
+
+    Route::put(
+        '/fournisseur-commandes/{fournisseurCommande}/lignes/{ligne}',
+        [FournisseurCommandeController::class, 'updateLigne']
+    )
+    ->whereNumber('fournisseurCommande')
+    ->whereNumber('ligne')
+    ->name('fournisseur-commandes.lignes.update');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CONVERTIR LE BON DE COMMANDE EN VENTE
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/fournisseur-commandes/{fournisseurCommande}/creer-vente',
+        [FournisseurCommandeController::class, 'creerVente']
+    )
+    ->whereNumber('fournisseurCommande')
+    ->name('fournisseur-commandes.creer-vente');
+
+});
+
+
+/*
+|--------------------------------------------------------------------------
+| AUTHENTIFICATION
+|--------------------------------------------------------------------------
+|
+| Les routes Login / Logout / Password Reset sont définies
+| dans routes/auth.php.
+|
+| IMPORTANT :
+| Ne pas redéclarer la route logout dans ce fichier.
+|
+*/
+
 require __DIR__.'/auth.php';
-
-/*
-|--------------------------------------------------------------------------
-| LOGOUT
-|--------------------------------------------------------------------------
-*/
-
-Route::post('/logout', function () {
-
-    auth()->logout();
-
-    request()->session()->invalidate();
-
-    request()->session()->regenerateToken();
-
-    return redirect('/');
-
-})->name('logout');

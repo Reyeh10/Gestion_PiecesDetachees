@@ -517,7 +517,7 @@ use Illuminate\Support\Facades\DB;
                 $nextId = Sale::max('id') + 1;
 
                 $invoiceNumber =
-                    'INV-' .
+                   'FACT-' .
                     date('Y') .
                     '-' .
                     str_pad(
@@ -769,21 +769,20 @@ use Illuminate\Support\Facades\DB;
 
             $numberToWords = new NumberToWords();
 
-            $numberTransformer =
-                $numberToWords->getNumberTransformer('fr');
+                        $numberTransformer =
+                            $numberToWords->getNumberTransformer('fr');
 
-           $total = round($sale->total);
+                    $totalRounded = (int) round(
+                (float) $sale->total
+            );
 
-            $entier = floor($total);
-            $centimes = round(($total - $entier) * 100);
-            $numberToWords = new NumberToWords();
-            $numberTransformer = $numberToWords->getNumberTransformer('fr');
-            $totalInWords = strtoupper($numberTransformer->toWords($entier)) . ' FDJ';
-
-            if ($centimes > 0) {
-                $totalInWords .= ' ET ' . strtoupper($numberTransformer->toWords($centimes)) . ' CENTIMES';
-            }
-
+            $totalInWords =
+                strtoupper(
+                    $numberTransformer->toWords(
+                        $totalRounded
+                    )
+                )
+                . ' FDJ';
             /*
             |--------------------------------------------------------------------------
             | VIEW
@@ -1034,100 +1033,265 @@ use Illuminate\Support\Facades\DB;
             Request $request,
             Sale $sale
         ) {
-            if ($sale->status === 'cancelled') {
-
+            /*
+            |--------------------------------------------------------------------------
+            | INTERDIRE LE PAIEMENT D'UNE FACTURE ANNULÉE
+            |--------------------------------------------------------------------------
+            */
+            if (
+                in_array(
+                    strtolower((string) $sale->status),
+                    ['cancelled', 'annulé', 'annule'],
+                    true
+                )
+            ) {
                 return back()->with(
                     'error',
                     'Impossible de payer une facture annulée.'
                 );
             }
 
-            $request->validate([
+            /*
+            |--------------------------------------------------------------------------
+            | VALIDATION
+            |--------------------------------------------------------------------------
+            */
+            $request->validate(
+                [
+                    'amount' => [
+                        'required',
+                        'numeric',
+                        'min:1',
+                    ],
 
-                'amount' =>
-                    'required|numeric|min:1',
+                    'method' => [
+                        'nullable',
+                        'string',
+                        'max:255',
+                    ],
+                ],
+                [
+                    'amount.required' =>
+                        'Veuillez saisir le montant du paiement.',
 
-                'method' =>
-                    'nullable|string|max:255',
-            ]);
+                    'amount.numeric' =>
+                        'Le montant du paiement doit être un nombre.',
 
+                    'amount.min' =>
+                        'Le montant du paiement doit être supérieur à zéro.',
+                ]
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | TOTAL FACTURE ARRONDI EN FDJ
+            |--------------------------------------------------------------------------
+            |
+            | On compare toujours le paiement avec le total ARRONDI affiché.
+            |
+            */
+            $invoiceTotal = (int) round(
+                (float) $sale->total
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | TOTAL DÉJÀ PAYÉ
+            |--------------------------------------------------------------------------
+            */
+            $alreadyPaid = (int) round(
+                (float) $sale->payments()->sum('amount')
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | RESTE À PAYER AVANT LE NOUVEAU PAIEMENT
+            |--------------------------------------------------------------------------
+            */
+            $remainingAmount = max(
+                0,
+                $invoiceTotal - $alreadyPaid
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | FACTURE DÉJÀ PAYÉE
+            |--------------------------------------------------------------------------
+            */
+            if ($remainingAmount <= 0) {
+
+                if ($sale->status !== 'payé') {
+                    $sale->update([
+                        'status' => 'payé',
+                    ]);
+                }
+
+                return back()->with(
+                    'success',
+                    'Cette facture est déjà entièrement payée.'
+                );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | MONTANT SAISI ARRONDI EN FDJ
+            |--------------------------------------------------------------------------
+            */
+            $paymentAmount = (int) round(
+                (float) $request->amount
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | INTERDIRE LE SURPAIEMENT
+            |--------------------------------------------------------------------------
+            */
+            if ($paymentAmount > $remainingAmount) {
+
+                return back()
+                    ->withInput()
+                    ->with(
+                        'error',
+                        'Le montant saisi dépasse le reste à payer de '
+                        . number_format(
+                            $remainingAmount,
+                            0,
+                            ',',
+                            ' '
+                        )
+                        . ' FDJ.'
+                    );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | ENREGISTRER LE PAIEMENT
+            |--------------------------------------------------------------------------
+            */
             Payment::create([
-
                 'sale_id' =>
                     $sale->id,
 
                 'amount' =>
-                    $request->amount,
+                    $paymentAmount,
 
                 'method' =>
-                    $request->method,
+                    $request->method ?? 'Cash',
             ]);
 
             /*
             |--------------------------------------------------------------------------
-            | TOTAL PAYE
+            | RECALCULER LE TOTAL PAYÉ
             |--------------------------------------------------------------------------
             */
+            $paid = (int) round(
+                (float) $sale->payments()->sum('amount')
+            );
 
-            $paid =
-                $sale->payments()->sum('amount');
-
-           /*
-|--------------------------------------------------------------------------
-| TOTAL PAYE
-|--------------------------------------------------------------------------
-*/
-
-$paid = $sale->payments()->sum('amount');
-
-/*
+            /*
             |--------------------------------------------------------------------------
-            | STATUS
+            | RECALCULER LE RESTE
             |--------------------------------------------------------------------------
             */
+            $remaining = max(
+                0,
+                $invoiceTotal - $paid
+            );
 
-            if ($paid >= $sale->total) {
+            /*
+            |--------------------------------------------------------------------------
+            | METTRE À JOUR LE STATUT
+            |--------------------------------------------------------------------------
+            */
+            if ($remaining <= 0) {
 
                 $sale->update([
-                    'status' => 'payé'
+                    'status' => 'payé',
                 ]);
 
             } elseif ($paid > 0) {
 
                 $sale->update([
-                    'status' => 'partiel'
+                    'status' => 'partiel',
                 ]);
 
             } else {
 
                 $sale->update([
-                    'status' => 'vendu'
+                    'status' => 'vendu',
                 ]);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | MESSAGE
+            |--------------------------------------------------------------------------
+            */
+            if ($remaining <= 0) {
+
+                return back()->with(
+                    'success',
+                    'Paiement enregistré. La facture est entièrement payée.'
+                );
             }
 
             return back()->with(
                 'success',
-                'Paiement ajouté avec succès.'
+                'Paiement enregistré avec succès. Reste à payer : '
+                . number_format(
+                    $remaining,
+                    0,
+                    ',',
+                    ' '
+                )
+                . ' FDJ.'
             );
         }
 
-        /*
+       /*
         |--------------------------------------------------------------------------
-        | FACTURE PDF
+        | AFFICHER LA FACTURE DANS LE NAVIGATEUR
         |--------------------------------------------------------------------------
+        |
+        | Cette méthode affiche la facture.
+        | Elle ne télécharge PAS automatiquement le PDF.
+        |
         */
 
         public function invoice(Sale $sale)
         {
+            /*
+            |--------------------------------------------------------------------------
+            | CHARGER LES RELATIONS
+            |--------------------------------------------------------------------------
+            */
+
             $sale->load([
                 'customer',
                 'vehicle',
                 'items.product.brand',
                 'items.product.model',
-                'payments'
+                'payments',
             ]);
 
-        /*
+
+            /*
+            |--------------------------------------------------------------------------
+            | NUMÉRO DE FACTURE
+            |--------------------------------------------------------------------------
+            */
+
+            $invoiceNumber =
+                $sale->invoice_number
+                ?: 'FACTURE-' . str_pad(
+                    (string) $sale->id,
+                    6,
+                    '0',
+                    STR_PAD_LEFT
+                );
+
+
+            /*
             |--------------------------------------------------------------------------
             | TOTAL EN LETTRES
             |--------------------------------------------------------------------------
@@ -1135,46 +1299,180 @@ $paid = $sale->payments()->sum('amount');
 
             $numberToWords = new NumberToWords();
 
-            $numberTransformer =
-                $numberToWords->getNumberTransformer('fr');
+                        $numberTransformer =
+                            $numberToWords->getNumberTransformer('fr');
 
-           $total = round($sale->total);
 
-            $entier = floor($total);
+                    $totalRounded = (int) round(
+                (float) $sale->total
+            );
 
-            $centimes = round(($total - $entier) * 100);
+            $totalInWords =
+                strtoupper(
+                    $numberTransformer->toWords(
+                        $totalRounded
+                    )
+                )
+                . ' FDJ';
 
-            $numberToWords = new NumberToWords();
-
-            $numberTransformer = $numberToWords->getNumberTransformer('fr');
-
-            $totalInWords = strtoupper($numberTransformer->toWords($entier)) . ' FDJ';
-
-            if ($centimes > 0) {
-                $totalInWords .= ' ET ' . strtoupper($numberTransformer->toWords($centimes)) . ' CENTIMES';
-            }
 
             /*
             |--------------------------------------------------------------------------
-            | PDF
+            | AFFICHER LA FACTURE
+            |--------------------------------------------------------------------------
+            |
+            | IMPORTANT :
+            |
+            | Votre projet possède déjà :
+            |
+            | resources/views/sales/invoice_pdf.blade.php
+            |
+            | On utilise donc cette vue pour l'affichage navigateur.
+            |
+            */
+
+            return view(
+                'sales.invoice',
+                [
+                    'sale' =>
+                        $sale,
+
+                    'invoiceNumber' =>
+                        $invoiceNumber,
+
+                    'totalInWords' =>
+                        $totalInWords,
+
+                    'isPdf' =>
+                        false,
+                ]
+            );
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | TÉLÉCHARGER LA FACTURE PDF
+        |--------------------------------------------------------------------------
+        |
+        | Cette méthode est appelée uniquement lorsque
+        | l'utilisateur clique sur "Télécharger PDF".
+        |
+        */
+
+        public function downloadInvoice(Sale $sale)
+        {
+            /*
+            |--------------------------------------------------------------------------
+            | CHARGER LES RELATIONS
+            |--------------------------------------------------------------------------
+            */
+
+            $sale->load([
+                'customer',
+                'vehicle',
+                'items.product.brand',
+                'items.product.model',
+                'payments',
+            ]);
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | NUMÉRO DE FACTURE
+            |--------------------------------------------------------------------------
+            */
+
+            $invoiceNumber =
+                $sale->invoice_number
+                ?: 'FACTURE-' . str_pad(
+                    (string) $sale->id,
+                    6,
+                    '0',
+                    STR_PAD_LEFT
+                );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | TOTAL EN LETTRES
+            |--------------------------------------------------------------------------
+            */
+
+            $numberToWords =
+                new NumberToWords();
+
+
+            $numberTransformer =
+                $numberToWords
+                    ->getNumberTransformer(
+                        'fr'
+                    );
+
+
+                        $totalRounded = (int) round(
+                    (float) $sale->total
+                );
+
+                $totalInWords =
+                    strtoupper(
+                        $numberTransformer->toWords(
+                            $totalRounded
+                        )
+                    )
+                    . ' FDJ';
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | NOM DU FICHIER
+            |--------------------------------------------------------------------------
+            */
+
+            $safeInvoiceNumber =
+                preg_replace(
+                    '/[^A-Za-z0-9\-_]/',
+                    '-',
+                    $invoiceNumber
+                );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | GÉNÉRER LE PDF
             |--------------------------------------------------------------------------
             */
 
             $pdf = Pdf::loadView(
-
                 'sales.invoice_pdf',
+                [
+                    'sale' =>
+                        $sale,
 
-                compact(
-                    'sale',
-                    'totalInWords'
-                )
+                    'invoiceNumber' =>
+                        $invoiceNumber,
 
+                    'totalInWords' =>
+                        $totalInWords,
+
+                    'isPdf' =>
+                        true,
+                ]
+            )
+            ->setPaper(
+                'a4',
+                'portrait'
             );
-                    return $pdf->download(
 
-                        'facture_' .
-                        $sale->invoice_number .
-                        '.pdf'
-                    );
+
+            /*
+            |--------------------------------------------------------------------------
+            | TÉLÉCHARGEMENT
+            |--------------------------------------------------------------------------
+            */
+
+            return $pdf->download(
+                $safeInvoiceNumber . '.pdf'
+            );
         }
 }
