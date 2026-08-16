@@ -272,14 +272,15 @@
                 </div>
 
 
-                {{-- PAIEMENT --}}
+               {{-- PAIEMENT --}}
                 <div class="col-lg-4 col-md-6 mb-3">
 
                     <label
                         for="payment_type"
                         class="form-label fw-semibold"
                     >
-                        Paiement
+                        Mode de paiement
+                        <span class="text-danger">*</span>
                     </label>
 
                     <select
@@ -288,11 +289,23 @@
                         class="form-control"
                         required
                     >
+
+                        <option value="">
+                            Sélectionner un mode de paiement
+                        </option>
+
                         <option
                             value="cash"
-                            {{ old('payment_type', 'cash') === 'cash' ? 'selected' : '' }}
+                            {{ old('payment_type') === 'cash' ? 'selected' : '' }}
                         >
                             Cash
+                        </option>
+
+                        <option
+                            value="echeance"
+                            {{ old('payment_type') === 'echeance' ? 'selected' : '' }}
+                        >
+                            Échéance
                         </option>
 
                         <option
@@ -301,6 +314,49 @@
                         >
                             Bon de commande
                         </option>
+
+                        <option
+                            value="cheque"
+                            {{ old('payment_type') === 'cheque' ? 'selected' : '' }}
+                        >
+                            Chèque
+                        </option>
+
+                        <option
+                            value="virement_bancaire"
+                            {{ old('payment_type') === 'virement_bancaire' ? 'selected' : '' }}
+                        >
+                            Virement bancaire
+                        </option>
+
+                        <option
+                            value="carte_bancaire"
+                            {{ old('payment_type') === 'carte_bancaire' ? 'selected' : '' }}
+                        >
+                            Carte bancaire
+                        </option>
+
+                        <option
+                            value="paiement_en_ligne"
+                            {{ old('payment_type') === 'paiement_en_ligne' ? 'selected' : '' }}
+                        >
+                            Paiement en ligne
+                        </option>
+
+                        <option
+                            value="mobile_money"
+                            {{ old('payment_type') === 'mobile_money' ? 'selected' : '' }}
+                        >
+                            Mobile Money
+                        </option>
+
+                        <option
+                            value="autre"
+                            {{ old('payment_type') === 'autre' ? 'selected' : '' }}
+                        >
+                            Autre
+                        </option>
+
                     </select>
 
                     @error('payment_type')

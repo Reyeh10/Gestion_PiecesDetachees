@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProductOptionController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\CustomerController;
@@ -24,7 +25,6 @@ use App\Http\Controllers\VehiclePartRequestController;
 use App\Http\Controllers\VehicleHistoryController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\FournisseurCommandeController;
-
 
 //use Illuminate\Http\Request;
 //use Illuminate\Support\Facades\Auth;
@@ -194,14 +194,6 @@ Route::middleware([
     |--------------------------------------------------------------------------
     | PIÈCES À COMMANDER
     |--------------------------------------------------------------------------
-    |
-    | Accessible à :
-    | - admin
-    | - chef_magasinier
-    | - magasinier
-    | - vendeur
-    | - caissier
-    |
     */
 
     Route::get(
@@ -233,20 +225,22 @@ Route::middleware([
         [ProductController::class, 'sold']
     )->name('products.sold');
 
+
     /*
     |--------------------------------------------------------------------------
-    | PRODUITS non disponible
+    | PRODUITS NON DISPONIBLES
     |--------------------------------------------------------------------------
     */
 
     Route::get(
-    '/products/unavailable',
+        '/products/unavailable',
         [ProductController::class, 'unavailable']
     )->name('products.unavailable');
-    
+
+
     /*
     |--------------------------------------------------------------------------
-    | IMPORT
+    | IMPORT PRODUITS
     |--------------------------------------------------------------------------
     */
 
@@ -255,10 +249,12 @@ Route::middleware([
         [ProductController::class, 'import']
     )->name('products.import');
 
+
     Route::post(
         '/products/preview',
         [ProductController::class, 'preview']
     )->name('products.preview');
+
 
     Route::post(
         '/products/store-import',
@@ -280,8 +276,81 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
+    | AJOUT RAPIDE DES OPTIONS PRODUIT
+    |--------------------------------------------------------------------------
+    |
+    | Ces routes sont utilisées dans products/_form.blade.php.
+    |
+    | Elles permettent d'ajouter directement depuis le formulaire :
+    |
+    | - une marque
+    | - un modèle
+    | - un rayon
+    | - un emplacement
+    |
+    | sans quitter la création/modification du produit.
+    |
+    */
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | AJOUTER UNE MARQUE
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/product-options/brands',
+        [ProductOptionController::class, 'storeBrand']
+    )->name('product-options.brands.store');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | AJOUTER UN MODÈLE
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/product-options/models',
+        [ProductOptionController::class, 'storeModel']
+    )->name('product-options.models.store');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | AJOUTER UN RAYON
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/product-options/rayons',
+        [ProductOptionController::class, 'storeRayon']
+    )->name('product-options.rayons.store');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | AJOUTER UN EMPLACEMENT
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/product-options/locations',
+        [ProductOptionController::class, 'storeLocation']
+    )->name('product-options.locations.store');
+
+
+    /*
+    |--------------------------------------------------------------------------
     | CRUD PRODUITS
     |--------------------------------------------------------------------------
+    |
+    | IMPORTANT :
+    |
+    | Les routes particulières sont volontairement déclarées AVANT
+    | Route::resource('products', ...).
+    |
     */
 
     Route::resource(
@@ -294,7 +363,7 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | SUPPRESSION
+    | SUPPRESSION PRODUIT
     |--------------------------------------------------------------------------
     |
     | Seuls admin et chef_magasinier peuvent supprimer.
