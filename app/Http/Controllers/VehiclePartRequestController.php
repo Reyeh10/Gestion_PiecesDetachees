@@ -3,19 +3,22 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreVehiclePartRequestRequest;
+
 use App\Models\Product;
+use App\Models\ProductDepotStock;
+use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\Vehicle;
 use App\Models\VehiclePartRequest;
 use App\Models\VehiclePartRequestHistory;
-use App\Models\StockMovement;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class VehiclePartRequestController extends Controller
@@ -24,15 +27,6 @@ class VehiclePartRequestController extends Controller
     |--------------------------------------------------------------------------
     | INDEX
     |--------------------------------------------------------------------------
-    |
-    | Liste de toutes les demandes de pièces :
-    | - en recherche
-    | - trouvées
-    | - commandées
-    | - reçues
-    | - non trouvées
-    | - annulées
-    |
     */
 
     public function index(Request $request): View
@@ -45,74 +39,77 @@ class VehiclePartRequestController extends Controller
                 'creator',
             ]);
 
+
         /*
         |--------------------------------------------------------------------------
-        | RECHERCHE GÉNÉRALE
+        | RECHERCHE
         |--------------------------------------------------------------------------
         */
 
         if ($request->filled('search')) {
 
-            $search = trim(
-                (string) $request->input('search')
+            $search =
+                trim((string) $request->search);
+
+            $query->where(
+                function ($subQuery) use ($search) {
+
+                    $subQuery
+                        ->where(
+                            'part_name',
+                            'like',
+                            "%{$search}%"
+                        )
+                        ->orWhere(
+                            'reference',
+                            'like',
+                            "%{$search}%"
+                        )
+                        ->orWhere(
+                            'supplier_reference',
+                            'like',
+                            "%{$search}%"
+                        )
+                        ->orWhere(
+                            'order_reference',
+                            'like',
+                            "%{$search}%"
+                        )
+                        ->orWhereHas(
+                            'vehicle',
+                            function ($vehicleQuery) use ($search) {
+
+                                $vehicleQuery
+                                    ->where(
+                                        'plate_number',
+                                        'like',
+                                        "%{$search}%"
+                                    )
+                                    ->orWhere(
+                                        'vin',
+                                        'like',
+                                        "%{$search}%"
+                                    )
+                                    ->orWhere(
+                                        'brand',
+                                        'like',
+                                        "%{$search}%"
+                                    )
+                                    ->orWhere(
+                                        'model',
+                                        'like',
+                                        "%{$search}%"
+                                    );
+                            }
+                        );
+                }
             );
-
-            $query->where(function ($subQuery) use ($search) {
-
-                $subQuery
-                    ->where(
-                        'part_name',
-                        'like',
-                        "%{$search}%"
-                    )
-                    ->orWhere(
-                        'reference',
-                        'like',
-                        "%{$search}%"
-                    )
-                    ->orWhere(
-                        'supplier_reference',
-                        'like',
-                        "%{$search}%"
-                    )
-                    ->orWhere(
-                        'order_reference',
-                        'like',
-                        "%{$search}%"
-                    )
-                    ->orWhereHas(
-                        'vehicle',
-                        function ($vehicleQuery) use ($search) {
-
-                            $vehicleQuery
-                                ->where(
-                                    'plate_number',
-                                    'like',
-                                    "%{$search}%"
-                                )
-                                ->orWhere(
-                                    'vin',
-                                    'like',
-                                    "%{$search}%"
-                                )
-                                ->orWhere(
-                                    'brand',
-                                    'like',
-                                    "%{$search}%"
-                                )
-                                ->orWhere(
-                                    'model',
-                                    'like',
-                                    "%{$search}%"
-                                );
-                        }
-                    );
-            });
         }
+
 
         /*
         |--------------------------------------------------------------------------
-        | FILTRE PAR STATUT
+        | STATUT
         |--------------------------------------------------------------------------
         */
 
@@ -120,13 +117,14 @@ class VehiclePartRequestController extends Controller
 
             $query->where(
                 'status',
-                $request->input('status')
+                $request->status
             );
         }
 
+
         /*
         |--------------------------------------------------------------------------
-        | FILTRE PAR VÉHICULE
+        | VÉHICULE
         |--------------------------------------------------------------------------
         */
 
@@ -134,49 +132,38 @@ class VehiclePartRequestController extends Controller
 
             $query->where(
                 'vehicle_id',
-                $request->input('vehicle_id')
+                $request->vehicle_id
             );
         }
 
+
         /*
         |--------------------------------------------------------------------------
-        | RÉSULTATS
+        | PAGINATION
         |--------------------------------------------------------------------------
         */
 
-        $partRequests = $query
-            ->latest('requested_at')
-            ->latest('id')
-            ->paginate(15);
+        $partRequests =
+            $query
+                ->latest('requested_at')
+                ->latest('id')
+                ->paginate(15);
 
         $partRequests->appends(
             $request->query()
         );
 
-        /*
-        |--------------------------------------------------------------------------
-        | VÉHICULES
-        |--------------------------------------------------------------------------
-        */
 
-        $vehicles = Vehicle::query()
-            ->orderBy('brand')
-            ->orderBy('model')
-            ->get();
+        $vehicles =
+            Vehicle::query()
+                ->orderBy('brand')
+                ->orderBy('model')
+                ->get();
 
-        /*
-        |--------------------------------------------------------------------------
-        | STATUTS
-        |--------------------------------------------------------------------------
-        */
 
-        $statuses = VehiclePartRequest::statuses();
+        $statuses =
+            VehiclePartRequest::statuses();
 
-        /*
-        |--------------------------------------------------------------------------
-        | VIEW
-        |--------------------------------------------------------------------------
-        */
 
         return view(
             'vehicle-part-requests.index',
@@ -188,86 +175,87 @@ class VehiclePartRequestController extends Controller
         );
     }
 
+
     /*
     |--------------------------------------------------------------------------
     | PIÈCES COMMANDÉES
     |--------------------------------------------------------------------------
+    |
+    | IMPORTANT :
+    |
+    | Une réception partielle reste une commande ouverte.
+    |
     */
 
     public function ordered(Request $request): View
     {
-        $query = VehiclePartRequest::query()
-            ->with([
-                'vehicle.customer',
-                'product',
-                'supplier',
-                'creator',
-            ])
-            ->where(
-                'status',
-                VehiclePartRequest::STATUS_ORDERED
-            );
+        $query =
+            VehiclePartRequest::query()
+                ->with([
+                    'vehicle.customer',
+                    'product',
+                    'supplier',
+                    'creator',
+                ])
+                ->whereIn(
+                    'status',
+                    [
+                        VehiclePartRequest::STATUS_ORDERED,
+                        VehiclePartRequest::STATUS_PARTIAL_RECEIVED,
+                    ]
+                );
 
-        /*
-        |--------------------------------------------------------------------------
-        | RECHERCHE
-        |--------------------------------------------------------------------------
-        */
 
         if ($request->filled('search')) {
 
-            $search = trim(
-                (string) $request->input('search')
+            $search =
+                trim((string) $request->input('search'));
+
+            $query->where(
+                function ($subQuery) use ($search) {
+
+                    $subQuery
+                        ->where(
+                            'part_name',
+                            'like',
+                            "%{$search}%"
+                        )
+                        ->orWhere(
+                            'reference',
+                            'like',
+                            "%{$search}%"
+                        )
+                        ->orWhereHas(
+                            'vehicle',
+                            function ($vehicleQuery) use ($search) {
+
+                                $vehicleQuery
+                                    ->where(
+                                        'plate_number',
+                                        'like',
+                                        "%{$search}%"
+                                    )
+                                    ->orWhere(
+                                        'vin',
+                                        'like',
+                                        "%{$search}%"
+                                    )
+                                    ->orWhere(
+                                        'brand',
+                                        'like',
+                                        "%{$search}%"
+                                    )
+                                    ->orWhere(
+                                        'model',
+                                        'like',
+                                        "%{$search}%"
+                                    );
+                            }
+                        );
+                }
             );
-
-            $query->where(function ($subQuery) use ($search) {
-
-                $subQuery
-                    ->where(
-                        'part_name',
-                        'like',
-                        "%{$search}%"
-                    )
-                    ->orWhere(
-                        'reference',
-                        'like',
-                        "%{$search}%"
-                    )
-                    ->orWhereHas(
-                        'vehicle',
-                        function ($vehicleQuery) use ($search) {
-
-                            $vehicleQuery
-                                ->where(
-                                    'plate_number',
-                                    'like',
-                                    "%{$search}%"
-                                )
-                                ->orWhere(
-                                    'vin',
-                                    'like',
-                                    "%{$search}%"
-                                )
-                                ->orWhere(
-                                    'brand',
-                                    'like',
-                                    "%{$search}%"
-                                )
-                                ->orWhere(
-                                    'model',
-                                    'like',
-                                    "%{$search}%"
-                                );
-                        }
-                    );
-            });
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | FILTRE VÉHICULE
-        |--------------------------------------------------------------------------
-        */
 
         if ($request->filled('vehicle_id')) {
 
@@ -277,52 +265,41 @@ class VehiclePartRequestController extends Controller
             );
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | RÉSULTATS
-        |--------------------------------------------------------------------------
-        */
 
-        $partRequests = $query
-            ->latest('ordered_at')
-            ->latest('id')
-            ->paginate(15);
+        $partRequests =
+            $query
+                ->latest('ordered_at')
+                ->latest('id')
+                ->paginate(15);
+
 
         $partRequests->appends(
             $request->query()
         );
 
-        /*
-        |--------------------------------------------------------------------------
-        | VÉHICULES
-        |--------------------------------------------------------------------------
-        */
 
-        $vehicles = Vehicle::query()
-            ->orderBy('brand')
-            ->orderBy('model')
-            ->get();
+        $vehicles =
+            Vehicle::query()
+                ->orderBy('brand')
+                ->orderBy('model')
+                ->get();
 
-        $statuses = VehiclePartRequest::statuses();
 
-        /*
-        |--------------------------------------------------------------------------
-        | TITRE
-        |--------------------------------------------------------------------------
-        */
+        $statuses =
+            VehiclePartRequest::statuses();
 
-        $pageTitle = 'Pièces commandées';
+
+        $pageTitle =
+            'Pièces commandées';
+
 
         $pageDescription =
-            'Liste des pièces déjà commandées auprès des fournisseurs.';
+            'Liste des pièces commandées, y compris les réceptions partielles.';
 
-        $currentList = 'ordered';
 
-        /*
-        |--------------------------------------------------------------------------
-        | VIEW
-        |--------------------------------------------------------------------------
-        */
+        $currentList =
+            'ordered';
+
 
         return view(
             'vehicle-part-requests.index',
@@ -336,87 +313,83 @@ class VehiclePartRequestController extends Controller
             )
         );
     }
+
 
     /*
     |--------------------------------------------------------------------------
     | PIÈCES REÇUES
     |--------------------------------------------------------------------------
+    |
+    | Seulement réception complète.
+    |
     */
 
     public function received(Request $request): View
     {
-        $query = VehiclePartRequest::query()
-            ->with([
-                'vehicle.customer',
-                'product',
-                'supplier',
-                'creator',
-            ])
-            ->where(
-                'status',
-                VehiclePartRequest::STATUS_RECEIVED
-            );
+        $query =
+            VehiclePartRequest::query()
+                ->with([
+                    'vehicle.customer',
+                    'product',
+                    'supplier',
+                    'creator',
+                ])
+                ->where(
+                    'status',
+                    VehiclePartRequest::STATUS_RECEIVED
+                );
 
-        /*
-        |--------------------------------------------------------------------------
-        | RECHERCHE
-        |--------------------------------------------------------------------------
-        */
 
         if ($request->filled('search')) {
 
-            $search = trim(
-                (string) $request->input('search')
+            $search =
+                trim((string) $request->input('search'));
+
+            $query->where(
+                function ($subQuery) use ($search) {
+
+                    $subQuery
+                        ->where(
+                            'part_name',
+                            'like',
+                            "%{$search}%"
+                        )
+                        ->orWhere(
+                            'reference',
+                            'like',
+                            "%{$search}%"
+                        )
+                        ->orWhereHas(
+                            'vehicle',
+                            function ($vehicleQuery) use ($search) {
+
+                                $vehicleQuery
+                                    ->where(
+                                        'plate_number',
+                                        'like',
+                                        "%{$search}%"
+                                    )
+                                    ->orWhere(
+                                        'vin',
+                                        'like',
+                                        "%{$search}%"
+                                    )
+                                    ->orWhere(
+                                        'brand',
+                                        'like',
+                                        "%{$search}%"
+                                    )
+                                    ->orWhere(
+                                        'model',
+                                        'like',
+                                        "%{$search}%"
+                                    );
+                            }
+                        );
+                }
             );
-
-            $query->where(function ($subQuery) use ($search) {
-
-                $subQuery
-                    ->where(
-                        'part_name',
-                        'like',
-                        "%{$search}%"
-                    )
-                    ->orWhere(
-                        'reference',
-                        'like',
-                        "%{$search}%"
-                    )
-                    ->orWhereHas(
-                        'vehicle',
-                        function ($vehicleQuery) use ($search) {
-
-                            $vehicleQuery
-                                ->where(
-                                    'plate_number',
-                                    'like',
-                                    "%{$search}%"
-                                )
-                                ->orWhere(
-                                    'vin',
-                                    'like',
-                                    "%{$search}%"
-                                )
-                                ->orWhere(
-                                    'brand',
-                                    'like',
-                                    "%{$search}%"
-                                )
-                                ->orWhere(
-                                    'model',
-                                    'like',
-                                    "%{$search}%"
-                                );
-                        }
-                    );
-            });
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | FILTRE VÉHICULE
-        |--------------------------------------------------------------------------
-        */
 
         if ($request->filled('vehicle_id')) {
 
@@ -426,52 +399,41 @@ class VehiclePartRequestController extends Controller
             );
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | RÉSULTATS
-        |--------------------------------------------------------------------------
-        */
 
-        $partRequests = $query
-            ->latest('received_at')
-            ->latest('id')
-            ->paginate(15);
+        $partRequests =
+            $query
+                ->latest('received_at')
+                ->latest('id')
+                ->paginate(15);
+
 
         $partRequests->appends(
             $request->query()
         );
 
-        /*
-        |--------------------------------------------------------------------------
-        | VÉHICULES
-        |--------------------------------------------------------------------------
-        */
 
-        $vehicles = Vehicle::query()
-            ->orderBy('brand')
-            ->orderBy('model')
-            ->get();
+        $vehicles =
+            Vehicle::query()
+                ->orderBy('brand')
+                ->orderBy('model')
+                ->get();
 
-        $statuses = VehiclePartRequest::statuses();
 
-        /*
-        |--------------------------------------------------------------------------
-        | TITRE
-        |--------------------------------------------------------------------------
-        */
+        $statuses =
+            VehiclePartRequest::statuses();
 
-        $pageTitle = 'Pièces reçues';
+
+        $pageTitle =
+            'Pièces reçues';
+
 
         $pageDescription =
-            'Liste des pièces commandées qui ont été reçues.';
+            'Liste des commandes entièrement reçues.';
 
-        $currentList = 'received';
 
-        /*
-        |--------------------------------------------------------------------------
-        | VIEW
-        |--------------------------------------------------------------------------
-        */
+        $currentList =
+            'received';
+
 
         return view(
             'vehicle-part-requests.index',
@@ -486,86 +448,79 @@ class VehiclePartRequestController extends Controller
         );
     }
 
+
     /*
     |--------------------------------------------------------------------------
-    | PIÈCES NON TROUVÉES
+    | NON TROUVÉES
     |--------------------------------------------------------------------------
     */
 
     public function notFound(Request $request): View
     {
-        $query = VehiclePartRequest::query()
-            ->with([
-                'vehicle.customer',
-                'product',
-                'supplier',
-                'creator',
-            ])
-            ->where(
-                'status',
-                VehiclePartRequest::STATUS_NOT_FOUND
-            );
+        $query =
+            VehiclePartRequest::query()
+                ->with([
+                    'vehicle.customer',
+                    'product',
+                    'supplier',
+                    'creator',
+                ])
+                ->where(
+                    'status',
+                    VehiclePartRequest::STATUS_NOT_FOUND
+                );
 
-        /*
-        |--------------------------------------------------------------------------
-        | RECHERCHE
-        |--------------------------------------------------------------------------
-        */
 
         if ($request->filled('search')) {
 
-            $search = trim(
-                (string) $request->input('search')
+            $search =
+                trim((string) $request->input('search'));
+
+            $query->where(
+                function ($subQuery) use ($search) {
+
+                    $subQuery
+                        ->where(
+                            'part_name',
+                            'like',
+                            "%{$search}%"
+                        )
+                        ->orWhere(
+                            'reference',
+                            'like',
+                            "%{$search}%"
+                        )
+                        ->orWhereHas(
+                            'vehicle',
+                            function ($vehicleQuery) use ($search) {
+
+                                $vehicleQuery
+                                    ->where(
+                                        'plate_number',
+                                        'like',
+                                        "%{$search}%"
+                                    )
+                                    ->orWhere(
+                                        'vin',
+                                        'like',
+                                        "%{$search}%"
+                                    )
+                                    ->orWhere(
+                                        'brand',
+                                        'like',
+                                        "%{$search}%"
+                                    )
+                                    ->orWhere(
+                                        'model',
+                                        'like',
+                                        "%{$search}%"
+                                    );
+                            }
+                        );
+                }
             );
-
-            $query->where(function ($subQuery) use ($search) {
-
-                $subQuery
-                    ->where(
-                        'part_name',
-                        'like',
-                        "%{$search}%"
-                    )
-                    ->orWhere(
-                        'reference',
-                        'like',
-                        "%{$search}%"
-                    )
-                    ->orWhereHas(
-                        'vehicle',
-                        function ($vehicleQuery) use ($search) {
-
-                            $vehicleQuery
-                                ->where(
-                                    'plate_number',
-                                    'like',
-                                    "%{$search}%"
-                                )
-                                ->orWhere(
-                                    'vin',
-                                    'like',
-                                    "%{$search}%"
-                                )
-                                ->orWhere(
-                                    'brand',
-                                    'like',
-                                    "%{$search}%"
-                                )
-                                ->orWhere(
-                                    'model',
-                                    'like',
-                                    "%{$search}%"
-                                );
-                        }
-                    );
-            });
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | FILTRE VÉHICULE
-        |--------------------------------------------------------------------------
-        */
 
         if ($request->filled('vehicle_id')) {
 
@@ -575,52 +530,41 @@ class VehiclePartRequestController extends Controller
             );
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | RÉSULTATS
-        |--------------------------------------------------------------------------
-        */
 
-        $partRequests = $query
-            ->latest('not_found_at')
-            ->latest('id')
-            ->paginate(15);
+        $partRequests =
+            $query
+                ->latest('not_found_at')
+                ->latest('id')
+                ->paginate(15);
+
 
         $partRequests->appends(
             $request->query()
         );
 
-        /*
-        |--------------------------------------------------------------------------
-        | VÉHICULES
-        |--------------------------------------------------------------------------
-        */
 
-        $vehicles = Vehicle::query()
-            ->orderBy('brand')
-            ->orderBy('model')
-            ->get();
+        $vehicles =
+            Vehicle::query()
+                ->orderBy('brand')
+                ->orderBy('model')
+                ->get();
 
-        $statuses = VehiclePartRequest::statuses();
 
-        /*
-        |--------------------------------------------------------------------------
-        | TITRE
-        |--------------------------------------------------------------------------
-        */
+        $statuses =
+            VehiclePartRequest::statuses();
 
-        $pageTitle = 'Pièces non trouvées';
+
+        $pageTitle =
+            'Pièces non trouvées';
+
 
         $pageDescription =
             'Liste des pièces recherchées mais déclarées introuvables.';
 
-        $currentList = 'not_found';
 
-        /*
-        |--------------------------------------------------------------------------
-        | VIEW
-        |--------------------------------------------------------------------------
-        */
+        $currentList =
+            'not_found';
+
 
         return view(
             'vehicle-part-requests.index',
@@ -634,6 +578,7 @@ class VehiclePartRequestController extends Controller
             )
         );
     }
+
 
     /*
     |--------------------------------------------------------------------------
@@ -643,51 +588,28 @@ class VehiclePartRequestController extends Controller
 
     public function create(Request $request): View
     {
-        /*
-        |--------------------------------------------------------------------------
-        | VÉHICULES
-        |--------------------------------------------------------------------------
-        */
+        $vehicles =
+            Vehicle::query()
+                ->orderBy('brand')
+                ->orderBy('model')
+                ->get();
 
-        $vehicles = Vehicle::query()
-            ->orderBy('brand')
-            ->orderBy('model')
-            ->get();
 
-        /*
-        |--------------------------------------------------------------------------
-        | PRODUITS
-        |--------------------------------------------------------------------------
-        */
+        $products =
+            Product::query()
+                ->orderBy('designation')
+                ->get();
 
-        $products = Product::query()
-            ->orderBy('designation')
-            ->get();
 
-        /*
-        |--------------------------------------------------------------------------
-        | FOURNISSEURS
-        |--------------------------------------------------------------------------
-        */
+        $suppliers =
+            Supplier::query()
+                ->orderBy('name')
+                ->get();
 
-        $suppliers = Supplier::query()
-            ->orderBy('name')
-            ->get();
-
-        /*
-        |--------------------------------------------------------------------------
-        | VÉHICULE PRÉ-SÉLECTIONNÉ
-        |--------------------------------------------------------------------------
-        */
 
         $selectedVehicleId =
-            $request->input('vehicle_id');
+            $request->vehicle_id;
 
-        /*
-        |--------------------------------------------------------------------------
-        | VIEW
-        |--------------------------------------------------------------------------
-        */
 
         return view(
             'vehicle-part-requests.create',
@@ -700,135 +622,132 @@ class VehiclePartRequestController extends Controller
         );
     }
 
+
     /*
     |--------------------------------------------------------------------------
     | STORE
     |--------------------------------------------------------------------------
-    |
-    | Création d'une nouvelle demande de pièce.
-    |
     */
 
     public function store(
         StoreVehiclePartRequestRequest $request
     ): RedirectResponse {
 
-        DB::transaction(function () use ($request) {
+        DB::transaction(
+            function () use ($request) {
 
-            /*
-            |--------------------------------------------------------------------------
-            | CRÉATION DEMANDE
-            |--------------------------------------------------------------------------
-            */
+                $partRequest =
+                    VehiclePartRequest::create([
 
-            $partRequest = VehiclePartRequest::create([
+                        'vehicle_id' =>
+                            $request->vehicle_id,
 
-                'vehicle_id' =>
-                    $request->vehicle_id,
+                        'product_id' =>
+                            $request->product_id,
 
-                'product_id' =>
-                    $request->product_id,
+                        'supplier_id' =>
+                            $request->supplier_id,
 
-                'supplier_id' =>
-                    $request->supplier_id,
+                        'created_by' =>
+                            Auth::id(),
 
-                'created_by' =>
-                    Auth::id(),
+                        'reference' =>
+                            $request->reference,
 
-                'reference' =>
-                    $request->reference,
+                        'part_name' =>
+                            $request->part_name,
 
-                'part_name' =>
-                    $request->part_name,
+                        'description' =>
+                            $request->description,
 
-                'description' =>
-                    $request->description,
+                        /*
+                        |--------------------------------------------------------------------------
+                        | QUANTITÉ DEMANDÉE
+                        |--------------------------------------------------------------------------
+                        */
 
-                'quantity' =>
-                    $request->quantity,
+                        'quantity' =>
+                            $request->quantity,
 
-                'unit' =>
-                    $request->unit,
+                        /*
+                        |--------------------------------------------------------------------------
+                        | RIEN REÇU À LA CRÉATION
+                        |--------------------------------------------------------------------------
+                        */
 
-                /*
-                |--------------------------------------------------------------------------
-                | STATUT INITIAL
-                |--------------------------------------------------------------------------
-                */
+                        'received_quantity' =>
+                            0,
 
-                'status' =>
-                    VehiclePartRequest::STATUS_SEARCHING,
+                        'unit' =>
+                            $request->unit,
 
-                'supplier_reference' =>
-                    $request->supplier_reference,
+                        'status' =>
+                            VehiclePartRequest::STATUS_SEARCHING,
 
-                'order_reference' =>
-                    null,
+                        'supplier_reference' =>
+                            $request->supplier_reference,
 
-                'estimated_price' =>
-                    $request->estimated_price,
+                        'order_reference' =>
+                            null,
 
-                'purchase_price' =>
-                    null,
+                        'estimated_price' =>
+                            $request->estimated_price,
 
-                /*
-                |--------------------------------------------------------------------------
-                | DATES
-                |--------------------------------------------------------------------------
-                */
+                        'purchase_price' =>
+                            null,
 
-                'requested_at' =>
-                    now(),
+                        'requested_at' =>
+                            now(),
 
-                'search_started_at' =>
-                    now(),
+                        'search_started_at' =>
+                            now(),
 
-                'ordered_at' =>
-                    null,
+                        'ordered_at' =>
+                            null,
 
-                'received_at' =>
-                    null,
+                        'received_at' =>
+                            null,
 
-                'not_found_at' =>
-                    null,
+                        'not_found_at' =>
+                            null,
 
-                'notes' =>
-                    $request->notes,
-            ]);
+                        'cancelled_at' =>
+                            null,
 
-            /*
-            |--------------------------------------------------------------------------
-            | HISTORIQUE
-            |--------------------------------------------------------------------------
-            */
+                        'notes' =>
+                            $request->notes,
+                    ]);
 
-            VehiclePartRequestHistory::create([
 
-                'vehicle_part_request_id' =>
-                    $partRequest->id,
+                VehiclePartRequestHistory::create([
 
-                'old_status' =>
-                    null,
+                    'vehicle_part_request_id' =>
+                        $partRequest->id,
 
-                'new_status' =>
-                    VehiclePartRequest::STATUS_SEARCHING,
+                    'old_status' =>
+                        null,
 
-                'comment' =>
-                    'Création de la demande et début de la recherche.',
+                    'new_status' =>
+                        VehiclePartRequest::STATUS_SEARCHING,
 
-                'changed_by' =>
-                    Auth::id(),
+                    'old_received_quantity' =>
+                        null,
 
-                'changed_at' =>
-                    now(),
-            ]);
-        });
+                    'new_received_quantity' =>
+                        0,
 
-        /*
-        |--------------------------------------------------------------------------
-        | REDIRECTION
-        |--------------------------------------------------------------------------
-        */
+                    'comment' =>
+                        'Création de la demande et début de la recherche.',
+
+                    'changed_by' =>
+                        Auth::id(),
+
+                    'changed_at' =>
+                        now(),
+                ]);
+            }
+        );
+
 
         return redirect()
             ->route(
@@ -840,6 +759,7 @@ class VehiclePartRequestController extends Controller
             );
     }
 
+
     /*
     |--------------------------------------------------------------------------
     | SHOW
@@ -850,12 +770,6 @@ class VehiclePartRequestController extends Controller
         VehiclePartRequest $vehiclePartRequest
     ): View {
 
-        /*
-        |--------------------------------------------------------------------------
-        | RELATIONS
-        |--------------------------------------------------------------------------
-        */
-
         $vehiclePartRequest->load([
             'vehicle.customer',
             'product',
@@ -864,37 +778,28 @@ class VehiclePartRequestController extends Controller
             'histories.user',
         ]);
 
-        /*
-        |--------------------------------------------------------------------------
-        | STATUTS AUTORISÉS
-        |--------------------------------------------------------------------------
-        */
 
-        $availableStatuses = collect(
-            $vehiclePartRequest->availableNextStatuses()
-        )->mapWithKeys(function ($status) {
+        $availableStatuses =
+            collect(
+                $vehiclePartRequest
+                    ->availableNextStatuses()
+            )
+            ->mapWithKeys(
+                function ($status) {
 
-            return [
-                $status =>
-                    VehiclePartRequest::statuses()[$status],
-            ];
-        });
+                    return [
+                        $status =>
+                            VehiclePartRequest::statuses()[$status],
+                    ];
+                }
+            );
 
-        /*
-        |--------------------------------------------------------------------------
-        | FOURNISSEURS
-        |--------------------------------------------------------------------------
-        */
 
-        $suppliers = Supplier::query()
-            ->orderBy('name')
-            ->get();
+        $suppliers =
+            Supplier::query()
+                ->orderBy('name')
+                ->get();
 
-        /*
-        |--------------------------------------------------------------------------
-        | VIEW
-        |--------------------------------------------------------------------------
-        */
 
         return view(
             'vehicle-part-requests.show',
@@ -906,6 +811,7 @@ class VehiclePartRequestController extends Controller
         );
     }
 
+
     /*
     |--------------------------------------------------------------------------
     | EDIT
@@ -916,42 +822,24 @@ class VehiclePartRequestController extends Controller
         VehiclePartRequest $vehiclePartRequest
     ): View {
 
-        /*
-        |--------------------------------------------------------------------------
-        | VÉHICULES
-        |--------------------------------------------------------------------------
-        */
+        $vehicles =
+            Vehicle::query()
+                ->orderBy('brand')
+                ->orderBy('model')
+                ->get();
 
-        $vehicles = Vehicle::query()
-            ->orderBy('brand')
-            ->orderBy('model')
-            ->get();
 
-        /*
-        |--------------------------------------------------------------------------
-        | PRODUITS
-        |--------------------------------------------------------------------------
-        */
+        $products =
+            Product::query()
+                ->orderBy('designation')
+                ->get();
 
-        $products = Product::query()
-            ->orderBy('designation')
-            ->get();
 
-        /*
-        |--------------------------------------------------------------------------
-        | FOURNISSEURS
-        |--------------------------------------------------------------------------
-        */
+        $suppliers =
+            Supplier::query()
+                ->orderBy('name')
+                ->get();
 
-        $suppliers = Supplier::query()
-            ->orderBy('name')
-            ->get();
-
-        /*
-        |--------------------------------------------------------------------------
-        | VIEW
-        |--------------------------------------------------------------------------
-        */
 
         return view(
             'vehicle-part-requests.edit',
@@ -964,9 +852,10 @@ class VehiclePartRequestController extends Controller
         );
     }
 
+
     /*
     |--------------------------------------------------------------------------
-    | UPDATE
+    | UPDATE INFORMATIONS GÉNÉRALES
     |--------------------------------------------------------------------------
     */
 
@@ -977,8 +866,13 @@ class VehiclePartRequestController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | MODIFICATION
+        | IMPORTANT
         |--------------------------------------------------------------------------
+        |
+        | received_quantity n'est PAS modifiée ici.
+        |
+        | Elle est modifiée uniquement par updateReceivedQuantity().
+        |
         */
 
         $vehiclePartRequest->update([
@@ -1023,11 +917,6 @@ class VehiclePartRequestController extends Controller
                 $request->notes,
         ]);
 
-        /*
-        |--------------------------------------------------------------------------
-        | REDIRECTION
-        |--------------------------------------------------------------------------
-        */
 
         return redirect()
             ->route(
@@ -1040,22 +929,11 @@ class VehiclePartRequestController extends Controller
             );
     }
 
+
     /*
     |--------------------------------------------------------------------------
     | CHANGE STATUS
     |--------------------------------------------------------------------------
-    |
-    | IMPORTANT :
-    |
-    | Lorsque la demande devient REÇUE :
-    |
-    | 1. Le statut de la demande devient REÇUE.
-    | 2. La date received_at est enregistrée.
-    | 3. La quantité reçue du produit augmente.
-    | 4. La quantité disponible du produit augmente.
-    | 5. Le produit passe automatiquement à DISPONIBLE.
-    | 6. Un mouvement de stock entrant est enregistré.
-    |
     */
 
     public function changeStatus(
@@ -1063,17 +941,10 @@ class VehiclePartRequestController extends Controller
         VehiclePartRequest $vehiclePartRequest
     ): RedirectResponse {
 
-        /*
-        |--------------------------------------------------------------------------
-        | VALIDATION
-        |--------------------------------------------------------------------------
-        */
-
         $request->validate([
 
             'status' => [
                 'required',
-
                 Rule::in(
                     array_keys(
                         VehiclePartRequest::statuses()
@@ -1105,36 +976,418 @@ class VehiclePartRequestController extends Controller
             ],
         ]);
 
-        /*
-        |--------------------------------------------------------------------------
-        | STATUTS
-        |--------------------------------------------------------------------------
-        */
 
         $newStatus =
-            $request->input('status');
+            $request->status;
 
         $oldStatus =
             $vehiclePartRequest->status;
 
+
         /*
         |--------------------------------------------------------------------------
-        | VÉRIFICATION DU CHANGEMENT DE STATUT
+        | ON NE CHANGE PAS MANUELLEMENT EN RÉCEPTION PARTIELLE / REÇUE
+        |--------------------------------------------------------------------------
+        |
+        | Ces statuts sont pilotés automatiquement par la quantité reçue.
+        |
+        */
+
+        if (
+            in_array(
+                $newStatus,
+                [
+                    VehiclePartRequest::STATUS_PARTIAL_RECEIVED,
+                    VehiclePartRequest::STATUS_RECEIVED,
+                ],
+                true
+            )
+        ) {
+
+            return back()->with(
+                'error',
+                'Pour enregistrer une réception, utilisez le formulaire Quantité reçue.'
+            );
+        }
+
+
+        if (
+            !$vehiclePartRequest
+                ->canChangeTo($newStatus)
+        ) {
+
+            return back()->with(
+                'error',
+                'Ce changement de statut n’est pas autorisé.'
+            );
+        }
+
+
+        DB::transaction(
+            function () use (
+                $request,
+                $vehiclePartRequest,
+                $oldStatus,
+                $newStatus
+            ) {
+
+                $updateData = [
+
+                    'status' =>
+                        $newStatus,
+                ];
+
+
+                switch ($newStatus) {
+
+                    case VehiclePartRequest::STATUS_SEARCHING:
+
+                        $updateData['search_started_at'] =
+                            $vehiclePartRequest
+                                ->search_started_at
+                            ?? now();
+
+                        $updateData['not_found_at'] =
+                            null;
+
+                        break;
+
+
+                    case VehiclePartRequest::STATUS_ORDERED:
+
+                        $updateData['ordered_at'] =
+                            $vehiclePartRequest->ordered_at
+                            ?? now();
+
+                        $updateData['not_found_at'] =
+                            null;
+
+
+                        if (
+                            $request->filled(
+                                'supplier_id'
+                            )
+                        ) {
+
+                            $updateData['supplier_id'] =
+                                $request->supplier_id;
+                        }
+
+
+                        if (
+                            $request->filled(
+                                'order_reference'
+                            )
+                        ) {
+
+                            $updateData['order_reference'] =
+                                $request->order_reference;
+                        }
+
+
+                        if (
+                            $request->filled(
+                                'purchase_price'
+                            )
+                        ) {
+
+                            $updateData['purchase_price'] =
+                                $request->purchase_price;
+                        }
+
+                        break;
+
+
+                    case VehiclePartRequest::STATUS_NOT_FOUND:
+
+                        $updateData['not_found_at'] =
+                            now();
+
+                        break;
+
+
+                    case VehiclePartRequest::STATUS_CANCELLED:
+
+                        $updateData['cancelled_at'] =
+                            now();
+
+                        break;
+                }
+
+
+                $vehiclePartRequest
+                    ->update($updateData);
+
+
+                VehiclePartRequestHistory::create([
+
+                    'vehicle_part_request_id' =>
+                        $vehiclePartRequest->id,
+
+                    'old_status' =>
+                        $oldStatus,
+
+                    'new_status' =>
+                        $newStatus,
+
+                    'old_received_quantity' =>
+                        $vehiclePartRequest
+                            ->received_quantity,
+
+                    'new_received_quantity' =>
+                        $vehiclePartRequest
+                            ->received_quantity,
+
+                    'comment' =>
+                        $request->comment,
+
+                    'changed_by' =>
+                        Auth::id(),
+
+                    'changed_at' =>
+                        now(),
+                ]);
+            }
+        );
+
+
+        return redirect()
+            ->route(
+                'vehicle-part-requests.show',
+                $vehiclePartRequest
+            )
+            ->with(
+                'success',
+                'Le statut de la pièce a été mis à jour.'
+            );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | UPDATE QUANTITÉ REÇUE
+    |--------------------------------------------------------------------------
+    |
+    | Exemple :
+    |
+    | commandé = 10
+    | ancien reçu = 5
+    | nouveau reçu = 8
+    |
+    | Différence à ajouter au stock = 3
+    |
+    */
+
+    public function updateReceivedQuantity(
+        Request $request,
+        VehiclePartRequest $vehiclePartRequest
+    ): RedirectResponse {
+
+        /*
+        |--------------------------------------------------------------------------
+        | VALIDATION
+        |--------------------------------------------------------------------------
+        |
+        | received_now = quantité reçue dans CETTE livraison uniquement.
+        |
+        | Exemple :
+        |
+        | commandée        = 30
+        | déjà reçue       = 20
+        | reçue maintenant = 8
+        |
+        | total reçu après = 28
+        | reste après      = 2
+        |
+        */
+
+        $request->validate(
+            [
+                'received_now' => [
+                    'required',
+                    'numeric',
+                    'gt:0',
+                ],
+
+                /*
+                |--------------------------------------------------------------------------
+                | DÉPÔT
+                |--------------------------------------------------------------------------
+                |
+                | Facultatif.
+                |
+                | S'il est envoyé, le stock du dépôt reçoit seulement la quantité
+                | de cette nouvelle livraison.
+                |
+                */
+
+                'depot_id' => [
+                    'nullable',
+                    'exists:depots,id',
+                ],
+
+                'comment' => [
+                    'nullable',
+                    'string',
+                    'max:2000',
+                ],
+            ],
+            [
+                'received_now.required' =>
+                    'La quantité reçue maintenant est obligatoire.',
+
+                'received_now.numeric' =>
+                    'La quantité reçue maintenant doit être un nombre.',
+
+                'received_now.gt' =>
+                    'La quantité reçue maintenant doit être supérieure à zéro.',
+
+                'depot_id.exists' =>
+                    'Le dépôt sélectionné est invalide.',
+            ]
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | AUTORISER UNIQUEMENT UNE COMMANDE OU UNE RÉCEPTION PARTIELLE
         |--------------------------------------------------------------------------
         */
 
         if (
-            !$vehiclePartRequest->canChangeTo(
-                $newStatus
+            !in_array(
+                $vehiclePartRequest->status,
+                [
+                    VehiclePartRequest::STATUS_ORDERED,
+                    VehiclePartRequest::STATUS_PARTIAL_RECEIVED,
+                ],
+                true
             )
         ) {
+            return back()->with(
+                'error',
+                'Cette pièce ne peut pas recevoir de quantité dans son statut actuel.'
+            );
+        }
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | QUANTITÉS DE LA COMMANDE
+        |--------------------------------------------------------------------------
+        |
+        | quantity          = quantité commandée
+        | received_quantity = quantité cumulée déjà reçue
+        | received_now      = quantité reçue dans cette livraison
+        |
+        */
+
+        $orderedQuantity =
+            (float) $vehiclePartRequest->quantity;
+
+        $oldReceivedQuantity =
+            (float) ($vehiclePartRequest->received_quantity ?? 0);
+
+        $receivedNow =
+            (float) $request->received_now;
+
+        $remainingBeforeReception =
+            max(
+                0,
+                $orderedQuantity - $oldReceivedQuantity
+            );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | INTERDIRE DE RECEVOIR PLUS QUE LE RESTE
+        |--------------------------------------------------------------------------
+        |
+        | Exemple :
+        |
+        | commandée   = 30
+        | déjà reçue  = 20
+        | reste       = 10
+        |
+        | received_now ne peut pas dépasser 10.
+        |
+        */
+
+        if ($receivedNow > $remainingBeforeReception) {
             return back()
+                ->withInput()
                 ->with(
                     'error',
-                    'Ce changement de statut n’est pas autorisé.'
+                    'Vous ne pouvez recevoir que '
+                    . number_format(
+                        $remainingBeforeReception,
+                        2,
+                        ',',
+                        ' '
+                    )
+                    . ' '
+                    . $vehiclePartRequest->unit
+                    . ' au maximum.'
                 );
         }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | NOUVEAU TOTAL REÇU
+        |--------------------------------------------------------------------------
+        */
+
+        $newReceivedQuantity =
+            $oldReceivedQuantity + $receivedNow;
+
+        $remainingAfterReception =
+            max(
+                0,
+                $orderedQuantity - $newReceivedQuantity
+            );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | DIFFÉRENCE À APPLIQUER AU STOCK
+        |--------------------------------------------------------------------------
+        |
+        | Ici la différence est simplement la nouvelle livraison.
+        |
+        | Exemple :
+        |
+        | déjà reçue       = 20
+        | reçue maintenant = 8
+        |
+        | stock à ajouter  = +8
+        |
+        */
+
+        $quantityDifference =
+            $receivedNow;
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | STATUT AUTOMATIQUE
+        |--------------------------------------------------------------------------
+        */
+
+        $oldStatus =
+            $vehiclePartRequest->status;
+
+        if ($newReceivedQuantity >= $orderedQuantity) {
+
+            $newStatus =
+                VehiclePartRequest::STATUS_RECEIVED;
+
+        } else {
+
+            $newStatus =
+                VehiclePartRequest::STATUS_PARTIAL_RECEIVED;
+        }
+
 
         /*
         |--------------------------------------------------------------------------
@@ -1142,529 +1395,407 @@ class VehiclePartRequestController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        DB::transaction(function () use (
-            $request,
-            $vehiclePartRequest,
-            $oldStatus,
-            $newStatus
-        ) {
-
-            /*
-            |--------------------------------------------------------------------------
-            | VERROUILLER LA DEMANDE
-            |--------------------------------------------------------------------------
-            |
-            | Permet d'éviter que deux utilisateurs réceptionnent la même pièce
-            | exactement au même moment.
-            |
-            */
-
-            $lockedPartRequest =
-                VehiclePartRequest::query()
-                    ->lockForUpdate()
-                    ->findOrFail(
-                        $vehiclePartRequest->id
-                    );
-
-            /*
-            |--------------------------------------------------------------------------
-            | DONNÉES À METTRE À JOUR
-            |--------------------------------------------------------------------------
-            */
-
-            $updateData = [
-
-                'status' =>
-                    $newStatus,
-            ];
-
-            /*
-            |--------------------------------------------------------------------------
-            | DATES AUTOMATIQUES
-            |--------------------------------------------------------------------------
-            */
-
-            switch ($newStatus) {
+        DB::transaction(
+            function () use (
+                $request,
+                $vehiclePartRequest,
+                $orderedQuantity,
+                $oldReceivedQuantity,
+                $receivedNow,
+                $newReceivedQuantity,
+                $quantityDifference,
+                $oldStatus,
+                $newStatus
+            ) {
 
                 /*
                 |--------------------------------------------------------------------------
-                | EN RECHERCHE
+                | RETROUVER ET VERROUILLER LE PRODUIT
                 |--------------------------------------------------------------------------
+                |
+                | Priorité :
+                |
+                | 1. product_id
+                | 2. référence
+                |
                 */
 
-                case VehiclePartRequest::STATUS_SEARCHING:
+                $product = null;
 
-                    $updateData['search_started_at'] =
-                        $lockedPartRequest->search_started_at
-                        ?? now();
+                if ($vehiclePartRequest->product_id) {
 
-                    $updateData['not_found_at'] =
-                        null;
+                    $product =
+                        Product::query()
+                            ->lockForUpdate()
+                            ->find(
+                                $vehiclePartRequest->product_id
+                            );
+                }
 
-                    break;
+                if (
+                    !$product
+                    &&
+                    !empty($vehiclePartRequest->reference)
+                ) {
+                    $product =
+                        Product::query()
+                            ->where(
+                                'reference',
+                                $vehiclePartRequest->reference
+                            )
+                            ->lockForUpdate()
+                            ->first();
+                }
+
 
                 /*
                 |--------------------------------------------------------------------------
-                | COMMANDÉE
+                | SYNCHRONISATION DU STOCK PRODUIT
                 |--------------------------------------------------------------------------
+                |
+                | RÈGLE MÉTIER :
+                |
+                | Cette réception correspond à une quantité déjà comptée dans
+                | initial_quantity.
+                |
+                | Donc :
+                |
+                | initial_quantity  = NE CHANGE PAS
+                | received_quantity = augmente de received_now
+                | quantity          = augmente de received_now
+                |
                 */
 
-                case VehiclePartRequest::STATUS_ORDERED:
-
-                    $updateData['ordered_at'] =
-                        now();
-
-                    $updateData['not_found_at'] =
-                        null;
+                if ($product) {
 
                     /*
                     |--------------------------------------------------------------------------
-                    | FOURNISSEUR
+                    | LIER LE PRODUIT À LA DEMANDE SI RETROUVÉ PAR RÉFÉRENCE
                     |--------------------------------------------------------------------------
                     */
 
-                    if (
-                        $request->filled(
-                            'supplier_id'
-                        )
-                    ) {
-
-                        $updateData['supplier_id'] =
-                            $request->supplier_id;
+                    if (!$vehiclePartRequest->product_id) {
+                        $vehiclePartRequest->product_id =
+                            $product->id;
                     }
+
 
                     /*
                     |--------------------------------------------------------------------------
-                    | RÉFÉRENCE DE COMMANDE
+                    | VALEURS ACTUELLES
                     |--------------------------------------------------------------------------
                     */
 
-                    if (
-                        $request->filled(
-                            'order_reference'
-                        )
-                    ) {
+                    $currentAvailableQuantity =
+                        (float) ($product->quantity ?? 0);
 
-                        $updateData['order_reference'] =
-                            $request->order_reference;
+                    $currentProductReceivedQuantity =
+                        (float) ($product->received_quantity ?? 0);
+
+                    $productInitialQuantity =
+                        (float) ($product->initial_quantity ?? 0);
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | NOUVELLES VALEURS
+                    |--------------------------------------------------------------------------
+                    */
+
+                    $newProductAvailableQuantity =
+                        $currentAvailableQuantity
+                        +
+                        $quantityDifference;
+
+                    $newProductReceivedQuantity =
+                        $currentProductReceivedQuantity
+                        +
+                        $quantityDifference;
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | SÉCURITÉ : NE PAS DÉPASSER LA QUANTITÉ INITIALE
+                    |--------------------------------------------------------------------------
+                    |
+                    | Cette protection est cohérente avec votre logique de pièce
+                    | commandée déjà comptée dans initial_quantity.
+                    |
+                    */
+
+                    if (
+                        $productInitialQuantity > 0
+                        &&
+                        $newProductReceivedQuantity > $productInitialQuantity
+                    ) {
+                        throw new \RuntimeException(
+                            'Impossible d’enregistrer cette réception : '
+                            . 'la quantité reçue du produit dépasserait sa quantité initiale.'
+                        );
                     }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | MISE À JOUR PRODUIT
+                    |--------------------------------------------------------------------------
+                    */
+
+                    $product->quantity =
+                        $newProductAvailableQuantity;
+
+                    $product->received_quantity =
+                        $newProductReceivedQuantity;
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | IMPORTANT : initial_quantity NE CHANGE PAS
+                    |--------------------------------------------------------------------------
+                    */
+
+                    $product->status =
+                        'disponible';
+
 
                     /*
                     |--------------------------------------------------------------------------
                     | PRIX D'ACHAT
                     |--------------------------------------------------------------------------
+                    |
+                    | On garde le prix le plus élevé.
+                    |
                     */
 
                     if (
-                        $request->filled(
-                            'purchase_price'
-                        )
+                        $vehiclePartRequest->purchase_price !== null
                     ) {
 
-                        $updateData['purchase_price'] =
-                            $request->purchase_price;
+                        $incomingPrice =
+                            (float) $vehiclePartRequest->purchase_price;
+
+                        $currentPrice =
+                            (float) ($product->purchase_price ?? 0);
+
+                        if ($incomingPrice > $currentPrice) {
+
+                            $product->purchase_price =
+                                $incomingPrice;
+
+                            $coefPurchase =
+                                (float) ($product->coef_purchase ?? 0);
+
+                            $coefSale =
+                                (float) ($product->coef_sale ?? 0);
+
+                            $product->cost_price =
+                                $incomingPrice * $coefPurchase;
+
+                            $product->sale_price =
+                                $product->cost_price * $coefSale;
+                        }
                     }
 
-                    break;
+                    $product->save();
 
-                /*
-                |--------------------------------------------------------------------------
-                | REÇUE
-                |--------------------------------------------------------------------------
-                */
-
-                case VehiclePartRequest::STATUS_RECEIVED:
-
-                    $updateData['received_at'] =
-                        now();
-
-                    break;
-
-                /*
-                |--------------------------------------------------------------------------
-                | NON TROUVÉE
-                |--------------------------------------------------------------------------
-                */
-
-                case VehiclePartRequest::STATUS_NOT_FOUND:
-
-                    $updateData['not_found_at'] =
-                        now();
-
-                    break;
-
-                /*
-                |--------------------------------------------------------------------------
-                | ANNULÉE
-                |--------------------------------------------------------------------------
-                */
-
-                case VehiclePartRequest::STATUS_CANCELLED:
-
-                    $updateData['cancelled_at'] =
-                        now();
-
-                    break;
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | MISE À JOUR DE LA DEMANDE
-            |--------------------------------------------------------------------------
-            */
-
-            $lockedPartRequest->update(
-                $updateData
-            );
-
-            /*
-            |--------------------------------------------------------------------------
-            | TRAITEMENT DE LA RÉCEPTION
-            |--------------------------------------------------------------------------
-            |
-            | IMPORTANT :
-            |
-            | Cette partie ne doit s'exécuter QUE lorsque la demande vient
-            | réellement de passer au statut REÇUE.
-            |
-            | Elle ne doit jamais s'exécuter deux fois pour la même demande.
-            |
-            */
-
-            if (
-                $newStatus ===
-                    VehiclePartRequest::STATUS_RECEIVED
-
-                &&
-
-                $oldStatus !==
-                    VehiclePartRequest::STATUS_RECEIVED
-            ) {
-
-                /*
-                |--------------------------------------------------------------------------
-                | PRODUIT ASSOCIÉ
-                |--------------------------------------------------------------------------
-                */
-
-                if (
-                    !empty(
-                        $lockedPartRequest->product_id
-                    )
-                ) {
 
                     /*
                     |--------------------------------------------------------------------------
-                    | VERROUILLER LE PRODUIT
+                    | STOCK DU DÉPÔT
                     |--------------------------------------------------------------------------
                     */
 
-                    $product = Product::query()
-                        ->lockForUpdate()
-                        ->find(
-                            $lockedPartRequest->product_id
-                        );
+                    if ($request->filled('depot_id')) {
+
+                        $depotStock =
+                            ProductDepotStock::query()
+                                ->where(
+                                    'product_id',
+                                    $product->id
+                                )
+                                ->where(
+                                    'depot_id',
+                                    $request->depot_id
+                                )
+                                ->lockForUpdate()
+                                ->first();
+
+                        if (!$depotStock) {
+
+                            $depotStock =
+                                ProductDepotStock::create([
+                                    'product_id' =>
+                                        $product->id,
+
+                                    'depot_id' =>
+                                        $request->depot_id,
+
+                                    'quantity' =>
+                                        0,
+                                ]);
+                        }
+
+                        $depotStock->quantity =
+                            (float) $depotStock->quantity
+                            +
+                            $quantityDifference;
+
+                        $depotStock->save();
+                    }
+
 
                     /*
                     |--------------------------------------------------------------------------
-                    | SI LE PRODUIT EXISTE
+                    | MOUVEMENT DE STOCK
                     |--------------------------------------------------------------------------
                     */
 
-                    if ($product) {
+                    StockMovement::create([
+                        'product_id' =>
+                            $product->id,
 
-                        /*
-                        |--------------------------------------------------------------------------
-                        | QUANTITÉ REÇUE
-                        |--------------------------------------------------------------------------
-                        |
-                        | Dans votre fonctionnement actuel :
-                        |
-                        | quantité demandée = quantité commandée = quantité reçue
-                        |
-                        | Exemple :
-                        |
-                        | Demande = 5 pièces
-                        | Passage à REÇUE
-                        | => réception de 5 pièces.
-                        |
-                        */
+                        'type' =>
+                            'in',
 
-                        $receivedQuantity =
-                            (float) (
-                                $lockedPartRequest->quantity
-                                ?? 0
-                            );
+                        'quantity' =>
+                            $quantityDifference,
 
-                        /*
-                        |--------------------------------------------------------------------------
-                        | VALIDATION DE SÉCURITÉ
-                        |--------------------------------------------------------------------------
-                        */
+                        'source' =>
+                            'Réception commande véhicule',
 
-                        if (
-                            $receivedQuantity <= 0
-                        ) {
+                        'reference' =>
+                            $vehiclePartRequest->order_reference
+                            ??
+                            $vehiclePartRequest->reference,
 
-                            throw ValidationException::withMessages([
-
-                                'quantity' =>
-                                    'Impossible de réceptionner cette pièce : la quantité doit être supérieure à zéro.',
-                            ]);
-                        }
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | ANCIENNES QUANTITÉS
-                        |--------------------------------------------------------------------------
-                        */
-
-                        $currentReceivedQuantity =
-                            (float) (
-                                $product->received_quantity
-                                ?? 0
-                            );
-
-                        $currentAvailableQuantity =
-                            (float) (
-                                $product->quantity
-                                ?? 0
-                            );
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | QUANTITÉ INITIALE
-                        |--------------------------------------------------------------------------
-                        */
-
-                        $initialQuantity =
-                            (float) (
-                                $product->initial_quantity
-                                ?? 0
-                            );
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | QUANTITÉ RESTANTE À RECEVOIR
-                        |--------------------------------------------------------------------------
-                        |
-                        | Exemple :
-                        |
-                        | initial_quantity  = 5
-                        | received_quantity = 3
-                        |
-                        | restant = 2
-                        |
-                        */
-
-                        $remainingQuantity =
-                            max(
-                                0,
-                                $initialQuantity
-                                - $currentReceivedQuantity
-                            );
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | QUANTITÉ À AJOUTER
-                        |--------------------------------------------------------------------------
-                        |
-                        | Si initial_quantity existe, on ne dépasse jamais
-                        | la quantité initialement prévue.
-                        |
-                        */
-
-                        if (
-                            $initialQuantity > 0
-                        ) {
-
-                            $quantityToReceive =
-                                min(
-                                    $receivedQuantity,
-                                    $remainingQuantity
-                                );
-
-                        } else {
-
-                            /*
-                            |--------------------------------------------------------------------------
-                            | ANCIEN PRODUIT SANS QUANTITÉ INITIALE
-                            |--------------------------------------------------------------------------
-                            |
-                            | Pour assurer la compatibilité avec d'anciens produits.
-                            |
-                            */
-
-                            $quantityToReceive =
-                                $receivedQuantity;
-                        }
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | SI AUCUNE QUANTITÉ NE RESTE À RECEVOIR
-                        |--------------------------------------------------------------------------
-                        */
-
-                        if (
-                            $quantityToReceive <= 0
-                        ) {
-
-                            /*
-                            |--------------------------------------------------------------------------
-                            | LE PRODUIT PEUT TOUT DE MÊME ÊTRE DISPONIBLE
-                            |--------------------------------------------------------------------------
-                            */
-
-                            if (
-                                $currentAvailableQuantity > 0
-                            ) {
-
-                                $product->status =
-                                    'disponible';
-
-                                $product->save();
-                            }
-
-                        } else {
-
-                            /*
-                            |--------------------------------------------------------------------------
-                            | NOUVELLE QUANTITÉ REÇUE
-                            |--------------------------------------------------------------------------
-                            */
-
-                            $newReceivedQuantity =
-                                $currentReceivedQuantity
-                                + $quantityToReceive;
-
-                            /*
-                            |--------------------------------------------------------------------------
-                            | NOUVELLE QUANTITÉ DISPONIBLE
-                            |--------------------------------------------------------------------------
-                            */
-
-                            $newAvailableQuantity =
-                                $currentAvailableQuantity
-                                + $quantityToReceive;
-
-                            /*
-                            |--------------------------------------------------------------------------
-                            | METTRE À JOUR LE PRODUIT
-                            |--------------------------------------------------------------------------
-                            |
-                            | Exemple :
-                            |
-                            | initial_quantity  = 5
-                            | received_quantity = 0
-                            | quantity          = 0
-                            |
-                            | Réception de 5 :
-                            |
-                            | initial_quantity  = 5
-                            | received_quantity = 5
-                            | quantity          = 5
-                            | status            = disponible
-                            |
-                            */
-
-                            $product->received_quantity =
-                                $newReceivedQuantity;
-
-                            $product->quantity =
-                                $newAvailableQuantity;
-
-                            /*
-                            |--------------------------------------------------------------------------
-                            | IMPORTANT : STATUT PRODUIT
-                            |--------------------------------------------------------------------------
-                            |
-                            | Dès qu'au moins une pièce physique est disponible,
-                            | le produit devient DISPONIBLE.
-                            |
-                            */
-
-                            if (
-                                $newAvailableQuantity > 0
-                            ) {
-
-                                $product->status =
-                                    'disponible';
-
-                            } else {
-
-                                $product->status =
-                                    'non_disponible';
-                            }
-
-                            /*
-                            |--------------------------------------------------------------------------
-                            | SAUVEGARDE
-                            |--------------------------------------------------------------------------
-                            */
-
-                            $product->save();
-
-                            /*
-                            |--------------------------------------------------------------------------
-                            | MOUVEMENT DE STOCK
-                            |--------------------------------------------------------------------------
-                            |
-                            | On conserve une trace de l'entrée de stock.
-                            |
-                            */
-
-                            StockMovement::create([
-
-                                'product_id' =>
-                                    $product->id,
-
-                                'type' =>
-                                    'in',
-
-                                'quantity' =>
-                                    $quantityToReceive,
-
-                                'source' =>
-                                    'Réception pièce véhicule',
-
-                                'reference' =>
-                                    $product->reference,
-
-                                'user_id' =>
-                                    Auth::id(),
-                            ]);
-                        }
-                    }
+                        'user_id' =>
+                            Auth::id(),
+                    ]);
                 }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | MISE À JOUR DE LA DEMANDE
+                |--------------------------------------------------------------------------
+                */
+
+                $vehiclePartRequest->received_quantity =
+                    $newReceivedQuantity;
+
+                $vehiclePartRequest->status =
+                    $newStatus;
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | DATE DE RÉCEPTION
+                |--------------------------------------------------------------------------
+                |
+                | On conserve la date de la première réception.
+                |
+                */
+
+                if (!$vehiclePartRequest->received_at) {
+                    $vehiclePartRequest->received_at =
+                        now();
+                }
+
+                $vehiclePartRequest->save();
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | HISTORIQUE
+                |--------------------------------------------------------------------------
+                */
+
+                $defaultComment =
+                    'Nouvelle réception : '
+                    . number_format(
+                        $receivedNow,
+                        2,
+                        ',',
+                        ' '
+                    )
+                    . ' '
+                    . $vehiclePartRequest->unit
+                    . '. Total reçu : '
+                    . number_format(
+                        $newReceivedQuantity,
+                        2,
+                        ',',
+                        ' '
+                    )
+                    . ' / '
+                    . number_format(
+                        $orderedQuantity,
+                        2,
+                        ',',
+                        ' '
+                    )
+                    . '.';
+
+                VehiclePartRequestHistory::create([
+                    'vehicle_part_request_id' =>
+                        $vehiclePartRequest->id,
+
+                    'old_status' =>
+                        $oldStatus,
+
+                    'new_status' =>
+                        $newStatus,
+
+                    'old_received_quantity' =>
+                        $oldReceivedQuantity,
+
+                    'new_received_quantity' =>
+                        $newReceivedQuantity,
+
+                    'comment' =>
+                        $request->filled('comment')
+                            ? $request->comment
+                            : $defaultComment,
+
+                    'changed_by' =>
+                        Auth::id(),
+
+                    'changed_at' =>
+                        now(),
+                ]);
             }
+        );
 
-            /*
-            |--------------------------------------------------------------------------
-            | HISTORIQUE DU CHANGEMENT DE STATUT
-            |--------------------------------------------------------------------------
-            */
 
-            VehiclePartRequestHistory::create([
+        /*
+        |--------------------------------------------------------------------------
+        | MESSAGE DE SUCCÈS
+        |--------------------------------------------------------------------------
+        */
 
-                'vehicle_part_request_id' =>
-                    $lockedPartRequest->id,
+        if (
+            $newStatus
+            ===
+            VehiclePartRequest::STATUS_RECEIVED
+        ) {
 
-                'old_status' =>
-                    $oldStatus,
+            $message =
+                'Réception complète enregistrée avec succès.';
 
-                'new_status' =>
-                    $newStatus,
+        } else {
 
-                'comment' =>
-                    $request->comment,
+            $message =
+                'Réception partielle enregistrée. Reste à recevoir : '
+                . number_format(
+                    $remainingAfterReception,
+                    2,
+                    ',',
+                    ' '
+                )
+                . ' '
+                . $vehiclePartRequest->unit
+                . '.';
+        }
 
-                'changed_by' =>
-                    Auth::id(),
-
-                'changed_at' =>
-                    now(),
-            ]);
-        });
 
         /*
         |--------------------------------------------------------------------------
@@ -1679,11 +1810,10 @@ class VehiclePartRequestController extends Controller
             )
             ->with(
                 'success',
-                $newStatus === VehiclePartRequest::STATUS_RECEIVED
-                    ? 'La pièce a été reçue. Le produit et le stock disponible ont été mis à jour automatiquement.'
-                    : 'Le statut de la pièce a été mis à jour.'
+                $message
             );
     }
+
 
     /*
     |--------------------------------------------------------------------------
@@ -1695,14 +1825,10 @@ class VehiclePartRequestController extends Controller
         VehiclePartRequest $vehiclePartRequest
     ): RedirectResponse {
 
-        /*
-        |--------------------------------------------------------------------------
-        | ADMIN UNIQUEMENT
-        |--------------------------------------------------------------------------
-        */
-
         if (
-            auth()->user()->role !== 'admin'
+            auth()->user()->role
+            !==
+            'admin'
         ) {
 
             abort(
@@ -1711,19 +1837,9 @@ class VehiclePartRequestController extends Controller
             );
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | SUPPRESSION
-        |--------------------------------------------------------------------------
-        */
 
         $vehiclePartRequest->delete();
 
-        /*
-        |--------------------------------------------------------------------------
-        | REDIRECTION
-        |--------------------------------------------------------------------------
-        */
 
         return redirect()
             ->route(

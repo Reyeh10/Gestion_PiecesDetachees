@@ -11,19 +11,45 @@ class VehiclePartRequest extends Model
 
     /*
     |--------------------------------------------------------------------------
-    | Constantes des statuts
+    | STATUTS
     |--------------------------------------------------------------------------
     */
 
-    //public const STATUS_PENDING = 'pending';
     public const STATUS_SEARCHING = 'searching';
+
     public const STATUS_FOUND = 'found';
+
     public const STATUS_ORDERED = 'ordered';
+
+    /*
+    |--------------------------------------------------------------------------
+    | RÉCEPTION PARTIELLE
+    |--------------------------------------------------------------------------
+    */
+
+    public const STATUS_PARTIAL_RECEIVED = 'partial_received';
+
+    /*
+    |--------------------------------------------------------------------------
+    | RÉCEPTION COMPLÈTE
+    |--------------------------------------------------------------------------
+    */
+
     public const STATUS_RECEIVED = 'received';
+
     public const STATUS_NOT_FOUND = 'not_found';
+
     public const STATUS_CANCELLED = 'cancelled';
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | FILLABLE
+    |--------------------------------------------------------------------------
+    */
+
     protected $fillable = [
+
         'vehicle_id',
         'product_id',
         'supplier_id',
@@ -32,13 +58,30 @@ class VehiclePartRequest extends Model
         'reference',
         'part_name',
         'description',
+
+        /*
+        |--------------------------------------------------------------------------
+        | QUANTITÉS
+        |--------------------------------------------------------------------------
+        |
+        | quantity
+        | = quantité demandée / commandée
+        |
+        | received_quantity
+        | = quantité réellement reçue
+        |
+        */
+
         'quantity',
+        'received_quantity',
+
         'unit',
 
         'status',
 
         'supplier_reference',
         'order_reference',
+
         'estimated_price',
         'purchase_price',
 
@@ -53,130 +96,326 @@ class VehiclePartRequest extends Model
         'notes',
     ];
 
-    protected $casts = [
-        'quantity' => 'decimal:2',
-        'estimated_price' => 'decimal:2',
-        'purchase_price' => 'decimal:2',
-
-        'requested_at' => 'datetime',
-        'search_started_at' => 'datetime',
-        'found_at' => 'datetime',
-        'ordered_at' => 'datetime',
-        'received_at' => 'datetime',
-        'not_found_at' => 'datetime',
-        'cancelled_at' => 'datetime',
-    ];
 
     /*
     |--------------------------------------------------------------------------
-    | Relations
+    | CASTS
+    |--------------------------------------------------------------------------
+    */
+
+    protected $casts = [
+
+        'quantity' =>
+            'decimal:2',
+
+        'received_quantity' =>
+            'decimal:2',
+
+        'estimated_price' =>
+            'decimal:2',
+
+        'purchase_price' =>
+            'decimal:2',
+
+        'requested_at' =>
+            'datetime',
+
+        'search_started_at' =>
+            'datetime',
+
+        'found_at' =>
+            'datetime',
+
+        'ordered_at' =>
+            'datetime',
+
+        'received_at' =>
+            'datetime',
+
+        'not_found_at' =>
+            'datetime',
+
+        'cancelled_at' =>
+            'datetime',
+    ];
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | RELATIONS
     |--------------------------------------------------------------------------
     */
 
     public function vehicle()
     {
-        return $this->belongsTo(Vehicle::class);
+        return $this->belongsTo(
+            Vehicle::class
+        );
     }
+
 
     public function product()
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(
+            Product::class
+        );
     }
+
 
     public function supplier()
     {
-        return $this->belongsTo(Supplier::class);
+        return $this->belongsTo(
+            Supplier::class
+        );
     }
+
 
     public function creator()
     {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->belongsTo(
+            User::class,
+            'created_by'
+        );
     }
+
 
     public function histories()
     {
-        return $this->hasMany(VehiclePartRequestHistory::class)
-            ->orderByDesc('changed_at');
+        return $this->hasMany(
+            VehiclePartRequestHistory::class
+        )
+        ->orderByDesc('changed_at');
     }
+
 
     /*
     |--------------------------------------------------------------------------
-    | Libellés des statuts
+    | STATUTS DISPONIBLES
     |--------------------------------------------------------------------------
     */
 
-   public static function statuses(): array
+    public static function statuses(): array
     {
         return [
-            self::STATUS_SEARCHING => 'En recherche',
-            self::STATUS_ORDERED => 'Commandée',
-            self::STATUS_RECEIVED => 'Reçue',
-            self::STATUS_NOT_FOUND => 'Non trouvée',
-            self::STATUS_CANCELLED => 'Annulée',
+
+            self::STATUS_SEARCHING =>
+                'En recherche',
+
+            self::STATUS_ORDERED =>
+                'Commandée',
+
+            self::STATUS_PARTIAL_RECEIVED =>
+                'Réception partielle',
+
+            self::STATUS_RECEIVED =>
+                'Reçue',
+
+            self::STATUS_NOT_FOUND =>
+                'Non trouvée',
+
+            self::STATUS_CANCELLED =>
+                'Annulée',
         ];
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | LIBELLÉ STATUT
+    |--------------------------------------------------------------------------
+    */
+
     public function getStatusLabelAttribute(): string
     {
-        return self::statuses()[$this->status] ?? $this->status;
+        return self::statuses()[$this->status]
+            ?? $this->status;
     }
+
 
     /*
     |--------------------------------------------------------------------------
-    | Couleur Bootstrap du statut
+    | BADGE BOOTSTRAP
     |--------------------------------------------------------------------------
     */
 
-  public function getStatusBadgeAttribute(): string
+    public function getStatusBadgeAttribute(): string
     {
         return match ($this->status) {
-            self::STATUS_SEARCHING => 'warning',
-            self::STATUS_ORDERED => 'primary',
-            self::STATUS_RECEIVED => 'success',
-            self::STATUS_NOT_FOUND => 'danger',
-            self::STATUS_CANCELLED => 'dark',
-            default => 'secondary',
+
+            self::STATUS_SEARCHING =>
+                'warning',
+
+            self::STATUS_ORDERED =>
+                'primary',
+
+            self::STATUS_PARTIAL_RECEIVED =>
+                'info',
+
+            self::STATUS_RECEIVED =>
+                'success',
+
+            self::STATUS_NOT_FOUND =>
+                'danger',
+
+            self::STATUS_CANCELLED =>
+                'dark',
+
+            default =>
+                'secondary',
         };
     }
+
+
     /*
     |--------------------------------------------------------------------------
-    | Vérification des transitions autorisées
+    | QUANTITÉ RESTANTE
     |--------------------------------------------------------------------------
     */
 
-   public function availableNextStatuses(): array
+    public function getRemainingQuantityAttribute(): float
+    {
+        $ordered =
+            (float) $this->quantity;
+
+        $received =
+            (float) $this->received_quantity;
+
+        return max(
+            0,
+            $ordered - $received
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | POURCENTAGE REÇU
+    |--------------------------------------------------------------------------
+    */
+
+    public function getReceivedPercentageAttribute(): float
+    {
+        $ordered =
+            (float) $this->quantity;
+
+        if ($ordered <= 0) {
+            return 0;
+        }
+
+        return min(
+            100,
+            (
+                (float) $this->received_quantity
+                /
+                $ordered
+            ) * 100
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | RÉCEPTION PARTIELLE ?
+    |--------------------------------------------------------------------------
+    */
+
+    public function getIsPartialReceivedAttribute(): bool
+    {
+        $received =
+            (float) $this->received_quantity;
+
+        $ordered =
+            (float) $this->quantity;
+
+        return
+            $received > 0
+            &&
+            $received < $ordered;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | RÉCEPTION COMPLÈTE ?
+    |--------------------------------------------------------------------------
+    */
+
+    public function getIsFullyReceivedAttribute(): bool
+    {
+        return
+            (float) $this->quantity > 0
+            &&
+            (float) $this->received_quantity
+            >=
+            (float) $this->quantity;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | TRANSITIONS AUTORISÉES
+    |--------------------------------------------------------------------------
+    */
+
+    public function availableNextStatuses(): array
     {
         return match ($this->status) {
 
-            /*
-            * Une nouvelle demande commence en recherche.
-            * Elle peut ensuite être commandée ou déclarée non trouvée.
-            */
             self::STATUS_SEARCHING => [
+
                 self::STATUS_ORDERED,
+
                 self::STATUS_NOT_FOUND,
+
                 self::STATUS_CANCELLED,
             ],
 
             /*
-            * Une pièce commandée peut ensuite être reçue.
+            |--------------------------------------------------------------------------
+            | COMMANDÉE
+            |--------------------------------------------------------------------------
             */
+
             self::STATUS_ORDERED => [
+
+                self::STATUS_PARTIAL_RECEIVED,
+
                 self::STATUS_RECEIVED,
+
                 self::STATUS_CANCELLED,
             ],
 
             /*
-            * Une pièce non trouvée peut être remise en recherche.
+            |--------------------------------------------------------------------------
+            | RÉCEPTION PARTIELLE
+            |--------------------------------------------------------------------------
+            |
+            | Une nouvelle livraison peut encore arriver.
+            |
             */
+
+            self::STATUS_PARTIAL_RECEIVED => [
+
+                self::STATUS_PARTIAL_RECEIVED,
+
+                self::STATUS_RECEIVED,
+
+                self::STATUS_CANCELLED,
+            ],
+
             self::STATUS_NOT_FOUND => [
+
                 self::STATUS_SEARCHING,
+
                 self::STATUS_CANCELLED,
             ],
 
             /*
-            * Une pièce reçue ou annulée termine le processus.
+            |--------------------------------------------------------------------------
+            | PROCESSUS TERMINÉ
+            |--------------------------------------------------------------------------
             */
+
             self::STATUS_RECEIVED,
             self::STATUS_CANCELLED => [],
 
@@ -184,8 +423,17 @@ class VehiclePartRequest extends Model
         };
     }
 
-    public function canChangeTo(string $newStatus): bool
-    {
+
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATION TRANSITION
+    |--------------------------------------------------------------------------
+    */
+
+    public function canChangeTo(
+        string $newStatus
+    ): bool {
+
         return in_array(
             $newStatus,
             $this->availableNextStatuses(),

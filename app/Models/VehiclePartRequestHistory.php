@@ -9,18 +9,54 @@ class VehiclePartRequestHistory extends Model
 {
     use HasFactory;
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | FILLABLE
+    |--------------------------------------------------------------------------
+    */
+
     protected $fillable = [
+
         'vehicle_part_request_id',
+
         'old_status',
         'new_status',
+
+        'old_received_quantity',
+        'new_received_quantity',
+
         'comment',
+
         'changed_by',
         'changed_at',
     ];
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | CASTS
+    |--------------------------------------------------------------------------
+    */
+
     protected $casts = [
-        'changed_at' => 'datetime',
+
+        'old_received_quantity' =>
+            'decimal:2',
+
+        'new_received_quantity' =>
+            'decimal:2',
+
+        'changed_at' =>
+            'datetime',
     ];
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | RELATION DEMANDE
+    |--------------------------------------------------------------------------
+    */
 
     public function request()
     {
@@ -30,24 +66,57 @@ class VehiclePartRequestHistory extends Model
         );
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | UTILISATEUR
+    |--------------------------------------------------------------------------
+    */
+
     public function user()
     {
-        return $this->belongsTo(User::class, 'changed_by');
+        return $this->belongsTo(
+            User::class,
+            'changed_by'
+        );
     }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ANCIEN STATUT
+    |--------------------------------------------------------------------------
+    */
 
     public function getOldStatusLabelAttribute(): string
     {
         if (!$this->old_status) {
+
             return 'Création';
         }
 
-        return VehiclePartRequest::statuses()[$this->old_status]
-            ?? $this->old_status;
+        return
+            VehiclePartRequest::statuses()[
+                $this->old_status
+            ]
+            ??
+            $this->old_status;
     }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | NOUVEAU STATUT
+    |--------------------------------------------------------------------------
+    */
 
     public function getNewStatusLabelAttribute(): string
     {
-        return VehiclePartRequest::statuses()[$this->new_status]
-            ?? $this->new_status;
+        return
+            VehiclePartRequest::statuses()[
+                $this->new_status
+            ]
+            ??
+            $this->new_status;
     }
 }

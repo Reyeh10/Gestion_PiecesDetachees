@@ -1003,6 +1003,34 @@ Route::middleware(['auth'])->group(function () {
         [VehiclePartRequestController::class, 'changeStatus']
     )->name('vehicle-part-requests.change-status');
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | MODIFIER LA QUANTITÉ REÇUE
+    |--------------------------------------------------------------------------
+    |
+    | Cette route permet d'enregistrer une réception partielle ou complète
+    | d'une pièce commandée.
+    |
+    | Exemple :
+    |
+    | Quantité commandée : 10
+    | Quantité reçue      : 5
+    | Reste à recevoir    : 5
+    |
+    */
+
+    Route::patch(
+        '/vehicle-part-requests/{vehiclePartRequest}/received-quantity',
+        [
+            VehiclePartRequestController::class,
+            'updateReceivedQuantity'
+        ]
+    )->name(
+        'vehicle-part-requests.update-received-quantity'
+    );
+
+
     /*
     |--------------------------------------------------------------------------
     | Autres routes CRUD
@@ -1016,6 +1044,7 @@ Route::middleware(['auth'])->group(function () {
         'vehicle-part-requests',
         VehiclePartRequestController::class
     )->except(['index']);
+
 });
 /*
 |--------------------------------------------------------------------------

@@ -52,14 +52,8 @@
                                     </p>
                                 </div>
 
-                                <span
-                                    class="badge bg-{{
-                                        $vehiclePartRequest->status_badge
-                                    }} fs-6"
-                                >
-                                    {{
-                                        $vehiclePartRequest->status_label
-                                    }}
+                                <span class="badge bg-{{ $vehiclePartRequest->status_badge }} fs-6">
+                                    {{ $vehiclePartRequest->status_label }}
                                 </span>
                             </div>
                         </div>
@@ -124,24 +118,60 @@
                                     </div>
                                 </div>
 
-                                <div class="col-md-6">
+
+                              {{-- Quantité commandée --}}
+                                <div class="col-md-4">
                                     <div class="text-muted">
-                                        Quantité
+                                        Quantité commandée
                                     </div>
 
                                     <div class="fw-bold">
-                                        {{
-                                            number_format(
-                                                $vehiclePartRequest->quantity,
-                                                2,
-                                                ',',
-                                                ' '
-                                            )
-                                        }}
-
+                                        {{ number_format(
+                                            (float) $vehiclePartRequest->quantity,
+                                            2,
+                                            ',',
+                                            ' '
+                                        ) }}
                                         {{ $vehiclePartRequest->unit }}
                                     </div>
                                 </div>
+
+
+                                {{-- Quantité reçue --}}
+                                <div class="col-md-4">
+                                    <div class="text-muted">
+                                        Quantité reçue
+                                    </div>
+
+                                    <div class="fw-bold text-success">
+                                        {{ number_format(
+                                            (float) ($vehiclePartRequest->received_quantity ?? 0),
+                                            2,
+                                            ',',
+                                            ' '
+                                        ) }}
+                                        {{ $vehiclePartRequest->unit }}
+                                    </div>
+                                </div>
+
+
+                                {{-- Reste à recevoir --}}
+                                <div class="col-md-4">
+                                    <div class="text-muted">
+                                        Reste à recevoir
+                                    </div>
+
+                                    <div class="fw-bold text-warning">
+                                        {{ number_format(
+                                            (float) $vehiclePartRequest->remaining_quantity,
+                                            2,
+                                            ',',
+                                            ' '
+                                        ) }}
+                                        {{ $vehiclePartRequest->unit }}
+                                    </div>
+                                </div>
+
 
                                 <div class="col-md-6">
                                     <div class="text-muted">
@@ -309,7 +339,14 @@
 
                         <div class="card-body">
 
-                            @if($availableStatuses->isNotEmpty())
+                            @php
+                                $manualStatuses = $availableStatuses->except([
+                                    \App\Models\VehiclePartRequest::STATUS_PARTIAL_RECEIVED,
+                                    \App\Models\VehiclePartRequest::STATUS_RECEIVED,
+                                ]);
+                            @endphp
+
+                            @if($manualStatuses->isNotEmpty())
                                <form
                                 method="POST"
                                 action="{{ route(
@@ -340,7 +377,7 @@
                                             Sélectionner
                                         </option>
 
-                                        @foreach($availableStatuses as $value => $label)
+                                        @foreach($manualStatuses as $value => $label)
 
                                             <option
                                                 value="{{ $value }}"
@@ -372,7 +409,7 @@
                                             class="form-label"
                                         >
                                             Fournisseur
-                                            <span class="text-danger">*</span>
+                                            <span class="text-danger"></span>
                                         </label>
 
                                         <select
@@ -415,7 +452,7 @@
                                             class="form-label"
                                         >
                                             Référence de commande
-                                            <span class="text-danger">*</span>
+                                            <span class="text-danger"></span>
                                         </label>
 
                                         <input
@@ -444,7 +481,7 @@
                                             class="form-label"
                                         >
                                             Prix d’achat
-                                            <span class="text-danger">*</span>
+                                            <span class="text-danger"></span>
                                         </label>
 
                                         <input
@@ -504,12 +541,159 @@
                             </form>
                             @else
                                 <div class="alert alert-info mb-0">
-                                    Cette demande est terminée.
+                                    Aucun changement manuel de statut n'est disponible.
+                                    @if(
+                                        in_array(
+                                            $vehiclePartRequest->status,
+                                            [
+                                                \App\Models\VehiclePartRequest::STATUS_ORDERED,
+                                                \App\Models\VehiclePartRequest::STATUS_PARTIAL_RECEIVED,
+                                            ],
+                                            true
+                                        )
+                                    )
+                                        Utilisez le formulaire de réception ci-dessous.
+                                    @endif
                                 </div>
                             @endif
 
                         </div>
                     </div>
+
+                    {{-- Réception de la commande --}}
+                    @if(
+                        in_array(
+                            $vehiclePartRequest->status,
+                            [
+                                \App\Models\VehiclePartRequest::STATUS_ORDERED,
+                                \App\Models\VehiclePartRequest::STATUS_PARTIAL_RECEIVED,
+                            ],
+                            true
+                        )
+                    )
+                        <div class="card border-0 shadow-sm mt-4">
+                            <div class="card-header bg-white">
+                                <h5 class="mb-1">Réception de la commande</h5>
+                                <small class="text-muted">
+                                    Saisissez uniquement la quantité reçue dans cette nouvelle livraison.
+                                </small>
+                            </div>
+
+                            <div class="card-body">
+                                <div class="alert alert-light border mb-4">
+                                    <div class="row g-3 text-center">
+                                        <div class="col-4">
+                                            <div class="text-muted small">Commandée</div>
+                                            <div class="fw-bold">
+                                                {{ number_format((float) $vehiclePartRequest->quantity, 2, ',', ' ') }}
+                                                {{ $vehiclePartRequest->unit }}
+                                            </div>
+                                        </div>
+
+                                        <div class="col-4">
+                                            <div class="text-muted small">Déjà reçue</div>
+                                            <div class="fw-bold text-success">
+                                                {{ number_format((float) ($vehiclePartRequest->received_quantity ?? 0), 2, ',', ' ') }}
+                                                {{ $vehiclePartRequest->unit }}
+                                            </div>
+                                        </div>
+
+                                        <div class="col-4">
+                                            <div class="text-muted small">Restante</div>
+                                            <div class="fw-bold text-warning">
+                                                {{ number_format((float) $vehiclePartRequest->remaining_quantity, 2, ',', ' ') }}
+                                                {{ $vehiclePartRequest->unit }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <form
+                                    method="POST"
+                                    action="{{ route(
+                                        'vehicle-part-requests.update-received-quantity',
+                                        $vehiclePartRequest
+                                    ) }}"
+                                    id="receivedQuantityForm"
+                                >
+                                    @csrf
+                                    @method('PATCH')
+
+                                    <div class="mb-3">
+                                        <label for="received_now" class="form-label">
+                                            Quantité reçue maintenant
+                                            <span class="text-danger"></span>
+                                        </label>
+
+                                        <input
+                                            type="number"
+                                            name="received_now"
+                                            id="received_now"
+                                            class="form-control @error('received_now') is-invalid @enderror"
+                                            step="0.01"
+                                            min="0"
+                                            max="{{ (float) $vehiclePartRequest->remaining_quantity }}"
+                                            value="{{ old('received_now') }}"
+                                            data-ordered-quantity="{{ (float) $vehiclePartRequest->quantity }}"
+                                            data-current-received-quantity="{{ (float) ($vehiclePartRequest->received_quantity ?? 0) }}"
+                                            data-current-remaining-quantity="{{ (float) $vehiclePartRequest->remaining_quantity }}"
+                                            required
+                                        >
+
+                                        @error('received_now')
+                                            <div class="invalid-feedback">
+                                                {{ $message }}
+                                            </div>
+                                        @enderror
+
+                                        <div class="form-text">
+                                            Saisissez uniquement la quantité reçue dans cette livraison.
+                                            Exemple : si 20 pièces sont déjà reçues et que 8 autres arrivent,
+                                            saisissez 8.
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            Reste à recevoir après cette saisie
+                                        </label>
+
+                                        <input
+                                            type="text"
+                                            id="remaining_quantity_preview"
+                                            class="form-control"
+                                            value="{{ number_format(
+                                                (float) $vehiclePartRequest->remaining_quantity,
+                                                2,
+                                                ',',
+                                                ' '
+                                            ) }} {{ $vehiclePartRequest->unit }}"
+                                            readonly
+                                        >
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="reception_comment" class="form-label">
+                                            Commentaire
+                                        </label>
+
+                                        <textarea
+                                            name="comment"
+                                            id="reception_comment"
+                                            class="form-control"
+                                            rows="3"
+                                            placeholder="Ex : 5 pièces reçues sur les 10 commandées."
+                                        >{{ old('comment') }}</textarea>
+                                    </div>
+
+                                    <button type="submit" class="btn btn-success w-100">
+                                        <i class="bx bx-package me-1"></i>
+                                        Enregistrer la réception
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    @endif
 
                     {{-- Dates --}}
                     <div class="card border-0 shadow-sm mt-4">
@@ -588,6 +772,8 @@
                                             <th>Date</th>
                                             <th>Ancien statut</th>
                                             <th>Nouveau statut</th>
+                                            <th>Ancienne qté reçue</th>
+                                            <th>Nouvelle qté reçue</th>
                                             <th>Utilisateur</th>
                                             <th>Commentaire</th>
                                         </tr>
@@ -625,6 +811,24 @@
                                                 </td>
 
                                                 <td>
+                                                    @if($history->old_received_quantity !== null)
+                                                        {{ number_format((float) $history->old_received_quantity, 2, ',', ' ') }}
+                                                        {{ $vehiclePartRequest->unit }}
+                                                    @else
+                                                        -
+                                                    @endif
+                                                </td>
+
+                                                <td>
+                                                    @if($history->new_received_quantity !== null)
+                                                        {{ number_format((float) $history->new_received_quantity, 2, ',', ' ') }}
+                                                        {{ $vehiclePartRequest->unit }}
+                                                    @else
+                                                        -
+                                                    @endif
+                                                </td>
+
+                                                <td>
                                                     {{
                                                         optional(
                                                             $history->user
@@ -643,7 +847,7 @@
                                         @empty
                                             <tr>
                                                 <td
-                                                    colspan="5"
+                                                    colspan="7"
                                                     class="text-center"
                                                 >
                                                     Aucun historique.
@@ -670,28 +874,31 @@
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | CHANGEMENT DE STATUT
+    |--------------------------------------------------------------------------
+    */
+
     const statusSelect = document.getElementById('status');
     const orderFields = document.getElementById('orderFields');
     const supplierSelect = document.getElementById('supplier_id');
-    const orderReferenceInput =
-        document.getElementById('order_reference');
-    const purchasePriceInput =
-        document.getElementById('purchase_price');
-
-    if (!statusSelect || !orderFields) {
-        return;
-    }
+    const orderReferenceInput = document.getElementById('order_reference');
+    const purchasePriceInput = document.getElementById('purchase_price');
 
     function toggleOrderFields() {
+
+        if (!statusSelect || !orderFields) {
+            return;
+        }
+
         const isOrdered = statusSelect.value === 'ordered';
 
         if (isOrdered) {
+
             orderFields.classList.remove('d-none');
 
-            /*
-             * Les champs deviennent obligatoires uniquement
-             * lorsque le statut Commandée est sélectionné.
-             */
             if (supplierSelect) {
                 supplierSelect.required = true;
             }
@@ -703,13 +910,11 @@ document.addEventListener('DOMContentLoaded', function () {
             if (purchasePriceInput) {
                 purchasePriceInput.required = true;
             }
+
         } else {
+
             orderFields.classList.add('d-none');
 
-            /*
-             * Pour les autres statuts, ils ne doivent pas
-             * empêcher l’envoi du formulaire.
-             */
             if (supplierSelect) {
                 supplierSelect.required = false;
             }
@@ -724,16 +929,90 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    statusSelect.addEventListener(
-        'change',
-        toggleOrderFields
-    );
+    if (statusSelect && orderFields) {
+        statusSelect.addEventListener('change', toggleOrderFields);
+        toggleOrderFields();
+    }
+
 
     /*
-     * Appliquer également la logique au chargement de la page.
-     * C’est utile après une erreur de validation Laravel.
-     */
-    toggleOrderFields();
+    |--------------------------------------------------------------------------
+    | RÉCEPTION DE LA COMMANDE
+    |--------------------------------------------------------------------------
+    |
+    | Exemple :
+    |
+    | commandée       = 30
+    | déjà reçue      = 20
+    | reçue maintenant = 8
+    |
+    | total reçu après saisie = 28
+    | reste après saisie      = 2
+    |
+    */
+
+    const receivedNowInput = document.getElementById('received_now');
+    const remainingQuantityPreview =
+        document.getElementById('remaining_quantity_preview');
+
+    function updateRemainingQuantityPreview() {
+
+        if (!receivedNowInput || !remainingQuantityPreview) {
+            return;
+        }
+
+        const orderedQuantity = parseFloat(
+            receivedNowInput.dataset.orderedQuantity || '0'
+        );
+
+        const currentReceivedQuantity = parseFloat(
+            receivedNowInput.dataset.currentReceivedQuantity || '0'
+        );
+
+        const remainingBeforeReception = Math.max(
+            0,
+            orderedQuantity - currentReceivedQuantity
+        );
+
+        const rawValue = receivedNowInput.value.trim();
+
+        let receivedNow = 0;
+
+        if (rawValue !== '') {
+            receivedNow = parseFloat(rawValue);
+
+            if (Number.isNaN(receivedNow) || receivedNow < 0) {
+                receivedNow = 0;
+            }
+        }
+
+        const remainingAfterReception = Math.max(
+            0,
+            remainingBeforeReception - receivedNow
+        );
+
+        const unit = @json($vehiclePartRequest->unit ?? '');
+
+        remainingQuantityPreview.value =
+            remainingAfterReception.toLocaleString(
+                'fr-FR',
+                {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }
+            ) + (unit ? ' ' + unit : '');
+    }
+
+    if (receivedNowInput) {
+
+        receivedNowInput.addEventListener(
+            'input',
+            updateRemainingQuantityPreview
+        );
+
+        updateRemainingQuantityPreview();
+    }
+
 });
 </script>
 @endpush
