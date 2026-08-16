@@ -26,6 +26,7 @@ use App\Http\Controllers\VehicleHistoryController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\FournisseurCommandeController;
 
+
 //use Illuminate\Http\Request;
 //use Illuminate\Support\Facades\Auth;
 

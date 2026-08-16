@@ -67,7 +67,7 @@
 
     .sale-card {
         border-radius: 14px;
-        overflow: hidden;
+        overflow: visible;
     }
 
     .sale-card .card-header {
@@ -94,10 +94,110 @@
         min-height: 18px;
     }
 
+    /* ============================================================
+       RECHERCHE RAPIDE PRODUIT
+    ============================================================ */
+
+    .product-search-wrapper {
+        position: relative;
+        z-index: 50;
+    }
+
+    .product-search-input-group {
+        border-radius: 8px;
+    }
+
+    .product-search-results {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        z-index: 1090;
+        max-height: 360px;
+        overflow-y: auto;
+        background: #fff;
+        border: 1px solid #d9dee3;
+        border-radius: 10px;
+        box-shadow: 0 12px 30px rgba(67, 89, 113, 0.18);
+    }
+
+    .product-search-result-item {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 15px;
+        padding: 12px 15px;
+        border: 0;
+        border-bottom: 1px solid #edf0f4;
+        background: #fff;
+        text-align: left;
+        cursor: pointer;
+        transition: background .15s ease;
+    }
+
+    .product-search-result-item:last-child {
+        border-bottom: 0;
+    }
+
+    .product-search-result-item:hover,
+    .product-search-result-item:focus {
+        background: #f5f6ff;
+        outline: none;
+    }
+
+    .product-search-reference {
+        color: #566a7f;
+        font-weight: 800;
+        margin-bottom: 2px;
+    }
+
+    .product-search-designation {
+        color: #697a8d;
+        font-size: 13px;
+    }
+
+    .product-search-meta,
+    .product-search-price {
+        color: #8592a3;
+        font-size: 12px;
+        margin-top: 3px;
+    }
+
+    .product-search-stock {
+        min-width: 120px;
+        text-align: right;
+        font-weight: 800;
+        color: #28a745;
+        white-space: nowrap;
+    }
+
+    .product-search-no-result {
+        padding: 18px;
+        text-align: center;
+        color: #8592a3;
+    }
+
+    .product-search-hint {
+        color: #8592a3;
+        font-size: 12px;
+        margin-top: 6px;
+    }
+
     @media (max-width: 991.98px) {
         .price-display {
             min-width: 120px;
             width: 120px;
+        }
+    }
+
+    @media (max-width: 767.98px) {
+        .product-search-result-item {
+            align-items: flex-start;
+        }
+
+        .product-search-stock {
+            min-width: auto;
         }
     }
 </style>
@@ -272,7 +372,7 @@
                 </div>
 
 
-               {{-- PAIEMENT --}}
+                {{-- PAIEMENT --}}
                 <div class="col-lg-4 col-md-6 mb-3">
 
                     <label
@@ -289,74 +389,45 @@
                         class="form-control"
                         required
                     >
-
                         <option value="">
                             Sélectionner un mode de paiement
                         </option>
 
-                        <option
-                            value="cash"
-                            {{ old('payment_type') === 'cash' ? 'selected' : '' }}
-                        >
+                        <option value="cash" {{ old('payment_type') === 'cash' ? 'selected' : '' }}>
                             Cash
                         </option>
 
-                        <option
-                            value="echeance"
-                            {{ old('payment_type') === 'echeance' ? 'selected' : '' }}
-                        >
+                        <option value="echeance" {{ old('payment_type') === 'echeance' ? 'selected' : '' }}>
                             Échéance
                         </option>
 
-                        <option
-                            value="bon_commande"
-                            {{ old('payment_type') === 'bon_commande' ? 'selected' : '' }}
-                        >
+                        <option value="bon_commande" {{ old('payment_type') === 'bon_commande' ? 'selected' : '' }}>
                             Bon de commande
                         </option>
 
-                        <option
-                            value="cheque"
-                            {{ old('payment_type') === 'cheque' ? 'selected' : '' }}
-                        >
+                        <option value="cheque" {{ old('payment_type') === 'cheque' ? 'selected' : '' }}>
                             Chèque
                         </option>
 
-                        <option
-                            value="virement_bancaire"
-                            {{ old('payment_type') === 'virement_bancaire' ? 'selected' : '' }}
-                        >
+                        <option value="virement_bancaire" {{ old('payment_type') === 'virement_bancaire' ? 'selected' : '' }}>
                             Virement bancaire
                         </option>
 
-                        <option
-                            value="carte_bancaire"
-                            {{ old('payment_type') === 'carte_bancaire' ? 'selected' : '' }}
-                        >
+                        <option value="carte_bancaire" {{ old('payment_type') === 'carte_bancaire' ? 'selected' : '' }}>
                             Carte bancaire
                         </option>
 
-                        <option
-                            value="paiement_en_ligne"
-                            {{ old('payment_type') === 'paiement_en_ligne' ? 'selected' : '' }}
-                        >
+                        <option value="paiement_en_ligne" {{ old('payment_type') === 'paiement_en_ligne' ? 'selected' : '' }}>
                             Paiement en ligne
                         </option>
 
-                        <option
-                            value="mobile_money"
-                            {{ old('payment_type') === 'mobile_money' ? 'selected' : '' }}
-                        >
+                        <option value="mobile_money" {{ old('payment_type') === 'mobile_money' ? 'selected' : '' }}>
                             Mobile Money
                         </option>
 
-                        <option
-                            value="autre"
-                            {{ old('payment_type') === 'autre' ? 'selected' : '' }}
-                        >
+                        <option value="autre" {{ old('payment_type') === 'autre' ? 'selected' : '' }}>
                             Autre
                         </option>
-
                     </select>
 
                     @error('payment_type')
@@ -371,6 +442,62 @@
 
 
             <hr class="my-4">
+
+
+            {{-- ============================================================
+                 RECHERCHE RAPIDE PRODUIT
+            ============================================================ --}}
+
+            <div class="mb-4">
+
+                <label
+                    for="productGlobalSearch"
+                    class="form-label fw-semibold"
+                >
+                    Recherche Référence / Produit
+                </label>
+
+                <div class="product-search-wrapper">
+
+                    <div class="input-group product-search-input-group">
+
+                        <span class="input-group-text bg-white">
+                            <i class="bx bx-search"></i>
+                        </span>
+
+                        <input
+                            type="text"
+                            id="productGlobalSearch"
+                            class="form-control"
+                            placeholder="Rechercher par référence, désignation, marque ou modèle..."
+                            autocomplete="off"
+                        >
+
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            id="clearProductSearch"
+                            title="Effacer la recherche"
+                        >
+                            <i class="bx bx-x"></i>
+                            Réinitialiser
+                        </button>
+
+                    </div>
+
+                    <div
+                        id="productSearchResults"
+                        class="product-search-results d-none"
+                    ></div>
+
+                </div>
+
+                <div class="product-search-hint">
+                    Commencez à saisir une référence, une désignation, une marque ou un modèle.
+                    Cliquez ensuite sur le produit pour l’ajouter à la vente.
+                </div>
+
+            </div>
 
 
             {{-- =================================================
@@ -690,6 +817,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const vehicleSelect =
         document.getElementById('vehicle_id');
 
+    const paymentTypeSelect =
+        document.getElementById('payment_type');
+
     const saleForm =
         document.getElementById('saleForm');
 
@@ -701,6 +831,41 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const saveCustomerBtn =
         document.getElementById('saveCustomerBtn');
+
+    const productGlobalSearch =
+        document.getElementById('productGlobalSearch');
+
+    const productSearchResults =
+        document.getElementById('productSearchResults');
+
+    const clearProductSearch =
+        document.getElementById('clearProductSearch');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | DONNÉES PRODUITS POUR LA RECHERCHE
+    |--------------------------------------------------------------------------
+    */
+
+    @php
+        $searchableProducts = $products
+            ->map(function ($product) {
+                return [
+                    'id' => $product->id,
+                    'reference' => $product->reference ?? '',
+                    'designation' => $product->designation ?? '',
+                    'brand' => optional($product->brand)->name ?? '',
+                    'model' => optional($product->model)->name ?? '',
+                    'stock' => (float) ($product->quantity ?? 0),
+                    'price' => (float) ($product->sale_price ?? 0),
+                    'unit' => $product->unit_label ?? 'Pièce',
+                ];
+            })
+            ->values();
+    @endphp
+
+    const searchableProducts = @json($searchableProducts);
 
 
     /*
@@ -722,6 +887,12 @@ document.addEventListener('DOMContentLoaded', function () {
         $('#vehicle_id').select2({
             width: '100%',
             placeholder: 'Sélectionnez d’abord un client',
+            allowClear: true
+        });
+
+        $('#payment_type').select2({
+            width: '100%',
+            placeholder: 'Sélectionner un mode de paiement',
             allowClear: true
         });
     }
@@ -760,7 +931,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /*
     |--------------------------------------------------------------------------
-    | FORMATAGE NOMBRE
+    | FORMATAGE
     |--------------------------------------------------------------------------
     */
 
@@ -768,7 +939,205 @@ document.addEventListener('DOMContentLoaded', function () {
         return new Intl.NumberFormat('fr-FR', {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
-        }).format(value);
+        }).format(parseFloat(value) || 0);
+    }
+
+    function normalizeSearchText(value) {
+        return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim();
+    }
+
+    function escapeProductHtml(value) {
+        const div = document.createElement('div');
+        div.textContent = String(value ?? '');
+        return div.innerHTML;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | RECHERCHE RAPIDE PRODUIT
+    |--------------------------------------------------------------------------
+    */
+
+    function hideProductSearchResults() {
+        if (!productSearchResults) {
+            return;
+        }
+
+        productSearchResults.innerHTML = '';
+        productSearchResults.classList.add('d-none');
+    }
+
+    function getAlreadySelectedProductIds() {
+        return Array.from(
+            itemsTableBody.querySelectorAll('.product-select')
+        )
+        .map(function (select) {
+            return String(select.value || '');
+        })
+        .filter(Boolean);
+    }
+
+    function searchProducts(searchValue) {
+        const search = normalizeSearchText(searchValue);
+
+        if (search.length < 1) {
+            hideProductSearchResults();
+            return;
+        }
+
+        const alreadySelectedIds =
+            getAlreadySelectedProductIds();
+
+        const results = searchableProducts
+            .filter(function (product) {
+
+                if (parseFloat(product.stock) <= 0) {
+                    return false;
+                }
+
+                const searchableText =
+                    normalizeSearchText([
+                        product.reference,
+                        product.designation,
+                        product.brand,
+                        product.model
+                    ].join(' '));
+
+                return searchableText.includes(search);
+            })
+            .sort(function (a, b) {
+
+                const aRef =
+                    normalizeSearchText(a.reference);
+
+                const bRef =
+                    normalizeSearchText(b.reference);
+
+                const aDesignation =
+                    normalizeSearchText(a.designation);
+
+                const bDesignation =
+                    normalizeSearchText(b.designation);
+
+                const aExact =
+                    aRef === search ||
+                    aDesignation === search;
+
+                const bExact =
+                    bRef === search ||
+                    bDesignation === search;
+
+                if (aExact && !bExact) {
+                    return -1;
+                }
+
+                if (!aExact && bExact) {
+                    return 1;
+                }
+
+                const aStarts =
+                    aRef.startsWith(search) ||
+                    aDesignation.startsWith(search);
+
+                const bStarts =
+                    bRef.startsWith(search) ||
+                    bDesignation.startsWith(search);
+
+                if (aStarts && !bStarts) {
+                    return -1;
+                }
+
+                if (!aStarts && bStarts) {
+                    return 1;
+                }
+
+                return String(a.reference)
+                    .localeCompare(
+                        String(b.reference),
+                        'fr'
+                    );
+            })
+            .slice(0, 20);
+
+        if (results.length === 0) {
+            productSearchResults.innerHTML = `
+                <div class="product-search-no-result">
+                    <i class="bx bx-search-alt mb-1"></i>
+                    <div>Aucun produit disponible trouvé.</div>
+                </div>
+            `;
+
+            productSearchResults.classList.remove('d-none');
+            return;
+        }
+
+        productSearchResults.innerHTML =
+            results.map(function (product) {
+
+                const brandModel = [
+                    product.brand,
+                    product.model
+                ]
+                .filter(Boolean)
+                .join(' - ');
+
+                const isAlreadySelected =
+                    alreadySelectedIds.includes(
+                        String(product.id)
+                    );
+
+                return `
+                    <button
+                        type="button"
+                        class="product-search-result-item"
+                        data-product-id="${product.id}"
+                        ${isAlreadySelected ? 'data-already-selected="1"' : ''}
+                    >
+                        <div>
+                            <div class="product-search-reference">
+                                ${escapeProductHtml(product.reference)}
+                            </div>
+
+                            <div class="product-search-designation">
+                                ${escapeProductHtml(product.designation)}
+                            </div>
+
+                            ${
+                                brandModel
+                                    ? `
+                                        <div class="product-search-meta">
+                                            ${escapeProductHtml(brandModel)}
+                                        </div>
+                                    `
+                                    : ''
+                            }
+
+                            <div class="product-search-price">
+                                Prix :
+                                ${formatNumber(product.price)}
+                                FDJ
+                                ${
+                                    isAlreadySelected
+                                        ? ' — déjà ajouté'
+                                        : ''
+                                }
+                            </div>
+                        </div>
+
+                        <div class="product-search-stock">
+                            ${formatNumber(product.stock)}
+                            ${escapeProductHtml(product.unit)}
+                        </div>
+                    </button>
+                `;
+            }).join('');
+
+        productSearchResults.classList.remove('d-none');
     }
 
 
@@ -799,8 +1168,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     @foreach($products as $product)
                         <option
                             value="{{ $product->id }}"
-                            data-price="{{ $product->sale_price }}"
-                            data-stock="{{ $product->quantity }}"
+                            data-price="{{ (float) $product->sale_price }}"
+                            data-stock="{{ (float) $product->quantity }}"
                             data-unit="{{ $product->unit_label ?? 'Pièce' }}"
                         >
                             {{ $product->reference }}
@@ -955,9 +1324,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         .select2('destroy');
                 }
 
-
                 row.remove();
-
 
                 if (
                     itemsTableBody
@@ -966,7 +1333,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 ) {
                     addRow();
                 }
-
 
                 calculateGrandTotal();
             }
@@ -977,19 +1343,10 @@ document.addEventListener('DOMContentLoaded', function () {
             oldItem &&
             oldItem.product_id
         ) {
-
-            if (window.jQuery) {
-                $(productSelect)
-                    .val(String(oldItem.product_id))
-                    .trigger('change');
-            } else {
-                productSelect.value =
-                    String(oldItem.product_id);
-
-                productSelect.dispatchEvent(
-                    new Event('change')
-                );
-            }
+            selectProductInRow(
+                productSelect,
+                oldItem.product_id
+            );
 
             quantityInput.value =
                 oldItem.quantity ?? 1;
@@ -1001,7 +1358,243 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
         rowIndex++;
+
+        return productSelect;
     }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | SÉLECTIONNER UN PRODUIT DANS UNE LIGNE
+    |--------------------------------------------------------------------------
+    */
+
+    function selectProductInRow(
+        productSelect,
+        productId
+    ) {
+        if (!productSelect) {
+            return;
+        }
+
+        productSelect.value =
+            String(productId);
+
+        if (
+            window.jQuery &&
+            $.fn.select2
+        ) {
+            $(productSelect)
+                .val(String(productId))
+                .trigger('change');
+        } else {
+            productSelect.dispatchEvent(
+                new Event(
+                    'change',
+                    {
+                        bubbles: true
+                    }
+                )
+            );
+        }
+    }
+
+    function getEmptyProductRow() {
+        const selects =
+            itemsTableBody
+                .querySelectorAll(
+                    '.product-select'
+                );
+
+        for (const select of selects) {
+            if (!select.value) {
+                return select;
+            }
+        }
+
+        return null;
+    }
+
+    function findSelectedProductRow(productId) {
+        const selects =
+            itemsTableBody
+                .querySelectorAll(
+                    '.product-select'
+                );
+
+        for (const select of selects) {
+            if (
+                String(select.value)
+                ===
+                String(productId)
+            ) {
+                return select.closest('tr');
+            }
+        }
+
+        return null;
+    }
+
+    function selectProductFromSearch(productId) {
+
+        const existingRow =
+            findSelectedProductRow(productId);
+
+        if (existingRow) {
+            const quantityInput =
+                existingRow.querySelector(
+                    'input[name$="[quantity]"]'
+                );
+
+            if (quantityInput) {
+                quantityInput.focus();
+                quantityInput.select();
+            }
+
+            hideProductSearchResults();
+
+            productGlobalSearch.value = '';
+
+            showWarning(
+                'Produit déjà ajouté',
+                'Ce produit se trouve déjà dans la vente. Modifiez sa quantité dans la ligne existante.'
+            );
+
+            return;
+        }
+
+        let productSelect =
+            getEmptyProductRow();
+
+        if (!productSelect) {
+            productSelect =
+                addRow();
+        }
+
+        selectProductInRow(
+            productSelect,
+            productId
+        );
+
+        if (productGlobalSearch) {
+            productGlobalSearch.value = '';
+        }
+
+        hideProductSearchResults();
+
+        const row =
+            productSelect.closest('tr');
+
+        const quantityInput =
+            row?.querySelector(
+                'input[name$="[quantity]"]'
+            );
+
+        if (quantityInput) {
+            quantityInput.focus();
+            quantityInput.select();
+        }
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ÉVÉNEMENTS RECHERCHE
+    |--------------------------------------------------------------------------
+    */
+
+    if (productGlobalSearch) {
+        productGlobalSearch.addEventListener(
+            'input',
+            function () {
+                searchProducts(
+                    this.value
+                );
+            }
+        );
+
+        productGlobalSearch.addEventListener(
+            'focus',
+            function () {
+                if (
+                    this.value.trim()
+                    !==
+                    ''
+                ) {
+                    searchProducts(
+                        this.value
+                    );
+                }
+            }
+        );
+
+        productGlobalSearch.addEventListener(
+            'keydown',
+            function (event) {
+                if (event.key === 'Escape') {
+                    hideProductSearchResults();
+                    this.blur();
+                }
+            }
+        );
+    }
+
+    if (productSearchResults) {
+        productSearchResults.addEventListener(
+            'click',
+            function (event) {
+
+                const result =
+                    event.target.closest(
+                        '.product-search-result-item'
+                    );
+
+                if (!result) {
+                    return;
+                }
+
+                const productId =
+                    result.dataset.productId;
+
+                if (!productId) {
+                    return;
+                }
+
+                selectProductFromSearch(
+                    productId
+                );
+            }
+        );
+    }
+
+    if (clearProductSearch) {
+        clearProductSearch.addEventListener(
+            'click',
+            function () {
+
+                if (productGlobalSearch) {
+                    productGlobalSearch.value = '';
+                    productGlobalSearch.focus();
+                }
+
+                hideProductSearchResults();
+            }
+        );
+    }
+
+    document.addEventListener(
+        'click',
+        function (event) {
+
+            if (
+                !event.target.closest(
+                    '.product-search-wrapper'
+                )
+            ) {
+                hideProductSearchResults();
+            }
+        }
+    );
 
 
     /*
@@ -1286,8 +1879,12 @@ document.addEventListener('DOMContentLoaded', function () {
             vehicleSelect.disabled =
                 true;
 
-            if (window.jQuery) {
+            if (
+                window.jQuery &&
+                $.fn.select2
+            ) {
                 $('#vehicle_id')
+                    .val('')
                     .trigger('change.select2');
             }
 
@@ -1427,8 +2024,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
 
-                if (window.jQuery) {
+                if (
+                    window.jQuery &&
+                    $.fn.select2
+                ) {
                     $('#vehicle_id')
+                        .val(
+                            selectedVehicleId
+                                ? String(selectedVehicleId)
+                                : ''
+                        )
                         .trigger(
                             'change.select2'
                         );
@@ -1485,7 +2090,10 @@ document.addEventListener('DOMContentLoaded', function () {
     |--------------------------------------------------------------------------
     */
 
-    if (window.jQuery) {
+    if (
+        window.jQuery &&
+        $.fn.select2
+    ) {
 
         $('#customer_id').on(
             'change',
@@ -1580,6 +2188,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
             try {
 
+                saveCustomerBtn.disabled = true;
+                saveCustomerBtn.innerHTML =
+                    '<span class="spinner-border spinner-border-sm me-1"></span> Enregistrement...';
+
                 const response =
                     await fetch(
                         "{{ route('customers.store') }}",
@@ -1642,7 +2254,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 );
 
 
-                if (window.jQuery) {
+                if (
+                    window.jQuery &&
+                    $.fn.select2
+                ) {
 
                     $('#customer_id')
                         .val(
@@ -1698,13 +2313,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     const modal =
                         bootstrap.Modal
-                            .getInstance(
+                            .getOrCreateInstance(
                                 modalElement
                             );
 
-                    if (modal) {
-                        modal.hide();
-                    }
+                    modal.hide();
                 }
 
 
@@ -1754,6 +2367,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 errorBox.classList.remove(
                     'd-none'
                 );
+
+            } finally {
+
+                saveCustomerBtn.disabled = false;
+                saveCustomerBtn.innerHTML =
+                    'Enregistrer';
             }
         }
     );
@@ -1841,12 +2460,6 @@ document.addEventListener('DOMContentLoaded', function () {
         'submit',
         function (event) {
 
-            /*
-            |--------------------------------------------------------------
-            | CLIENT + VÉHICULE MANQUANTS
-            |--------------------------------------------------------------
-            */
-
             if (
                 !customerSelect.value &&
                 !vehicleSelect.value
@@ -1863,12 +2476,6 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
 
-            /*
-            |--------------------------------------------------------------
-            | CLIENT MANQUANT
-            |--------------------------------------------------------------
-            */
-
             if (!customerSelect.value) {
 
                 event.preventDefault();
@@ -1881,12 +2488,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-
-            /*
-            |--------------------------------------------------------------
-            | VÉHICULE MANQUANT
-            |--------------------------------------------------------------
-            */
 
             if (!vehicleSelect.value) {
 
@@ -1901,11 +2502,21 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
 
-            /*
-            |--------------------------------------------------------------
-            | LIGNES PRODUITS
-            |--------------------------------------------------------------
-            */
+            if (
+                !paymentTypeSelect ||
+                !paymentTypeSelect.value
+            ) {
+
+                event.preventDefault();
+
+                showWarning(
+                    'Mode de paiement obligatoire',
+                    'Veuillez sélectionner un mode de paiement.'
+                );
+
+                return;
+            }
+
 
             const rows =
                 itemsTableBody.querySelectorAll('tr');
@@ -1923,12 +2534,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-
-            /*
-            |--------------------------------------------------------------
-            | PRODUIT RÉELLEMENT SÉLECTIONNÉ
-            |--------------------------------------------------------------
-            */
 
             let validProduct =
                 false;
@@ -1966,18 +2571,24 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
 
-            /*
-            |--------------------------------------------------------------
-            | QUANTITÉS VALIDES
-            |--------------------------------------------------------------
-            */
-
             let invalidQuantity =
                 false;
 
 
             rows.forEach(
                 function (row) {
+
+                    const select =
+                        row.querySelector(
+                            '.product-select'
+                        );
+
+                    if (
+                        !select ||
+                        !select.value
+                    ) {
+                        return;
+                    }
 
                     const quantityInput =
                         row.querySelector(
