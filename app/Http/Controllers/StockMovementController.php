@@ -159,9 +159,9 @@ class StockMovementController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        $movements = $query
-            ->latest()
-            ->paginate(20);
+       $movements = $query
+        ->latest()
+        ->get();
 
         return view(
             'stock_movements.index',
@@ -249,10 +249,75 @@ class StockMovementController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    public function entries()
+   /*
+|--------------------------------------------------------------------------
+| ENTREES
+|--------------------------------------------------------------------------
+*/
+
+    public function entries(Request $request)
     {
-        $movements = StockMovement::with('product')
-            ->where('type', 'in')
+        $query = StockMovement::with([
+            'product.brand',
+            'product.model',
+            'user',
+        ])
+        ->where('type', 'in');
+
+        /*
+        |--------------------------------------------------------------------------
+        | RECHERCHE REFERENCE
+        |--------------------------------------------------------------------------
+        */
+
+        if ($request->filled('reference')) {
+
+            $query->where(
+                'reference',
+                'like',
+                '%' . trim($request->reference) . '%'
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | RECHERCHE DESIGNATION
+        |--------------------------------------------------------------------------
+        */
+
+        if ($request->filled('designation')) {
+
+            $query->whereHas('product', function ($q) use ($request) {
+
+                $q->where(
+                    'designation',
+                    'like',
+                    '%' . trim($request->designation) . '%'
+                );
+            });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | DATE
+        |--------------------------------------------------------------------------
+        */
+
+        if ($request->filled('date')) {
+
+            $query->whereDate(
+                'created_at',
+                $request->date
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | RESULTATS
+        |--------------------------------------------------------------------------
+        */
+
+        $movements = $query
             ->latest()
             ->get();
 
@@ -268,10 +333,75 @@ class StockMovementController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    public function exits()
+   /*
+    |--------------------------------------------------------------------------
+    | SORTIES
+    |--------------------------------------------------------------------------
+    */
+
+    public function exits(Request $request)
     {
-        $movements = StockMovement::with('product')
-            ->where('type', 'out')
+        $query = StockMovement::with([
+            'product.brand',
+            'product.model',
+            'user',
+        ])
+        ->where('type', 'out');
+
+        /*
+        |--------------------------------------------------------------------------
+        | RECHERCHE REFERENCE
+        |--------------------------------------------------------------------------
+        */
+
+        if ($request->filled('reference')) {
+
+            $query->where(
+                'reference',
+                'like',
+                '%' . trim($request->reference) . '%'
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | RECHERCHE DESIGNATION
+        |--------------------------------------------------------------------------
+        */
+
+        if ($request->filled('designation')) {
+
+            $query->whereHas('product', function ($q) use ($request) {
+
+                $q->where(
+                    'designation',
+                    'like',
+                    '%' . trim($request->designation) . '%'
+                );
+            });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | DATE
+        |--------------------------------------------------------------------------
+        */
+
+        if ($request->filled('date')) {
+
+            $query->whereDate(
+                'created_at',
+                $request->date
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | RESULTATS
+        |--------------------------------------------------------------------------
+        */
+
+        $movements = $query
             ->latest()
             ->get();
 

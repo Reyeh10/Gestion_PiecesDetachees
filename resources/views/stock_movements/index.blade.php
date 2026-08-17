@@ -12,7 +12,7 @@
     <div class="card-body">
         {{-- SEARCH BAR --}}
         <form method="GET"
-            action="{{ route('stock-movements.index') }}"
+            action="{{ url()->current() }}"
             class="row g-3 align-items-center mb-4">
 
             {{-- REFERENCE --}}
@@ -88,7 +88,7 @@
 
     <div class="col-md-2">
 
-        <a href="{{ route('stock-movements.index') }}"
+        <a href="{{ url()->current() }}"
         class="btn w-100 fw-bold shadow-sm text-white"
         style="
                 border-radius: 12px;
