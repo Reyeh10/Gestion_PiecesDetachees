@@ -1454,105 +1454,74 @@
                                         ?: 'Pièce';
 
 
-                                    /*
-                                |--------------------------------------------------------------------------
-                                | STATUT AFFICHÉ
-                                |--------------------------------------------------------------------------
-                                |
-                                | IMPORTANT :
-                                |
-                                | Le statut général d'un produit dépend uniquement :
-                                |
-                                | - de son statut métier "vendu"
-                                | - de sa quantité disponible
-                                | - de son stock minimum
-                                |
-                                | La quantité reçue et la quantité non disponible servent uniquement
-                                | au suivi des pièces à commander / pièces non disponibles.
-                                |
-                                | Elles ne doivent PAS produire "Disponible partiel"
-                                | dans la liste générale des produits.
-                                |
-                                */
-
-                                if ($isSoldProducts) {
-
-                                    /*
+                                 /*
                                     |--------------------------------------------------------------------------
-                                    | PAGE PRODUITS VENDUS
+                                    | STATUT AFFICHÉ
                                     |--------------------------------------------------------------------------
+                                    |
+                                    | Dans "Tous les produits", le statut doit représenter
+                                    | uniquement l'état ACTUEL du stock :
+                                    |
+                                    | - Disponible
+                                    | - Stock faible
+                                    | - Rupture
+                                    |
+                                    | Le statut "Vendu" est réservé à la page "Produits vendus".
+                                    |
                                     */
 
-                                    $displayStatus =
-                                        'Vendu';
+                                    if ($isSoldProducts) {
 
-                                    $statusClass =
-                                        'product-status-sold';
+                                        /*
+                                        |--------------------------------------------------------------------------
+                                        | PRODUITS VENDUS
+                                        |--------------------------------------------------------------------------
+                                        */
 
-                                } elseif (
-                                    strtolower((string) $product->status) === 'vendu'
-                                ) {
+                                        $displayStatus = 'Vendu';
 
-                                    /*
-                                    |--------------------------------------------------------------------------
-                                    | PRODUIT VENDU
-                                    |--------------------------------------------------------------------------
-                                    */
+                                        $statusClass = 'product-status-sold';
 
-                                    $displayStatus =
-                                        'Vendu';
+                                    } elseif ($availableQty <= 0) {
 
-                                    $statusClass =
-                                        'product-status-sold';
+                                        /*
+                                        |--------------------------------------------------------------------------
+                                        | RUPTURE
+                                        |--------------------------------------------------------------------------
+                                        */
 
-                                } elseif (
-                                    $availableQty <= 0
-                                ) {
+                                        $displayStatus = 'Rupture';
 
-                                    /*
-                                    |--------------------------------------------------------------------------
-                                    | RUPTURE DE STOCK
-                                    |--------------------------------------------------------------------------
-                                    */
+                                        $statusClass = 'product-status-unavailable';
 
-                                    $displayStatus =
-                                        'En rupture';
+                                    } elseif (
+                                        (float) ($product->min_stock ?? 0) > 0
+                                        &&
+                                        $availableQty <= (float) $product->min_stock
+                                    ) {
 
-                                    $statusClass =
-                                        'product-status-unavailable';
+                                        /*
+                                        |--------------------------------------------------------------------------
+                                        | STOCK FAIBLE
+                                        |--------------------------------------------------------------------------
+                                        */
 
-                                } elseif (
-                                    (float) $product->min_stock > 0
-                                    &&
-                                    $availableQty <= (float) $product->min_stock
-                                ) {
+                                        $displayStatus = 'Stock faible';
 
-                                    /*
-                                    |--------------------------------------------------------------------------
-                                    | STOCK FAIBLE
-                                    |--------------------------------------------------------------------------
-                                    */
+                                        $statusClass = 'product-status-low';
 
-                                    $displayStatus =
-                                        'Stock faible';
+                                    } else {
 
-                                    $statusClass =
-                                        'product-status-low';
+                                        /*
+                                        |--------------------------------------------------------------------------
+                                        | DISPONIBLE
+                                        |--------------------------------------------------------------------------
+                                        */
 
-                                } else {
+                                        $displayStatus = 'Disponible';
 
-                                    /*
-                                    |--------------------------------------------------------------------------
-                                    | PRODUIT DISPONIBLE
-                                    |--------------------------------------------------------------------------
-                                    */
-
-                                    $displayStatus =
-                                        'Disponible';
-
-                                    $statusClass =
-                                        'product-status-available';
-                                }
+                                        $statusClass = 'product-status-available';
+                                    }
                                 @endphp
 
 

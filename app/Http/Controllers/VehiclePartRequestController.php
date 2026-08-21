@@ -1486,13 +1486,19 @@ class VehiclePartRequestController extends Controller
                     |--------------------------------------------------------------------------
                     */
 
+                   /*
+                    |--------------------------------------------------------------------------
+                    | VALEURS ACTUELLES DU PRODUIT
+                    |--------------------------------------------------------------------------
+                    */
+
                     $currentAvailableQuantity =
                         (float) ($product->quantity ?? 0);
 
                     $currentProductReceivedQuantity =
                         (float) ($product->received_quantity ?? 0);
 
-                    $productInitialQuantity =
+                    $currentProductInitialQuantity =
                         (float) ($product->initial_quantity ?? 0);
 
 
@@ -1500,10 +1506,28 @@ class VehiclePartRequestController extends Controller
                     |--------------------------------------------------------------------------
                     | NOUVELLES VALEURS
                     |--------------------------------------------------------------------------
+                    |
+                    | Une réception provenant d'une commande garage est une nouvelle
+                    | entrée physique dans le stock.
+                    |
+                    | Exemple :
+                    |
+                    | Produit avant :
+                    | initial_quantity  = 20
+                    | received_quantity = 20
+                    | quantity          = 5
+                    |
+                    | Nouvelle commande reçue : 10
+                    |
+                    | Produit après :
+                    | initial_quantity  = 30
+                    | received_quantity = 30
+                    | quantity          = 15
+                    |
                     */
 
-                    $newProductAvailableQuantity =
-                        $currentAvailableQuantity
+                    $newProductInitialQuantity =
+                        $currentProductInitialQuantity
                         +
                         $quantityDifference;
 
@@ -1512,46 +1536,26 @@ class VehiclePartRequestController extends Controller
                         +
                         $quantityDifference;
 
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | SÉCURITÉ : NE PAS DÉPASSER LA QUANTITÉ INITIALE
-                    |--------------------------------------------------------------------------
-                    |
-                    | Cette protection est cohérente avec votre logique de pièce
-                    | commandée déjà comptée dans initial_quantity.
-                    |
-                    */
-
-                    if (
-                        $productInitialQuantity > 0
-                        &&
-                        $newProductReceivedQuantity > $productInitialQuantity
-                    ) {
-                        throw new \RuntimeException(
-                            'Impossible d’enregistrer cette réception : '
-                            . 'la quantité reçue du produit dépasserait sa quantité initiale.'
-                        );
-                    }
+                    $newProductAvailableQuantity =
+                        $currentAvailableQuantity
+                        +
+                        $quantityDifference;
 
 
                     /*
                     |--------------------------------------------------------------------------
-                    | MISE À JOUR PRODUIT
+                    | MISE À JOUR DU PRODUIT
                     |--------------------------------------------------------------------------
                     */
 
-                    $product->quantity =
-                        $newProductAvailableQuantity;
+                    $product->initial_quantity =
+                        $newProductInitialQuantity;
 
                     $product->received_quantity =
                         $newProductReceivedQuantity;
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | IMPORTANT : initial_quantity NE CHANGE PAS
-                    |--------------------------------------------------------------------------
-                    */
+                    $product->quantity =
+                        $newProductAvailableQuantity;
 
                     $product->status =
                         'disponible';

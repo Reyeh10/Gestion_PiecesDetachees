@@ -84,6 +84,7 @@ class Product extends Model
         */
 
         'status',
+        'supply_status',
     ];
 
     /*

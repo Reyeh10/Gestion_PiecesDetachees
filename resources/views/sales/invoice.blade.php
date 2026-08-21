@@ -959,15 +959,15 @@
                         {{ $sale->payment_type ?? '-' }}
                     </div>
 
-                    <div>
+                    <!--div>
                         <strong>Immatriculation :</strong>
-                        {{ $sale->vehicle->plate_number ?? '-' }}
+                        { { $sale->vehicle->plate_number ?? '-' }}
                     </div>
 
-                    @if($sale->vehicle)
+                    @ if($sale->vehicle)
                         <div>
                             <strong>Véhicule :</strong>
-                            {{
+                            { {
                                 trim(
                                     ($sale->vehicle->brand ?? '')
                                     . ' '
@@ -975,7 +975,12 @@
                                 ) ?: '-'
                             }}
                         </div>
-                    @endif
+                    @ endif-->
+                    
+                    <div>
+                        <strong>Vendeur :</strong>
+                        {{ $sale->user->name ?? '-' }}
+                    </div>
 
                 </div>
 

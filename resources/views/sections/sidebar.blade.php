@@ -202,22 +202,22 @@
                     {{-- PIÈCES NON DISPONIBLES --}}
                     {{-- ===================================================== --}}
 
-                    <li class="menu-item
-                        {{
+                    <!--li class="menu-item
+                        { {
                             request()->routeIs('products.unavailable')
                                 ? 'active'
                                 : ''
                         }}"
-                    >
+                        >
                         <a
-                            href="{{ route('products.unavailable') }}"
+                            href="{ { route('products.unavailable') }}"
                             class="menu-link"
                         >
                             <div>
                                 Pièces non disponibles
                             </div>
                         </a>
-                    </li>
+                    </li-->
                     <li class="menu-item
                         {{
                             request()->routeIs('products.sold')
@@ -304,19 +304,102 @@
 
         </li>
 
-        {{-- CLIENTS --}}
-        <li class="menu-item {{ request()->routeIs('customers.*') ? 'active' : '' }}">
+       {{-- ===================================================== --}}
+    {{-- CLIENTS --}}
+    {{-- ===================================================== --}}
 
-            <a href="{{ route('customers.index') }}"
-               class="menu-link">
+    <li class="menu-item
+        {{
+            request()->routeIs('customers.*')
+            ? 'active open'
+            : ''
+        }}"
+    >
 
-                <i class="menu-icon tf-icons bx bx-user"></i>
+        {{-- MENU PRINCIPAL --}}
+        <a
+            href="javascript:void(0);"
+            class="menu-link menu-toggle"
+        >
 
-                <div>Clients</div>
+            <i class="menu-icon tf-icons bx bx-user"></i>
 
-            </a>
+            <div>
+                Clients
+            </div>
 
-        </li>
+        </a>
+
+
+        {{-- SOUS-MENU --}}
+        <ul class="menu-sub">
+
+
+            {{-- =============================================== --}}
+            {{-- LISTE DES CLIENTS --}}
+            {{-- =============================================== --}}
+
+            <li class="menu-item
+                {{
+                    request()->routeIs(
+                        'customers.index',
+                        'customers.create',
+                        'customers.edit'
+                    )
+                        ? 'active'
+                        : ''
+                }}"
+            >
+
+                <a
+                    href="{{ route('customers.index') }}"
+                    class="menu-link"
+                >
+
+                    <div>
+
+                        Liste des clients
+
+                    </div>
+
+                </a>
+
+            </li>
+
+
+            {{-- =============================================== --}}
+            {{-- HISTORIQUE DES CLIENTS --}}
+            {{-- =============================================== --}}
+
+            <li class="menu-item
+                {{
+                    request()->routeIs(
+                        'customers.history',
+                        'customers.show'
+                    )
+                        ? 'active'
+                        : ''
+                }}"
+            >
+
+                <a
+                    href="{{ route('customers.history') }}"
+                    class="menu-link"
+                >
+
+                    <div>
+
+                        Historique des clients
+
+                    </div>
+
+                </a>
+
+            </li>
+
+        </ul>
+
+    </li>
 
         {{-- ===================================================== --}}
         {{-- VÉHICULES --}}

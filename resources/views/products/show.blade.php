@@ -3,26 +3,123 @@
 @section('content')
 
 @php
-    $initialQty = (float) ($product->initial_quantity ?? 0);
-    $receivedQty = (float) ($product->received_quantity ?? 0);
-    $availableQty = (float) ($availableQuantity ?? $product->quantity ?? 0);
-    $unavailableQty = max(0, $initialQty - $receivedQty);
-    $soldQty = (float) ($soldQuantity ?? 0);
-    $unitLabel = $product->unit_label ?: 'Pièce';
+
+    /*
+    |--------------------------------------------------------------------------
+    | QUANTITÉS
+    |--------------------------------------------------------------------------
+    */
+
+    $initialQty =
+        (float) ($product->initial_quantity ?? 0);
+
+    $receivedQty =
+        (float) ($product->received_quantity ?? 0);
+
+    $availableQty =
+        (float) (
+            $availableQuantity
+            ?? $product->quantity
+            ?? 0
+        );
+
+    $unavailableQty =
+        max(
+            0,
+            $initialQty - $receivedQty
+        );
+
+    $soldQty =
+        (float) ($soldQuantity ?? 0);
+
+    $unitLabel =
+        $product->unit_label
+        ?: 'Pièce';
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | STATUT AFFICHÉ
+    |--------------------------------------------------------------------------
+    */
 
     if ($product->status === 'vendu') {
-        $displayStatus = 'Vendu';
-        $statusClass = 'status-sold';
-    } elseif ($availableQty > 0 && $unavailableQty > 0) {
-        $displayStatus = 'Disponible partiellement';
-        $statusClass = 'status-partial';
-    } elseif ($availableQty > 0) {
-        $displayStatus = 'Disponible';
-        $statusClass = 'status-available';
+
+        $displayStatus =
+            'Vendu';
+
+        $statusClass =
+            'status-sold';
+
+    } elseif (
+        $product->supply_status
+        ===
+        'en_recherche'
+    ) {
+
+        $displayStatus =
+            'En recherche';
+
+        $statusClass =
+            'status-searching';
+
+    } elseif (
+        $product->supply_status
+        ===
+        'en_commande'
+    ) {
+
+        $displayStatus =
+            'En commande';
+
+        $statusClass =
+            'status-ordered';
+
+    } elseif (
+        $receivedQty > 0
+        &&
+        $receivedQty < $initialQty
+    ) {
+
+        $displayStatus =
+            'Partiellement reçu';
+
+        $statusClass =
+            'status-partial';
+
+    } elseif (
+        $receivedQty <= 0
+        ||
+        $availableQty <= 0
+    ) {
+
+        $displayStatus =
+            'Rupture';
+
+        $statusClass =
+            'status-unavailable';
+
+    } elseif (
+        $initialQty > 0
+        &&
+        $receivedQty >= $initialQty
+    ) {
+
+        $displayStatus =
+            'Reçu';
+
+        $statusClass =
+            'status-available';
+
     } else {
-        $displayStatus = 'Non disponible';
-        $statusClass = 'status-unavailable';
+
+        $displayStatus =
+            'Disponible';
+
+        $statusClass =
+            'status-available';
     }
+
 @endphp
 
 <style>
@@ -196,6 +293,16 @@
     .status-sold {
         color: #475569;
         background: #e2e8f0;
+    }
+
+    .status-searching {
+    color: #0369a1;
+    background: #e0f2fe;
+    }
+
+    .status-ordered {
+        color: #854d0e;
+        background: #fef9c3;
     }
 
     .stock-summary-grid {

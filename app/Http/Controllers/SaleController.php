@@ -541,6 +541,8 @@ use Illuminate\Support\Facades\DB;
                     'vehicle_id' =>
                         $vehicle->id,
 
+                    'user_id' => auth()->id(),
+
                     'payment_type' =>
                         $request->payment_type,
 
@@ -719,8 +721,8 @@ use Illuminate\Support\Facades\DB;
 
                 DB::commit();
 
-                return redirect()
-                    ->route('sales.show', $sale)
+               return redirect()
+                    ->route('sales.invoice', $sale)
                     ->with(
                         'success',
                         'Vente enregistrée avec succès.'
@@ -747,7 +749,12 @@ use Illuminate\Support\Facades\DB;
         */
 
         public function show(Sale $sale)
+
         {
+            return redirect()
+                ->route('sales.invoice', $sale);
+        }
+       /* {
             $sale->load([
 
                 'customer',
@@ -767,7 +774,7 @@ use Illuminate\Support\Facades\DB;
             |--------------------------------------------------------------------------
             */
 
-            $numberToWords = new NumberToWords();
+          /*  $numberToWords = new NumberToWords();
 
                         $numberTransformer =
                             $numberToWords->getNumberTransformer('fr');
@@ -789,14 +796,14 @@ use Illuminate\Support\Facades\DB;
             |--------------------------------------------------------------------------
             */
 
-            return view(
+           /* return view(
                 'sales.show',
                 compact(
                     'sale',
                     'totalInWords'
                 )
             );
-        }
+        }*/
 
         /*
         |--------------------------------------------------------------------------
@@ -1015,8 +1022,8 @@ use Illuminate\Support\Facades\DB;
 
         $sale->save();
 
-        return redirect()
-            ->route('sales.show', $sale)
+       return redirect()
+            ->route('sales.invoice', $sale)
             ->with(
                 'success',
                 'Facture annulée avec succès.'
@@ -1269,6 +1276,7 @@ use Illuminate\Support\Facades\DB;
             $sale->load([
                 'customer',
                 'vehicle',
+                 'user',
                 'items.product.brand',
                 'items.product.model',
                 'payments',

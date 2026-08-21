@@ -28,6 +28,7 @@ class Sale extends Model
         // CLIENT ET VÉHICULE
         'customer_id',
         'vehicle_id',
+        'user_id',
 
         // INFORMATIONS DE LA VENTE
         'payment_type',
@@ -91,6 +92,17 @@ class Sale extends Model
             'vehicle_id',
             'id'
         );
+    }
+
+     /*
+    |--------------------------------------------------------------------------
+    | User
+    |--------------------------------------------------------------------------
+    */
+
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
     }
 
     /*

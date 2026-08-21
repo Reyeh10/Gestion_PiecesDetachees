@@ -1339,6 +1339,19 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
+    | HISTORIQUE ASSOCIÉS À UN CLIENT
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+    '/customers-history',
+    [CustomerController::class, 'history']
+        )->name('customers.history');
+
+        Route::resource('customers', CustomerController::class);
+
+    /*
+    |--------------------------------------------------------------------------
     | CRÉER UN PROFORMA À PARTIR D'UN VÉHICULE
     |--------------------------------------------------------------------------
     */

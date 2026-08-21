@@ -35,6 +35,65 @@
     </div>
 
     <div class="card-body">
+        <form
+            action="{{ route('customers.index') }}"
+            method="GET"
+            class="mb-4"
+        >
+
+            <div class="row g-2 align-items-end">
+
+                <div class="col-md-6">
+
+                    <label class="form-label">
+
+                        Rechercher un client
+
+                    </label>
+
+                    <input
+                        type="text"
+                        name="search"
+                        class="form-control"
+                        value="{{ request('search') }}"
+                        placeholder="Code, nom, téléphone ou email..."
+                    >
+
+                </div>
+
+
+                <div class="col-auto">
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary"
+                    >
+
+                        <i class="bx bx-search me-1"></i>
+
+                        Rechercher
+
+                    </button>
+
+                </div>
+
+
+                <div class="col-auto">
+
+                    <a
+                        href="{{ route('customers.index') }}"
+                        class="btn btn-outline-secondary"
+                    >
+
+                        Réinitialiser
+
+                    </a>
+
+                </div>
+
+            </div>
+
+        </form>
 
         <div class="table-responsive">
 
@@ -157,6 +216,17 @@
             </table>
 
         </div>
+
+        {{-- PAGINATION --}}
+        @if($customers->hasPages())
+
+            <div class="mt-4">
+
+                {{ $customers->withQueryString()->links() }}
+
+            </div>
+
+        @endif
 
     </div>
 

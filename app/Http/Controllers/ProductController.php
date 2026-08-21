@@ -787,7 +787,10 @@ class ProductController extends Controller
                         $product['unit_label'] ?? 'Pièce',
 
                    'status' =>
-                         'disponible',
+                    'disponible',
+
+                 'supply_status' =>
+                    null,
                 ]);
 
                 $createdProduct = $existingProduct;
@@ -876,6 +879,9 @@ class ProductController extends Controller
 
                   'status' =>
                     'disponible',
+
+                'supply_status' =>
+                    null,
                 ]);
             }
 
@@ -1071,11 +1077,7 @@ class ProductController extends Controller
         |
         */
 
-        $products = $query
-            ->where(
-                'status',
-                'disponible'
-            )
+       $products = $query
             ->where(
                 'quantity',
                 '>',
@@ -1452,7 +1454,31 @@ class ProductController extends Controller
             |
             */
 
-            ->whereColumn('quantity', '<=', 'min_stock')
+           ->where(function ($query) {
+
+                $query
+                    ->whereColumn(
+                        'quantity',
+                        '<=',
+                        'min_stock'
+                    )
+
+                    ->orWhereIn(
+                        'supply_status',
+                        [
+                            'rupture',
+                            'en_recherche',
+                            'en_commande',
+                            'partiellement_recu',
+                        ]
+                    )
+
+                    ->orWhereColumn(
+                        'received_quantity',
+                        '<',
+                        'initial_quantity'
+                    );
+            })
 
             /*
             |--------------------------------------------------------------------------
@@ -1546,14 +1572,47 @@ class ProductController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            ->paginate(20)
-            ->withQueryString();
+            ->paginate(20);
+            $products->appends(
+                $request->query()
+            );
+                    
 
 
         return view(
             'products.to-order',
             compact('products')
         );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | MODIFIER LE STATUT DE RÉAPPROVISIONNEMENT
+    |--------------------------------------------------------------------------
+    */
+
+    public function updateSupplyStatus(
+        Request $request,
+        Product $product
+    ) {
+        $request->validate([
+            'supply_status' => [
+                'required',
+                'in:rupture,en_recherche,en_commande,partiellement_recu,recu',
+            ],
+        ]);
+
+        $product->update([
+            'supply_status' =>
+                $request->supply_status,
+        ]);
+
+        return redirect()
+            ->back()
+            ->with(
+                'success',
+                'Statut de réapprovisionnement mis à jour avec succès.'
+            );
     }
 
    /*
@@ -2050,6 +2109,19 @@ public function store(Request $request)
 
         'status' =>
             'disponible',
+           /*
+            |--------------------------------------------------------------------------
+            | STATUT DE RÉAPPROVISIONNEMENT
+            |--------------------------------------------------------------------------
+            |
+            | Une nouvelle pièce créée sans stock commence en "rupture".
+            |
+            */
+
+            'supply_status' =>
+                $isUnavailable
+                    ? 'rupture'
+                    : null,
 
         /*
         |--------------------------------------------------------------------------

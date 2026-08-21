@@ -45,6 +45,179 @@ class CustomerController extends Controller
 
     /*
     |--------------------------------------------------------------------------
+    | HISTORIQUE GLOBAL DES CLIENTS
+    |--------------------------------------------------------------------------
+    |
+    | Affiche :
+    | - informations client
+    | - nombre de véhicules
+    | - nombre de factures / ventes
+    | - montant total facturé
+    | - montant total payé
+    | - solde restant
+    |
+    */
+    public function history(Request $request)
+    {
+        $query = Customer::query()
+            ->with([
+                'vehicles',
+                'sales.payments',
+            ])
+            ->withCount([
+                'vehicles',
+                'sales',
+            ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | RECHERCHE
+        |--------------------------------------------------------------------------
+        */
+
+        if ($request->filled('search')) {
+
+            $search = trim($request->search);
+
+            $query->where(function ($q) use ($search) {
+
+                $q->where(
+                    'code',
+                    'like',
+                    '%' . $search . '%'
+                )
+                ->orWhere(
+                    'name',
+                    'like',
+                    '%' . $search . '%'
+                )
+                ->orWhere(
+                    'phone',
+                    'like',
+                    '%' . $search . '%'
+                )
+                ->orWhere(
+                    'email',
+                    'like',
+                    '%' . $search . '%'
+                )
+
+                /*
+                |--------------------------------------------------------------------------
+                | RECHERCHE VÉHICULE
+                |--------------------------------------------------------------------------
+                */
+
+                ->orWhereHas('vehicles', function ($vehicleQuery) use ($search) {
+
+                    $vehicleQuery
+                        ->where(
+                            'vin',
+                            'like',
+                            '%' . $search . '%'
+                        )
+                        ->orWhere(
+                            'brand',
+                            'like',
+                            '%' . $search . '%'
+                        )
+                        ->orWhere(
+                            'model',
+                            'like',
+                            '%' . $search . '%'
+                        );
+                })
+
+                /*
+                |--------------------------------------------------------------------------
+                | RECHERCHE FACTURE / VENTE
+                |--------------------------------------------------------------------------
+                */
+
+                ->orWhereHas('sales', function ($saleQuery) use ($search) {
+
+                    $saleQuery
+                        ->where(
+                            'invoice_number',
+                            'like',
+                            '%' . $search . '%'
+                        );
+                });
+            });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | CHARGEMENT
+        |--------------------------------------------------------------------------
+        */
+
+        $customers = $query
+            ->latest('id')
+            ->paginate(15);
+           
+
+      /*
+    |--------------------------------------------------------------------------
+    | CALCULS
+    |--------------------------------------------------------------------------
+    */
+
+    foreach ($customers as $customer) {
+
+        /*
+        |--------------------------------------------------------------------------
+        | TOTAL FACTURÉ
+        |--------------------------------------------------------------------------
+        */
+
+        $customer->total_invoiced = $customer->sales->sum(function ($sale) {
+
+            return (float) (
+                $sale->total
+                ?? $sale->total_amount
+                ?? $sale->grand_total
+                ?? 0
+            );
+        });
+
+        /*
+        |--------------------------------------------------------------------------
+        | TOTAL PAYÉ
+        |--------------------------------------------------------------------------
+        */
+
+        $customer->total_paid = $customer->sales->sum(function ($sale) {
+
+            return $sale->payments->sum(function ($payment) {
+
+                return (float) (
+                    $payment->amount
+                    ?? $payment->paid_amount
+                    ?? 0
+                );
+            });
+        });
+
+        /*
+        |--------------------------------------------------------------------------
+        | SOLDE
+        |--------------------------------------------------------------------------
+        */
+
+        $customer->balance =
+            $customer->total_invoiced
+            - $customer->total_paid;
+    }
+
+    return view(
+        'customers.history',
+        compact('customers')
+    );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
     | CREATE
     |--------------------------------------------------------------------------
     */
@@ -199,7 +372,7 @@ class CustomerController extends Controller
     public function show(Customer $customer)
     {
         $customer->load([
-
+            'vehicles',
             'sales.items.product',
             'sales.payments',
         ]);

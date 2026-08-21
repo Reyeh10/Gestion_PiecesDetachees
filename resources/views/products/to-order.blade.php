@@ -668,37 +668,87 @@
 
 
                                     {{-- STATUT --}}
+                                
                                     <td class="text-center">
 
-                                        @if($availableQty <= 0)
+                                        @php
 
-                                            <span
-                                                class="
-                                                    status-badge
-                                                    bg-danger
-                                                    text-white
-                                                "
-                                            >
+                                            $supplyStatus =
+                                                $product->supply_status ?? null;
+
+                                            $initialQty =
+                                                (float) ($product->initial_quantity ?? 0);
+
+                                            $receivedQty =
+                                                (float) ($product->received_quantity ?? 0);
+
+                                        @endphp
+
+
+                                        {{-- EN RECHERCHE --}}
+                                        @if($supplyStatus === 'en_recherche')
+
+                                            <span class="status-badge bg-info text-white">
+
+                                                En recherche
+
+                                            </span>
+
+
+                                        {{-- EN COMMANDE --}}
+                                        @elseif($supplyStatus === 'en_commande')
+
+                                            <span class="status-badge bg-primary text-white">
+
+                                                En commande
+
+                                            </span>
+
+
+                                        {{-- PARTIELLEMENT REÇU --}}
+                                        @elseif(
+                                            $receivedQty > 0
+                                            &&
+                                            $receivedQty < $initialQty
+                                        )
+
+                                            <span class="status-badge bg-warning text-dark">
+
+                                                Partiellement reçu
+
+                                            </span>
+
+
+                                        {{-- RUPTURE --}}
+                                        @elseif($availableQty <= 0)
+
+                                            <span class="status-badge bg-danger text-white">
 
                                                 Rupture
 
                                             </span>
 
+
+                                        {{-- STOCK FAIBLE --}}
                                         @elseif(
-                                            $availableQty
-                                            <=
-                                            $minStock
+                                            $minStock > 0
+                                            &&
+                                            $availableQty <= $minStock
                                         )
 
-                                            <span
-                                                class="
-                                                    status-badge
-                                                    bg-warning
-                                                    text-dark
-                                                "
-                                            >
+                                            <span class="status-badge bg-warning text-dark">
 
                                                 Stock faible
+
+                                            </span>
+
+
+                                        {{-- AUTRE --}}
+                                        @else
+
+                                            <span class="status-badge bg-secondary text-white">
+
+                                                À traiter
 
                                             </span>
 

@@ -752,7 +752,14 @@
                 step="0.01"
                 class="form-control"
                 id="unavailable_quantity_preview"
-                value="{{ $isEdit ? (float) ($product->unavailable_quantity ?? 0) : 0 }}"
+                value="{{ $isEdit
+                ? max(
+                    0,
+                    (float) ($product->initial_quantity ?? 0)
+                    - (float) ($product->received_quantity ?? 0)
+                )
+                : 0
+            }}"
                 readonly
             >
 
@@ -803,24 +810,90 @@
         </div>
 
 
-        @if($isEdit)
+       @if($isEdit)
 
-            <div class="col-md-4 mb-3">
+        @php
 
-                <label class="form-label">
-                    Statut actuel
-                </label>
+            $editInitialQty =
+                (float) ($product->initial_quantity ?? 0);
 
-                <input
-                    type="text"
-                    class="form-control"
-                    value="{{ $product->status === 'disponible' ? 'Disponible' : ($product->status === 'vendu' ? 'Vendu' : 'Non disponible') }}"
-                    readonly
-                >
+            $editReceivedQty =
+                (float) ($product->received_quantity ?? 0);
 
-            </div>
+            $editAvailableQty =
+                (float) ($product->quantity ?? 0);
 
-        @endif
+            $editSupplyStatus =
+                $product->supply_status ?? null;
+
+
+            if ($product->status === 'vendu') {
+
+                $editDisplayStatus =
+                    'Vendu';
+
+            } elseif ($editSupplyStatus === 'en_recherche') {
+
+                $editDisplayStatus =
+                    'En recherche';
+
+            } elseif ($editSupplyStatus === 'en_commande') {
+
+                $editDisplayStatus =
+                    'En commande';
+
+            } elseif (
+                $editReceivedQty > 0
+                &&
+                $editReceivedQty < $editInitialQty
+            ) {
+
+                $editDisplayStatus =
+                    'Partiellement reçu';
+
+            } elseif (
+                $editReceivedQty <= 0
+                ||
+                $editAvailableQty <= 0
+            ) {
+
+                $editDisplayStatus =
+                    'Rupture';
+
+            } elseif (
+                $editInitialQty > 0
+                &&
+                $editReceivedQty >= $editInitialQty
+            ) {
+
+                $editDisplayStatus =
+                    'Reçu';
+
+            } else {
+
+                $editDisplayStatus =
+                    'Disponible';
+            }
+
+        @endphp
+
+
+    <div class="col-md-4 mb-3">
+
+        <label class="form-label">
+            Statut actuel
+        </label>
+
+        <input
+            type="text"
+            class="form-control"
+            value="{{ $editDisplayStatus }}"
+            readonly
+        >
+
+    </div>
+
+@endif
 
     </div>
 

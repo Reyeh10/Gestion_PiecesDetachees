@@ -20,18 +20,24 @@
 <div class="row">
 
     {{-- CODE --}}
-    <div class="col-md-6 mb-3">
+   <div class="col-md-6 mb-3">
 
         <label class="form-label">
             Code fournisseur
         </label>
 
-        <input type="text"
-            name="code"
-            class="form-control"
-            placeholder="Ex: FR001"
-            value="{{ old('code', $supplier->code ?? '') }}"
-            required>
+        <input
+            type="text"
+            class="form-control bg-light"
+            value="{{ $nextCode ?? ($supplier->code ?? '') }}"
+            readonly
+        >
+
+        @if(isset($nextCode))
+            <div class="form-text">
+                Code généré automatiquement par le système.
+            </div>
+        @endif
 
     </div>
 
