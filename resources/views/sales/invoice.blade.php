@@ -926,6 +926,11 @@
                         <strong>Adresse :</strong>
                         {{ $sale->customer->address ?? '-' }}
                     </div>
+                    
+                    <div>
+                        <strong>Immatriculation :</strong>
+                        {{ $sale->vehicle->plate_number ?? '-' }}
+                    </div>
 
                 </div>
 
@@ -959,10 +964,10 @@
                         {{ $sale->payment_type ?? '-' }}
                     </div>
 
-                    <div>
+                    <!--div>
                         <strong>Immatriculation :</strong>
-                        {{ $sale->vehicle->plate_number ?? '-' }}
-                    </div>
+                        { $sale->vehicle->plate_number ?? '-' }}
+                    </div-->
 
                    <!-- @ if($sale->vehicle)
                         <div>
