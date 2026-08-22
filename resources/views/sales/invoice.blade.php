@@ -959,12 +959,12 @@
                         {{ $sale->payment_type ?? '-' }}
                     </div>
 
-                    <!--div>
+                    <div>
                         <strong>Immatriculation :</strong>
                         { { $sale->vehicle->plate_number ?? '-' }}
                     </div>
 
-                    @ if($sale->vehicle)
+                   <!-- @ if($sale->vehicle)
                         <div>
                             <strong>Véhicule :</strong>
                             { {
@@ -976,7 +976,7 @@
                             }}
                         </div>
                     @ endif-->
-                    
+
                     <div>
                         <strong>Vendeur :</strong>
                         {{ $sale->user->name ?? '-' }}
@@ -989,7 +989,7 @@
         </div>
 
         {{-- ========================================================
-**            ARTICLES**
+            **            ARTICLES**
         ======================================================== --}}
         <div class="table-responsive">
 
