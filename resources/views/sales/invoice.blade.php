@@ -961,7 +961,7 @@
 
                     <div>
                         <strong>Immatriculation :</strong>
-                        { { $sale->vehicle->plate_number ?? '-' }}
+                        {{ $sale->vehicle->plate_number ?? '-' }}
                     </div>
 
                    <!-- @ if($sale->vehicle)
