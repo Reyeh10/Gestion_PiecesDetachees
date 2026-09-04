@@ -96,9 +96,17 @@ class InventoryAdjustmentController extends Controller
             ->orderBy('designation')
             ->get();
 
+        $depots = Depot::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
         return view(
             'inventory_adjustments.create',
-            compact('products')
+            compact(
+                'products',
+                'depots'
+            )
         );
     }
 
@@ -122,6 +130,10 @@ class InventoryAdjustmentController extends Controller
                     'required',
                     'exists:products,id',
                 ],
+                'depot_id' => [
+                    'required',
+                    'exists:depots,id',
+                ],
                 'new_qty' => [
                     'required',
                     'numeric',
@@ -136,6 +148,10 @@ class InventoryAdjustmentController extends Controller
             [
                 'product_id.required' =>
                     'Veuillez sélectionner un produit.',
+                'depot_id.required' =>
+                    'Veuillez sélectionner un dépôt.',
+                'depot_id.exists' =>
+                    'Le dépôt sélectionné est invalide.',
                 'new_qty.required' =>
                     'Veuillez saisir la nouvelle quantité.',
                 'new_qty.min' =>
@@ -151,6 +167,17 @@ class InventoryAdjustmentController extends Controller
                     ->where('id', $request->product_id)
                     ->lockForUpdate()
                     ->firstOrFail();
+
+                $depot = Depot::query()
+                    ->where('id', $request->depot_id)
+                    ->where('is_active', true)
+                    ->first();
+
+                if (!$depot) {
+                    throw new RuntimeException(
+                        'Le dépôt sélectionné est introuvable ou désactivé.'
+                    );
+                }
 
                 $oldQty = round(
                     (float) $product->quantity,
@@ -169,13 +196,38 @@ class InventoryAdjustmentController extends Controller
 
                 $adjustment = InventoryAdjustment::create([
                     'product_id' => $product->id,
-                    'depot_id' => null,
+                    'depot_id' => $depot->id,
                     'rayon_id' => $product->rayon_id,
                     'location_id' => $product->location_id,
                     'old_qty' => $oldQty,
                     'new_qty' => $newQty,
                     'reason' => trim((string) $request->reason),
                     'approved_by' => auth()->id(),
+                ]);
+
+                /*
+                |--------------------------------------------------------------------------
+                | REGLE METIER : UN PRODUIT = UN SEUL DEPOT COURANT
+                |--------------------------------------------------------------------------
+                |
+                | On verrouille les anciennes lignes, puis on supprime
+                | TOUTES les présences actuelles du produit dans les dépôts.
+                | Ensuite on recrée uniquement le dépôt sélectionné.
+                |
+                */
+                ProductDepotStock::query()
+                    ->where('product_id', $product->id)
+                    ->lockForUpdate()
+                    ->get();
+
+                ProductDepotStock::query()
+                    ->where('product_id', $product->id)
+                    ->delete();
+
+                ProductDepotStock::create([
+                    'product_id' => $product->id,
+                    'depot_id' => $depot->id,
+                    'quantity' => $newQty,
                 ]);
 
                 DB::table('products')
@@ -190,7 +242,9 @@ class InventoryAdjustmentController extends Controller
                         'product_id' => $product->id,
                         'type' => $difference > 0 ? 'in' : 'out',
                         'quantity' => abs($difference),
-                        'source' => 'Ajustement inventaire',
+                        'source' =>
+                            'Ajustement inventaire | Dépôt: '
+                            . $depot->name,
                         'reference' => 'ADJ-' . $adjustment->id,
                         'user_id' => auth()->id(),
                     ]);
@@ -818,22 +872,50 @@ class InventoryAdjustmentController extends Controller
 
                         /*
                         |--------------------------------------------------------------------------
-                        | STOCK DEPOT
+                        | STOCK DEPOT - DEPOT UNIQUE
                         |--------------------------------------------------------------------------
+                        |
+                        | REGLE METIER :
+                        | Après cet ajustement, ce produit ne doit exister
+                        | QUE dans le dépôt sélectionné pour cet import.
+                        |
+                        | Les anciens ajustements restent dans l'historique,
+                        | mais les anciennes lignes product_depot_stocks
+                        | sont supprimées.
+                        |
                         */
-                        $depotStock = ProductDepotStock::query()
+
+                        /*
+                        | Verrouiller toutes les présences actuelles
+                        | du produit dans les dépôts.
+                        */
+                        ProductDepotStock::query()
                             ->where(
                                 'product_id',
                                 $product->id
                             )
-                            ->where(
-                                'depot_id',
-                                $depot->id
-                            )
                             ->lockForUpdate()
-                            ->first();
+                            ->get();
 
-                        if (!$depotStock) {
+                        /*
+                        | Supprimer le produit de TOUS les dépôts,
+                        | y compris une ancienne ligne du dépôt cible.
+                        */
+                        ProductDepotStock::query()
+                            ->where(
+                                'product_id',
+                                $product->id
+                            )
+                            ->delete();
+
+                        /*
+                        | Recréer UNE SEULE ligne :
+                        | le dernier dépôt sélectionné.
+                        |
+                        | La quantité réelle sera affectée plus bas
+                        | après validation complète de la ligne Excel.
+                        */
+                        $depotStock =
                             ProductDepotStock::create([
                                 'product_id' =>
                                     $product->id,
@@ -844,20 +926,6 @@ class InventoryAdjustmentController extends Controller
                                 'quantity' =>
                                     0,
                             ]);
-
-                            $depotStock =
-                                ProductDepotStock::query()
-                                    ->where(
-                                        'product_id',
-                                        $product->id
-                                    )
-                                    ->where(
-                                        'depot_id',
-                                        $depot->id
-                                    )
-                                    ->lockForUpdate()
-                                    ->firstOrFail();
-                        }
 
                       /*
                         |--------------------------------------------------------------------------
@@ -1187,39 +1255,453 @@ class InventoryAdjustmentController extends Controller
 
     /*
     |--------------------------------------------------------------------------
+    | EDIT
+    |--------------------------------------------------------------------------
+    |
+    | Seul l'administrateur doit pouvoir atteindre cette méthode via web.php.
+    | Le produit de l'ajustement reste inchangé afin de préserver la traçabilité.
+    |
+    */
+    public function edit(
+        InventoryAdjustment $inventoryAdjustment
+    ): View {
+        $inventoryAdjustment->load([
+            'product.brand',
+            'product.model',
+            'product.rayon',
+            'product.location',
+            'depot',
+            'rayon',
+            'location',
+            'approver',
+        ]);
+
+        $products = Product::query()
+            ->with([
+                'brand',
+                'model',
+                'rayon',
+                'location',
+            ])
+            ->orderBy('designation')
+            ->get();
+
+        $depots = Depot::query()
+            ->orderBy('name')
+            ->get();
+
+        $rayons = Rayon::query()
+            ->orderBy('name')
+            ->get();
+
+        $locations = Location::query()
+            ->orderBy('name')
+            ->get();
+
+        return view(
+            'inventory_adjustments.edit',
+            compact(
+                'inventoryAdjustment',
+                'products',
+                'depots',
+                'rayons',
+                'locations'
+            )
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
     | UPDATE
     |--------------------------------------------------------------------------
+    |
+    | La correction d'un ajustement met à jour l'effet de cet ajustement
+    | sur le stock courant, sans toucher à initial_quantity.
+    |
     */
     public function update(
         Request $request,
         InventoryAdjustment $inventoryAdjustment
     ): RedirectResponse {
-        return redirect()
-            ->route(
-                'inventory-adjustments.index'
-            )
-            ->with(
-                'error',
-                'Un ajustement enregistré ne peut pas être modifié. Créez un nouvel ajustement correctif.'
-            );
+        $request->validate(
+            [
+                'depot_id' => [
+                    'required',
+                    'exists:depots,id',
+                ],
+                'new_qty' => [
+                    'required',
+                    'numeric',
+                    'min:0',
+                ],
+                'reason' => [
+                    'required',
+                    'string',
+                    'max:1000',
+                ],
+                'rayon_id' => [
+                    'nullable',
+                    'exists:rayons,id',
+                ],
+                'location_id' => [
+                    'nullable',
+                    'exists:locations,id',
+                ],
+            ],
+            [
+                'depot_id.required' =>
+                    'Veuillez sélectionner un dépôt.',
+                'depot_id.exists' =>
+                    'Le dépôt sélectionné est invalide.',
+                'new_qty.required' =>
+                    'Veuillez saisir la nouvelle quantité.',
+                'new_qty.numeric' =>
+                    'La nouvelle quantité doit être numérique.',
+                'new_qty.min' =>
+                    'La quantité ne peut pas être négative.',
+                'reason.required' =>
+                    'Veuillez préciser la raison.',
+                'rayon_id.exists' =>
+                    'Le rayon sélectionné est invalide.',
+                'location_id.exists' =>
+                    'L’emplacement sélectionné est invalide.',
+            ]
+        );
+
+        try {
+            DB::transaction(function () use (
+                $request,
+                $inventoryAdjustment
+            ) {
+                $adjustment = InventoryAdjustment::query()
+                    ->where('id', $inventoryAdjustment->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $product = Product::query()
+                    ->where('id', $adjustment->product_id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $depot = Depot::query()
+                    ->where('id', $request->depot_id)
+                    ->firstOrFail();
+
+                $historicalOldQty = round(
+                    (float) $adjustment->old_qty,
+                    2
+                );
+
+                $previousNewQty = round(
+                    (float) $adjustment->new_qty,
+                    2
+                );
+
+                $previousDifference = round(
+                    $previousNewQty - $historicalOldQty,
+                    2
+                );
+
+                $newQty = round(
+                    (float) $request->new_qty,
+                    2
+                );
+
+                $newDifference = round(
+                    $newQty - $historicalOldQty,
+                    2
+                );
+
+                $stockCorrection = round(
+                    $newDifference - $previousDifference,
+                    2
+                );
+
+                $currentProductQty = round(
+                    (float) $product->quantity,
+                    2
+                );
+
+                $correctedProductQty = round(
+                    $currentProductQty + $stockCorrection,
+                    2
+                );
+
+                if ($correctedProductQty < 0) {
+                    throw new RuntimeException(
+                        'La modification rendrait la quantité disponible '
+                        . 'du produit négative.'
+                    );
+                }
+
+                $finalRayonId = $adjustment->rayon_id;
+                $finalLocationId = $adjustment->location_id;
+
+                if ($request->exists('rayon_id')) {
+                    $finalRayonId = $request->filled('rayon_id')
+                        ? (int) $request->rayon_id
+                        : null;
+                }
+
+                if ($request->exists('location_id')) {
+                    $finalLocationId = $request->filled('location_id')
+                        ? (int) $request->location_id
+                        : null;
+                }
+
+                if ($finalLocationId !== null) {
+                    $location = Location::query()
+                        ->findOrFail($finalLocationId);
+
+                    if (
+                        $finalRayonId !== null
+                        && (int) $location->rayon_id
+                            !== (int) $finalRayonId
+                    ) {
+                        throw new RuntimeException(
+                            'L’emplacement sélectionné n’appartient pas '
+                            . 'au rayon sélectionné.'
+                        );
+                    }
+
+                    if ($finalRayonId === null) {
+                        $finalRayonId = $location->rayon_id;
+                    }
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | DEPOT UNIQUE APRES MODIFICATION
+                |--------------------------------------------------------------------------
+                */
+                ProductDepotStock::query()
+                    ->where('product_id', $product->id)
+                    ->lockForUpdate()
+                    ->get();
+
+                ProductDepotStock::query()
+                    ->where('product_id', $product->id)
+                    ->delete();
+
+                ProductDepotStock::create([
+                    'product_id' => $product->id,
+                    'depot_id' => $depot->id,
+                    'quantity' => $newQty,
+                ]);
+
+                /*
+                | Dans cette règle métier, products.quantity correspond
+                | exactement à la quantité du seul dépôt courant.
+                */
+                $product->quantity = $newQty;
+
+                if (
+                    $request->exists('rayon_id')
+                    || $request->exists('location_id')
+                ) {
+                    $product->rayon_id = $finalRayonId;
+                    $product->location_id = $finalLocationId;
+                }
+
+                $product->save();
+
+                $adjustment->depot_id = $depot->id;
+                $adjustment->new_qty = $newQty;
+                $adjustment->reason =
+                    trim((string) $request->reason);
+                $adjustment->rayon_id = $finalRayonId;
+                $adjustment->location_id = $finalLocationId;
+                $adjustment->approved_by = auth()->id();
+                $adjustment->save();
+
+                $movementReference =
+                    'ADJ-' . $adjustment->id;
+
+                $movement = StockMovement::query()
+                    ->where(
+                        'reference',
+                        $movementReference
+                    )
+                    ->first();
+
+                if (abs($newDifference) > 0.00001) {
+                    $source = 'Ajustement inventaire corrigé';
+
+                    if ($adjustment->depot_id !== null) {
+                        $depotName = Depot::query()
+                            ->where(
+                                'id',
+                                $adjustment->depot_id
+                            )
+                            ->value('name');
+
+                        if ($depotName) {
+                            $source .=
+                                ' | Dépôt: ' . $depotName;
+                        }
+                    }
+
+                    $movementData = [
+                        'product_id' => $product->id,
+                        'type' => $newDifference > 0
+                            ? 'in'
+                            : 'out',
+                        'quantity' => abs($newDifference),
+                        'source' => $source,
+                        'reference' => $movementReference,
+                        'user_id' => auth()->id(),
+                    ];
+
+                    if ($movement) {
+                        $movement->update(
+                            $movementData
+                        );
+                    } else {
+                        StockMovement::create(
+                            $movementData
+                        );
+                    }
+                } elseif ($movement) {
+                    $movement->delete();
+                }
+            });
+
+            return redirect()
+                ->route(
+                    'inventory-adjustments.index'
+                )
+                ->with(
+                    'success',
+                    'Ajustement inventaire modifié avec succès.'
+                );
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()
+                ->withInput()
+                ->with(
+                    'error',
+                    'La modification a été annulée : '
+                    . $e->getMessage()
+                );
+        }
     }
 
     /*
     |--------------------------------------------------------------------------
     | DESTROY
     |--------------------------------------------------------------------------
+    |
+    | La suppression annule l'effet quantitatif de l'ajustement
+    | avant de supprimer son historique et son mouvement de stock.
+    |
     */
     public function destroy(
         InventoryAdjustment $inventoryAdjustment
     ): RedirectResponse {
-        return redirect()
-            ->route(
-                'inventory-adjustments.index'
-            )
-            ->with(
-                'error',
-                'La suppression d’un ajustement est interdite afin de préserver la traçabilité.'
-            );
+        try {
+            DB::transaction(function () use (
+                $inventoryAdjustment
+            ) {
+                $adjustment = InventoryAdjustment::query()
+                    ->where('id', $inventoryAdjustment->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $product = Product::query()
+                    ->where('id', $adjustment->product_id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $difference = round(
+                    (float) $adjustment->new_qty
+                    - (float) $adjustment->old_qty,
+                    2
+                );
+
+                $correctedProductQty = round(
+                    (float) $product->quantity
+                    - $difference,
+                    2
+                );
+
+                if ($correctedProductQty < 0) {
+                    throw new RuntimeException(
+                        'La suppression rendrait la quantité disponible '
+                        . 'du produit négative.'
+                    );
+                }
+
+                if ($adjustment->depot_id !== null) {
+                    $depotStock = ProductDepotStock::query()
+                        ->where(
+                            'product_id',
+                            $product->id
+                        )
+                        ->where(
+                            'depot_id',
+                            $adjustment->depot_id
+                        )
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($depotStock) {
+                        $correctedDepotQty = round(
+                            (float) $depotStock->quantity
+                            - $difference,
+                            2
+                        );
+
+                        if ($correctedDepotQty < 0) {
+                            throw new RuntimeException(
+                                'La suppression rendrait le stock du dépôt négatif.'
+                            );
+                        }
+
+                        $depotStock->quantity =
+                            $correctedDepotQty;
+
+                        $depotStock->save();
+                    }
+                }
+
+                $product->quantity =
+                    $correctedProductQty;
+
+                $product->save();
+
+                StockMovement::query()
+                    ->where(
+                        'reference',
+                        'ADJ-' . $adjustment->id
+                    )
+                    ->delete();
+
+                $adjustment->delete();
+            });
+
+            return redirect()
+                ->route(
+                    'inventory-adjustments.index'
+                )
+                ->with(
+                    'success',
+                    'Ajustement inventaire supprimé avec succès. '
+                    . 'Son effet sur le stock a été annulé.'
+                );
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()
+                ->route(
+                    'inventory-adjustments.index'
+                )
+                ->with(
+                    'error',
+                    'La suppression a été annulée : '
+                    . $e->getMessage()
+                );
+        }
     }
 
     /*
@@ -1227,6 +1709,38 @@ class InventoryAdjustmentController extends Controller
     | HELPERS
     |--------------------------------------------------------------------------
     */
+    /*
+    |--------------------------------------------------------------------------
+    | FORCE SINGLE DEPOT STOCK
+    |--------------------------------------------------------------------------
+    |
+    | Helper réutilisable si nécessaire :
+    | supprime toutes les anciennes présences du produit et conserve
+    | uniquement le dépôt fourni.
+    |
+    */
+    private function forceSingleDepotStock(
+        int $productId,
+        int $depotId,
+        float $quantity
+    ): void {
+        ProductDepotStock::query()
+            ->where('product_id', $productId)
+            ->lockForUpdate()
+            ->get();
+
+        ProductDepotStock::query()
+            ->where('product_id', $productId)
+            ->delete();
+
+        ProductDepotStock::create([
+            'product_id' => $productId,
+            'depot_id' => $depotId,
+            'quantity' => round($quantity, 2),
+        ]);
+    }
+
+
     private function cellToString(
         mixed $value
     ): string {

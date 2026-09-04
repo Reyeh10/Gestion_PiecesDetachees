@@ -3,28 +3,13 @@
     $user = auth()->user();
 
     /**
+     * --------------------------------------------------------------------------
+     * NOUVELLES COMMANDES REÇUES DU GARAGE
+     * --------------------------------------------------------------------------
+     * Compteur des commandes App Atelier qui n'ont pas encore été ouvertes.
+     * Visible pour : admin, chef_magasinier, vendeur.
+     */
 
-*    |--------------------------------------------------------------------------*
-
-*    | NOUVELLES COMMANDES REÇUES DU GARAGE*
-
-*    |--------------------------------------------------------------------------*
-
-*    |*
-
-*    | Compteur des commandes App Atelier qui n'ont pas encore été ouvertes.*
-
-*    | Visible pour :*
-
-*    | - admin*
-
-*    | - chef_magasinier*
-
-*    | - vendeur*
-
-*    |*
-
-*    */
 
     $nouvellesCommandesGarage = 0;
 
@@ -53,224 +38,632 @@
 @endphp
 
 {{-- ============================================================
+
      CORRECTION SIDEBAR STCD MOTORS
+
      - Visible en permanence sur ordinateur
+
      - Coulissant sur tablette/mobile
+
      - Le contenu reste entièrement visible à droite
+
 ============================================================ --}}
+
 <style>
+
     :root {
+
         --stcd-sidebar-width: 280px;
+
     }
 
     #layout-menu {
+
         width: var(--stcd-sidebar-width) !important;
+
         min-width: var(--stcd-sidebar-width) !important;
+
         max-width: var(--stcd-sidebar-width) !important;
+
         overflow-x: hidden !important;
+
         overflow-y: auto !important;
+
         transition: transform .25s ease !important;
+
     }
 
     #layout-menu .menu-inner {
+
         width: 100% !important;
+
         margin: 0 !important;
+
         padding-left: 0 !important;
+
         padding-right: 0 !important;
+
     }
 
     #layout-menu .menu-item,
+
     #layout-menu .menu-link,
+
     #layout-menu .menu-sub {
+
         width: 100% !important;
+
     }
 
     #layout-menu .menu-link {
+
         display: flex !important;
+
         align-items: center !important;
+
         text-decoration: none !important;
+
     }
 
     @media (min-width: 1200px) {
+
         #layout-menu {
+
             position: fixed !important;
+
             top: 0 !important;
+
             left: 0 !important;
+
             right: auto !important;
+
             bottom: 0 !important;
+
             display: flex !important;
+
             flex-direction: column !important;
+
             width: var(--stcd-sidebar-width) !important;
+
             min-width: var(--stcd-sidebar-width) !important;
+
             max-width: var(--stcd-sidebar-width) !important;
+
             height: 100vh !important;
+
             min-height: 100vh !important;
+
             margin: 0 !important;
+
             transform: translate3d(0, 0, 0) !important;
+
             visibility: visible !important;
+
             opacity: 1 !important;
+
             z-index: 2000 !important;
+
         }
 
         .layout-container {
+
             width: 100% !important;
+
             max-width: 100% !important;
+
             margin: 0 !important;
+
             padding: 0 !important;
+
         }
 
         .layout-page {
+
             width: calc(100% - var(--stcd-sidebar-width)) !important;
+
             max-width: calc(100% - var(--stcd-sidebar-width)) !important;
+
             min-width: 0 !important;
+
             margin-left: var(--stcd-sidebar-width) !important;
+
             padding-left: 0 !important;
+
         }
 
         .content-wrapper,
+
         .layout-navbar {
+
             width: 100% !important;
+
             max-width: 100% !important;
+
             min-width: 0 !important;
+
             margin-left: 0 !important;
+
         }
 
         .layout-overlay {
+
             display: none !important;
+
         }
+
     }
 
     @media (max-width: 1199.98px) {
+
         #layout-menu {
+
             position: fixed !important;
+
             top: 0 !important;
+
             left: 0 !important;
+
             bottom: 0 !important;
+
             width: var(--stcd-sidebar-width) !important;
+
             min-width: var(--stcd-sidebar-width) !important;
+
             max-width: var(--stcd-sidebar-width) !important;
+
             height: 100vh !important;
+
             transform: translateX(calc(-1 * var(--stcd-sidebar-width))) !important;
+
             visibility: visible !important;
+
             opacity: 1 !important;
+
             z-index: 2000 !important;
+
         }
 
         body.layout-menu-expanded #layout-menu,
+
         html.layout-menu-expanded #layout-menu {
+
             transform: translateX(0) !important;
+
         }
 
         .layout-page {
+
             width: 100% !important;
+
             max-width: 100% !important;
+
             margin-left: 0 !important;
+
         }
 
         .layout-overlay {
+
             position: fixed !important;
+
             inset: 0 !important;
+
             width: 100vw !important;
+
             height: 100vh !important;
+
             background: rgba(15, 23, 42, .45) !important;
+
             display: none !important;
+
             z-index: 1900 !important;
+
         }
 
         body.layout-menu-expanded .layout-overlay,
+
         html.layout-menu-expanded .layout-overlay {
+
             display: block !important;
+
         }
+
     }
 
     #layout-menu::-webkit-scrollbar {
+
         width: 6px;
+
     }
 
     #layout-menu::-webkit-scrollbar-track {
+
         background: transparent;
+
     }
 
     #layout-menu::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, .18);
-        border-radius: 10px;
-    }
-</style>
 
+        background: rgba(255, 255, 255, .18);
+
+        border-radius: 10px;
+
+    }
+
+</style>
 
 <aside id="layout-menu"
 
        class="layout-menu menu-vertical menu bg-menu-theme">
 
-    {{-- LOGO --}}
+    {{-- ============================================================ --}}
 
-    <div class="app-brand demo py-3 px-3 border-bottom border-secondary">
+    {{-- EN-TÊTE / LOGO STCD MOTORS --}}
 
-        <a href="{{ route('dashboard') }}"
+    {{-- ============================================================ --}}
 
-           class="app-brand-link d-flex align-items-center text-decoration-none w-100">
+    <style>
 
-            {{-- LOGO --}}
+        /* ============================================================
 
-            <div class="me-2">
+        EN-TÊTE DU SIDEBAR
 
-                <img src="{{ asset('assets/img/logo/stcd.jpg') }}"
+        ============================================================ */
 
-                     alt="STCD Motors"
+        #layout-menu .stcd-sidebar-brand {
 
-                     width="42"
+            position: relative;
 
-                     height="42"
+            display: flex;
 
-                     class="rounded-circle bg-white p-1 shadow-sm">
+            align-items: center;
 
-            </div>
+            width: 100%;
 
-            {{-- TEXTE --}}
+            min-height: 96px;
 
-            <div class="d-flex flex-column">
+            padding: 14px 18px;
 
-                <span class="fw-bold"
+            border-bottom: 1px solid rgba(255, 255, 255, 0.16);
 
-                      style="
+            overflow: hidden;
 
-                        font-size:16px;
+        }
 
-                        line-height:1.1;
+        /*
 
-                        color:#8b5cf6;
+        * Le lien occupe l'espace disponible mais laisse
 
-                      ">
+        * suffisamment de place à la flèche.
 
-                    STCD Motors
+        */
 
-                </span>
+        #layout-menu .stcd-brand-link {
 
-                <small class="text-light opacity-75"
+            display: flex;
 
-                       style="font-size:11px;">
+            align-items: center;
 
-                    Djibouti
+            flex: 1 1 auto;
 
-                </small>
+            min-width: 0;
 
-            </div>
+            padding: 0;
 
-        </a>
+            margin: 0;
 
-        {{-- MOBILE TOGGLE --}}
+            text-decoration: none;
 
-        <a href="javascript:void(0);"
+        }
 
-           class="layout-menu-toggle menu-link text-large ms-auto d-block d-xl-none">
+        /* ============================================================
 
-            <i class="bx bx-chevron-left bx-sm text-white"></i>
+        LOGO
 
-        </a>
+        ============================================================ */
 
-    </div>
+        #layout-menu .stcd-brand-logo {
 
-    <div class="menu-inner-shadow"></div>
+            display: flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            width: 48px;
+
+            min-width: 48px;
+
+            height: 48px;
+
+            margin-right: 12px;
+
+            background: #ffffff;
+
+            border-radius: 50%;
+
+            box-shadow:
+
+                0 3px 8px rgba(0, 0, 0, 0.22),
+
+                0 0 0 1px rgba(255, 255, 255, 0.15);
+
+            overflow: hidden;
+
+        }
+
+        #layout-menu .stcd-brand-logo img {
+
+            display: block;
+
+            width: 100%;
+
+            height: 100%;
+
+            padding: 4px;
+
+            object-fit: contain;
+
+            border-radius: 50%;
+
+        }
+
+    /* ============================================================
+
+       TEXTE
+
+       ============================================================ */
+
+    #layout-menu .stcd-brand-text {
+
+        display: flex;
+
+        flex-direction: column;
+
+        justify-content: center;
+
+        flex: 1 1 auto;
+
+        min-width: 0;
+
+        line-height: 1;
+
+    }
+
+    #layout-menu .stcd-brand-name {
+
+        display: block;
+
+        margin: 0;
+
+        padding: 0;
+
+        color: #8b5cf6;
+
+        font-size: 22px;
+
+        font-weight: 700;
+
+        line-height: 1.05;
+
+        letter-spacing: 0;
+
+        white-space: normal;
+
+    }
+
+    #layout-menu .stcd-brand-city {
+
+        display: block;
+
+        margin-top: 4px;
+
+        padding: 0;
+
+        color: rgba(255, 255, 255, 0.72);
+
+        font-size: 14px;
+
+        font-weight: 400;
+
+        line-height: 1;
+
+        white-space: nowrap;
+
+    }
+
+    /* ============================================================
+
+       FLÈCHE
+
+       ============================================================ */
+
+    #layout-menu .stcd-sidebar-toggle {
+
+        display: flex !important;
+
+        align-items: center;
+
+        justify-content: center;
+
+        flex: 0 0 40px;
+
+        width: 40px;
+
+        min-width: 40px;
+
+        height: 40px;
+
+        margin-left: 8px;
+
+        padding: 0;
+
+        color: #ffffff !important;
+
+        text-decoration: none;
+
+        border-radius: 50%;
+
+        cursor: pointer;
+
+        transition:
+
+            background-color 0.2s ease,
+
+            transform 0.2s ease;
+
+    }
+
+    #layout-menu .stcd-sidebar-toggle:hover {
+
+        background-color: rgba(255, 255, 255, 0.08);
+
+    }
+
+    #layout-menu .stcd-sidebar-toggle i {
+
+        display: flex;
+
+        align-items: center;
+
+        justify-content: center;
+
+        margin: 0 !important;
+
+        color: #ffffff !important;
+
+        font-size: 28px !important;
+
+        line-height: 1 !important;
+
+    }
+
+    /*
+
+     * Important :
+
+     * contrairement à l'ancienne version, la flèche
+
+     * n'utilise plus d-xl-none.
+
+     *
+
+     * Elle reste donc visible également sur ordinateur.
+
+     */
+
+    @media (min-width: 1200px) {
+
+        #layout-menu .stcd-sidebar-toggle {
+
+            display: flex !important;
+
+        }
+
+    }
+
+    /* ============================================================
+
+       TABLETTE / MOBILE
+
+       ============================================================ */
+
+    @media (max-width: 1199.98px) {
+
+        #layout-menu .stcd-sidebar-brand {
+
+            min-height: 88px;
+
+            padding: 12px 16px;
+
+        }
+
+        #layout-menu .stcd-brand-logo {
+
+            width: 46px;
+
+            min-width: 46px;
+
+            height: 46px;
+
+            margin-right: 11px;
+
+        }
+
+        #layout-menu .stcd-brand-name {
+
+            font-size: 20px;
+
+        }
+
+        #layout-menu .stcd-brand-city {
+
+            font-size: 13px;
+
+        }
+
+    }
+
+</style>
+
+{{-- ============================================================ --}}
+
+{{-- EN-TÊTE --}}
+
+{{-- ============================================================ --}}
+
+<div class="app-brand demo stcd-sidebar-brand">
+
+    {{-- ======================================================== --}}
+
+    {{-- LOGO + NOM --}}
+
+    {{-- ======================================================== --}}
+
+    <a href="{{ route('dashboard') }}"
+
+       class="app-brand-link stcd-brand-link">
+
+        {{-- LOGO --}}
+
+        <span class="app-brand-logo demo stcd-brand-logo">
+
+            <img
+
+                src="{{ asset('assets/img/logo/stcd.jpg') }}"
+
+                alt="STCD Motors"
+
+            >
+
+        </span>
+
+        {{-- NOM DE L'APPLICATION --}}
+
+        <span class="stcd-brand-text">
+
+            <span class="stcd-brand-name">
+
+                STCD<br>Motors
+
+            </span>
+
+            <span class="stcd-brand-city">
+
+                Djibouti
+
+            </span>
+
+        </span>
+
+    </a>
+
+    
+
+</div>
+
+{{-- OMBRE SOUS L'EN-TÊTE --}}
+
+<div class="menu-inner-shadow"></div>
 
     <ul class="menu-inner py-2">
 
@@ -289,14 +682,6 @@
             </a>
 
         </li>
-
-
-
-
-
-
-
-
 
         {{-- ===================================================== --}}
 
@@ -358,8 +743,6 @@
 
                 </a>
 
-
-
                 <ul class="menu-sub">
 
                     {{-- GESTION DES PRODUITS --}}
@@ -373,8 +756,6 @@
                         </span>
 
                     </li>
-
-
 
                     <li class="menu-item
 
@@ -410,8 +791,6 @@
 
                     </li>
 
-
-
                     <li class="menu-item
 
                         {{
@@ -442,37 +821,39 @@
 
                     {{-- ===================================================== --}}
 
-                    <!--li class="menu-item*
+                    {{--
+                    <li class="menu-item
 
-*                        { {*
+                        {{
 
-*                            request()->routeIs('products.unavailable')*
+                            request()->routeIs('products.unavailable')
 
-*                                ? 'active'*
+                                ? 'active'
 
-*                                : ''*
+                                : ''
 
-*                        }}"*
+                        }}"
 
-*                        >*
+                        >
 
-*                        <a*
+                        <a
 
-*                            href="{ { route('products.unavailable') }}"*
+                            href="{{ route('products.unavailable') }}"
 
-*                            class="menu-link"*
+                            class="menu-link"
 
-*                        >*
+                        >
 
-*                            <div>*
+                            <div>
 
-*                                Pièces non disponibles*
+                                Pièces non disponibles
 
-*                            </div>*
+                            </div>
 
-*                        </a>*
+                        </a>
 
-*                    </li-->
+                    </li>
+                    --}}
 
                     <li class="menu-item
 
@@ -498,8 +879,6 @@
 
                     </li>
 
-
-
                     {{-- RÉAPPROVISIONNEMENT --}}
 
                     @if(in_array($user->role, [
@@ -523,8 +902,6 @@
                             </span>
 
                         </li>
-
-
 
                         <li class="menu-item
 
@@ -630,13 +1007,9 @@
 
         </a>
 
-
-
         {{-- SOUS-MENU --}}
 
         <ul class="menu-sub">
-
-
 
             {{-- =============================================== --}}
 
@@ -683,8 +1056,6 @@
                 </a>
 
             </li>
-
-
 
             {{-- =============================================== --}}
 
@@ -782,11 +1153,7 @@
 
                 </a>
 
-
-
                 <ul class="menu-sub">
-
-
 
                     {{-- ================================================= --}}
 
@@ -826,8 +1193,6 @@
 
                     </li>
 
-
-
                     {{-- LISTE DES VÉHICULES --}}
 
                     <li class="menu-item
@@ -866,8 +1231,6 @@
 
                     </li>
 
-
-
                     {{-- NOUVEAU VÉHICULE --}}
 
                     <li class="menu-item
@@ -898,8 +1261,6 @@
 
                     </li>
 
-
-
                     {{-- HISTORIQUE / TRAÇABILITÉ --}}
 
                     <li class="menu-item
@@ -929,10 +1290,6 @@
                         </a>
 
                     </li>
-
-
-
-
 
                     {{-- ================================================= --}}
 
@@ -982,8 +1339,6 @@
 
                         </li>
 
-
-
                         {{-- TOUTES LES PIÈCES --}}
 
                         <li class="menu-item
@@ -1030,8 +1385,6 @@
 
                         </li>
 
-
-
                         {{-- PIÈCES COMMANDÉES --}}
 
                         <li class="menu-item
@@ -1066,8 +1419,6 @@
 
                         </li>
 
-
-
                         {{-- PIÈCES REÇUES --}}
 
                         <li class="menu-item
@@ -1101,8 +1452,6 @@
                             </a>
 
                         </li>
-
-
 
                         {{-- PIÈCES NON TROUVÉES --}}
 
@@ -1149,8 +1498,6 @@
             </li>
 
         @endif
-
-
 
         {{-- ===================================================== --}}
 
@@ -1466,85 +1813,71 @@
 
         </li>
 
-
-
-
-
-
-
-
-
         {{-- ACHATS --}}
 
-        <!--@ if($user && in_array($user->role, [*
+        {{--
+        @if($user && in_array($user->role, [
 
-*            'admin',*
+            'admin',
 
-*            'chef_magasinier'*
+            'chef_magasinier'
 
-*        ]))*
+        ]))
 
-*        <li class="menu-item*
+        <li class="menu-item
 
-*            { {*
+            {{
 
-*                request()->routeIs('purchases.*')*
+                request()->routeIs('purchases.*')
 
-*                ? 'active open'*
+                ? 'active open'
 
-*                : ''*
+                : ''
 
-*            }}">*
+            }}">
 
-*            <a href="javascript:void(0);"*
+            <a href="javascript:void(0);"
 
-*               class="menu-link menu-toggle">*
+               class="menu-link menu-toggle">
 
-*                <i class="menu-icon tf-icons bx bx-cart"></i>*
+                <i class="menu-icon tf-icons bx bx-cart"></i>
 
-*                <div>Achats</div>*
+                <div>Achats</div>
 
-*            </a>*
+            </a>
 
-*            <ul class="menu-sub">*
+            <ul class="menu-sub">
 
-*                <li class="menu-item { { request()->routeIs('purchases.index') ? 'active' : '' }}">*
+                <li class="menu-item {{ request()->routeIs('purchases.index') ? 'active' : '' }}">
 
-*                    <a href="{ { route('purchases.index') }}"*
+                    <a href="{{ route('purchases.index') }}"
 
-*                       class="menu-link">*
+                       class="menu-link">
 
-*                        <div>Liste des achats</div>*
+                        <div>Liste des achats</div>
 
-*                    </a>*
+                    </a>
 
-*                </li>*
+                </li>
 
-*                <li class="menu-item { { request()->routeIs('purchases.create') ? 'active' : '' }}">*
+                <li class="menu-item {{ request()->routeIs('purchases.create') ? 'active' : '' }}">
 
-*                    <a href="{ { route('purchases.create') }}"*
+                    <a href="{{ route('purchases.create') }}"
 
-*                       class="menu-link">*
+                       class="menu-link">
 
-*                        <div>Générer un achat</div>*
+                        <div>Générer un achat</div>
 
-*                    </a>*
+                    </a>
 
-*                </li>*
+                </li>
 
-*            </ul>*
+            </ul>
 
-*        </li>*
+        </li>
 
-*        @ endif-->
-
-
-
-
-
-
-
-
+        @endif
+        --}}
 
        {{-- ===================================================== --}}
 
@@ -1594,11 +1927,7 @@
 
                 </a>
 
-
-
                 <ul class="menu-sub">
-
-
 
                     {{-- ================================================= --}}
 
@@ -1638,8 +1967,6 @@
 
                     </li>
 
-
-
                     {{-- GÉNÉRER UNE VENTE --}}
 
                     <li class="menu-item
@@ -1669,8 +1996,6 @@
                         </a>
 
                     </li>
-
-
 
                     {{-- LISTE DES VENTES --}}
 
@@ -1707,10 +2032,6 @@
                         </a>
 
                     </li>
-
-
-
-
 
                     {{-- ================================================= --}}
 
@@ -1750,8 +2071,6 @@
 
                     </li>
 
-
-
                     {{-- GÉNÉRER UN PROFORMA --}}
 
                     <li class="menu-item
@@ -1781,8 +2100,6 @@
                         </a>
 
                     </li>
-
-
 
                     {{-- LISTE DES PROFORMAS --}}
 
@@ -1820,19 +2137,11 @@
 
                     </li>
 
-
-
                 </ul>
 
             </li>
 
         @endif
-
-
-
-
-
-
 
         {{-- ===================================================== --}}
 
@@ -1909,43 +2218,75 @@
     </ul>
 
     <script>
+
         document.addEventListener('DOMContentLoaded', function () {
+
             const body = document.body;
+
             const html = document.documentElement;
+
             const sidebar = document.getElementById('layout-menu');
 
             // Sous-menus du sidebar
+
             document.querySelectorAll('#layout-menu .menu-link.menu-toggle').forEach(function (toggle) {
+
                 toggle.addEventListener('click', function (event) {
+
                     event.preventDefault();
+
                     event.stopPropagation();
 
                     const parent = this.closest('.menu-item');
+
                     if (parent) {
+
                         parent.classList.toggle('open');
+
                     }
+
                 });
+
             });
 
             // Fermeture du menu sur mobile après clic sur un vrai lien
+
             if (sidebar) {
+
                 sidebar.querySelectorAll('a.menu-link:not(.menu-toggle)').forEach(function (link) {
+
                     link.addEventListener('click', function () {
+
                         if (window.innerWidth < 1200) {
+
                             body.classList.remove('layout-menu-expanded');
+
                             html.classList.remove('layout-menu-expanded');
+
                         }
+
                     });
+
                 });
+
             }
 
             // En revenant sur ordinateur, le sidebar doit rester visible
+
             window.addEventListener('resize', function () {
+
                 if (window.innerWidth >= 1200) {
+
                     body.classList.remove('layout-menu-expanded');
+
                     html.classList.remove('layout-menu-expanded');
+
                 }
+
             });
+
         });
+
     </script>
+
 </aside>

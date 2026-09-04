@@ -135,7 +135,7 @@
                             Client
                         </label>
 
-                        <button
+                        <!--button
                             type="button"
                             class="btn btn-primary btn-sm"
                             data-bs-toggle="modal"
@@ -143,7 +143,7 @@
                         >
                             <i class="bx bx-plus me-1"></i>
                             Nouveau client
-                        </button>
+                        </button-->
 
                     </div>
 

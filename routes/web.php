@@ -868,17 +868,19 @@ Route::middleware([
 |
 | - Import Excel : admin + chef_magasinier
 | - Création manuelle : admin + chef_magasinier
-| - Modification / suppression : admin + chef_magasinier
+| - Modification : admin uniquement
+| - Suppression : admin uniquement
 | - Consultation index/show : tous les rôles autorisés
 |
 | IMPORTANT :
-| Toutes les routes fixes (/import, /create, etc.) doivent être déclarées
-| AVANT les routes dynamiques /inventory-adjustments/{inventoryAdjustment}.
+| Toutes les routes fixes (/import, /create, etc.) sont déclarées
+| avant les routes dynamiques /inventory-adjustments/{inventoryAdjustment}.
 |
 */
 
 /*
 |--------------------------------------------------------------------------
+| IMPORT + CRÉATION
 | ADMIN + CHEF MAGASINIER
 |--------------------------------------------------------------------------
 */
@@ -954,14 +956,37 @@ Route::middleware([
         [InventoryAdjustmentController::class, 'store']
     )->name('inventory-adjustments.store');
 
+});
+
+/*
+|--------------------------------------------------------------------------
+| MODIFICATION + SUPPRESSION
+| ADMIN UNIQUEMENT
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware([
+    'auth',
+    'role:admin'
+])->group(function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | EDIT
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/inventory-adjustments/{inventoryAdjustment}/edit',
+        [InventoryAdjustmentController::class, 'edit']
+    )
+    ->whereNumber('inventoryAdjustment')
+    ->name('inventory-adjustments.edit');
+
     /*
     |--------------------------------------------------------------------------
     | UPDATE
     |--------------------------------------------------------------------------
-    |
-    | Le contrôleur peut refuser la modification d'un ajustement déjà enregistré
-    | afin de préserver la traçabilité.
-    |
     */
 
     Route::put(
@@ -975,10 +1000,6 @@ Route::middleware([
     |--------------------------------------------------------------------------
     | DELETE
     |--------------------------------------------------------------------------
-    |
-    | Le contrôleur peut refuser la suppression d'un ajustement déjà enregistré
-    | afin de préserver la traçabilité.
-    |
     */
 
     Route::delete(
@@ -993,10 +1014,8 @@ Route::middleware([
 /*
 |--------------------------------------------------------------------------
 | CONSULTATION
+| TOUS LES RÔLES AUTORISÉS
 |--------------------------------------------------------------------------
-|
-| Tous les rôles autorisés peuvent consulter les ajustements.
-|
 */
 
 Route::middleware([
@@ -1029,6 +1048,7 @@ Route::middleware([
     ->name('inventory-adjustments.show');
 
 });
+
 
 /*
 |--------------------------------------------------------------------------
