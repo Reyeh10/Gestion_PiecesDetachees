@@ -863,6 +863,18 @@ Route::middleware([
 |--------------------------------------------------------------------------
 | AJUSTEMENTS INVENTAIRE
 |--------------------------------------------------------------------------
+|
+| Règles :
+|
+| - Import Excel : admin + chef_magasinier
+| - Création manuelle : admin + chef_magasinier
+| - Modification / suppression : admin + chef_magasinier
+| - Consultation index/show : tous les rôles autorisés
+|
+| IMPORTANT :
+| Toutes les routes fixes (/import, /create, etc.) doivent être déclarées
+| AVANT les routes dynamiques /inventory-adjustments/{inventoryAdjustment}.
+|
 */
 
 /*
@@ -875,6 +887,50 @@ Route::middleware([
     'auth',
     'role:admin,chef_magasinier'
 ])->group(function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | IMPORT EXCEL - FORMULAIRE
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/inventory-adjustments/import',
+        [InventoryAdjustmentController::class, 'importForm']
+    )->name('inventory-adjustments.import');
+
+    /*
+    |--------------------------------------------------------------------------
+    | IMPORT EXCEL - TÉLÉCHARGER LE MODÈLE
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/inventory-adjustments/import/template',
+        [InventoryAdjustmentController::class, 'importTemplate']
+    )->name('inventory-adjustments.import.template');
+
+    /*
+    |--------------------------------------------------------------------------
+    | IMPORT EXCEL - PRÉVISUALISATION
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/inventory-adjustments/import/preview',
+        [InventoryAdjustmentController::class, 'importPreview']
+    )->name('inventory-adjustments.import.preview');
+
+    /*
+    |--------------------------------------------------------------------------
+    | IMPORT EXCEL - ENREGISTREMENT
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/inventory-adjustments/import/store',
+        [InventoryAdjustmentController::class, 'importStore']
+    )->name('inventory-adjustments.import.store');
 
     /*
     |--------------------------------------------------------------------------
@@ -900,43 +956,47 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | EDIT
-    |--------------------------------------------------------------------------
-    */
-
-    Route::get(
-        '/inventory-adjustments/{inventoryAdjustment}/edit',
-        [InventoryAdjustmentController::class, 'edit']
-    )->name('inventory-adjustments.edit');
-
-    /*
-    |--------------------------------------------------------------------------
     | UPDATE
     |--------------------------------------------------------------------------
+    |
+    | Le contrôleur peut refuser la modification d'un ajustement déjà enregistré
+    | afin de préserver la traçabilité.
+    |
     */
 
     Route::put(
         '/inventory-adjustments/{inventoryAdjustment}',
         [InventoryAdjustmentController::class, 'update']
-    )->name('inventory-adjustments.update');
+    )
+    ->whereNumber('inventoryAdjustment')
+    ->name('inventory-adjustments.update');
 
     /*
     |--------------------------------------------------------------------------
     | DELETE
     |--------------------------------------------------------------------------
+    |
+    | Le contrôleur peut refuser la suppression d'un ajustement déjà enregistré
+    | afin de préserver la traçabilité.
+    |
     */
 
     Route::delete(
         '/inventory-adjustments/{inventoryAdjustment}',
         [InventoryAdjustmentController::class, 'destroy']
-    )->name('inventory-adjustments.destroy');
+    )
+    ->whereNumber('inventoryAdjustment')
+    ->name('inventory-adjustments.destroy');
 
 });
 
 /*
 |--------------------------------------------------------------------------
-| TOUS PEUVENT VOIR
+| CONSULTATION
 |--------------------------------------------------------------------------
+|
+| Tous les rôles autorisés peuvent consulter les ajustements.
+|
 */
 
 Route::middleware([
@@ -964,7 +1024,9 @@ Route::middleware([
     Route::get(
         '/inventory-adjustments/{inventoryAdjustment}',
         [InventoryAdjustmentController::class, 'show']
-    )->name('inventory-adjustments.show');
+    )
+    ->whereNumber('inventoryAdjustment')
+    ->name('inventory-adjustments.show');
 
 });
 

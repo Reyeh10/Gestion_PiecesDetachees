@@ -73,7 +73,7 @@
 
     .products-page {
         width: 100%;
-        padding: 22px 18px 45px;
+        padding: 14px 8px 32px;
         overflow-x: hidden;
     }
 
@@ -103,7 +103,7 @@
     */
 
     .products-card-header {
-        padding: 24px 28px 22px;
+        padding: 20px 18px 18px;
 
         background: #ffffff;
 
@@ -175,7 +175,7 @@
 
         margin-bottom: 8px;
 
-        font-size: 11px;
+        font-size: 9.5px;
         font-weight: 800;
 
         letter-spacing: .06em;
@@ -426,7 +426,7 @@
     */
 
     .products-card-body {
-        padding: 22px 28px 28px;
+        padding: 18px 18px 24px;
     }
 
     /*
@@ -436,9 +436,13 @@
     */
 
     .product-search-grid {
-        display: flex;
+        display: grid !important;
+        grid-template-columns:
+            minmax(0, 1fr)
+            minmax(170px, 220px)
+            minmax(170px, 220px);
+
         align-items: stretch;
-        flex-wrap: wrap;
 
         gap: 12px;
 
@@ -448,25 +452,29 @@
     }
 
     .product-search-input {
-        flex: 1 1 360px;
-
-        min-width: 240px;
+        min-width: 0;
+        width: 100%;
     }
 
     .product-search-grid > .btn {
-        flex: 0 1 190px;
-
-        min-width: 150px;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        margin: 0 !important;
     }
 
     .product-search-grid .form-control,
     .product-search-grid .btn {
+        width: 100% !important;
         min-height: 48px;
+        height: 48px;
 
         border-radius: 9px;
     }
 
     .product-search-grid .form-control {
+        min-width: 0;
+
         border: 1px solid #d8dee8;
 
         box-shadow: none;
@@ -480,11 +488,13 @@
     }
 
     .product-search-grid .btn {
-        display: inline-flex;
+        display: inline-flex !important;
         align-items: center;
         justify-content: center;
 
         gap: 7px;
+
+        white-space: nowrap;
 
         font-weight: 700;
     }
@@ -499,35 +509,36 @@
         width: 100%;
         max-width: 100%;
 
-        overflow-x: auto;
+        overflow-x: hidden;
         overflow-y: visible;
-
-        -webkit-overflow-scrolling: touch;
 
         border: 1px solid #edf0f4;
         border-radius: 11px;
     }
 
     .products-table {
-        width: 100%;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
 
-        min-width: 1780px;
+        table-layout: fixed !important;
 
         margin: 0;
     }
 
     .products-table-unavailable {
-        min-width: 1660px;
+        min-width: 0 !important;
     }
 
     .products-table thead th {
-        padding: 13px 12px;
+        padding: 9px 5px;
 
         vertical-align: middle;
 
-        white-space: nowrap;
+        white-space: normal;
+        overflow-wrap: anywhere;
 
-        font-size: 11px;
+        font-size: 9px;
         font-weight: 800;
 
         letter-spacing: .04em;
@@ -540,11 +551,11 @@
     }
 
     .products-table tbody td {
-        padding: 13px 12px;
+        padding: 9px 5px;
 
         vertical-align: middle;
 
-        font-size: 13px;
+        font-size: 11px;
 
         color: #52657b;
     }
@@ -554,24 +565,48 @@
     }
 
     .products-table .reference-cell {
-        min-width: 180px;
+        min-width: 0;
+        max-width: none;
 
-        white-space: nowrap;
+        white-space: normal;
+        overflow-wrap: anywhere;
+
+        font-size: 10.5px;
     }
 
     .products-table .designation-cell {
-        min-width: 200px;
-        max-width: 250px;
+        min-width: 0;
+        max-width: none;
+
+        white-space: normal;
+        overflow-wrap: anywhere;
+
+        line-height: 1.25;
     }
 
     .products-table .numeric-cell {
         white-space: nowrap;
 
         text-align: right;
+
+        font-size: 10.5px;
+    }
+
+    .products-table .price-cell {
+        white-space: nowrap;
+
+        text-align: right;
+
+        font-size: 10.5px;
+    }
+
+    .products-table .price-cell strong {
+        font-size: 10.5px;
+        font-weight: 800;
     }
 
     .products-table .actions-cell {
-        min-width: 140px;
+        min-width: 0;
 
         white-space: nowrap;
     }
@@ -587,12 +622,14 @@
         align-items: center;
         justify-content: center;
 
-        gap: 6px;
+        gap: 4px;
     }
 
     .product-row-actions .btn {
-        width: 36px;
-        height: 34px;
+        width: 29px;
+        height: 29px;
+
+        min-width: 29px;
 
         padding: 0;
 
@@ -614,9 +651,9 @@
     */
 
     .quantity-badge {
-        min-width: 88px;
+        min-width: 0;
 
-        padding: 5px 8px;
+        padding: 4px 5px;
 
         display: inline-flex;
         align-items: center;
@@ -624,7 +661,7 @@
 
         border-radius: 6px;
 
-        font-size: 12px;
+        font-size: 10px;
         font-weight: 700;
 
         white-space: nowrap;
@@ -667,9 +704,11 @@
     */
 
     .product-status-badge {
-        min-width: 108px;
+        min-width: 0;
 
-        padding: 6px 9px;
+        width: 100%;
+
+        padding: 5px 4px;
 
         display: inline-flex;
         align-items: center;
@@ -790,11 +829,16 @@
             margin-left: 0;
         }
 
-        .product-search-input,
-        .product-search-grid > .btn {
-            flex: 1 1 100%;
+        .product-search-grid {
+            grid-template-columns: 1fr 1fr;
+        }
 
-            min-width: 0;
+        .product-search-input {
+            grid-column: 1 / -1;
+        }
+
+        .product-search-grid > .btn {
+            width: 100% !important;
         }
     }
 
@@ -805,6 +849,14 @@
     */
 
     @media (max-width: 480px) {
+
+        .product-search-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .product-search-input {
+            grid-column: auto;
+        }
 
         .products-title-row {
             align-items: stretch;
@@ -826,7 +878,7 @@
         }
 
         .products-table {
-            min-width: 1450px;
+            min-width: 0 !important;
         }
     }
 </style>
@@ -1229,6 +1281,53 @@
                         "
                     >
 
+                        {{-- =================================================
+                            LARGEURS DES COLONNES
+                            Objectif : tout afficher sans scroll horizontal
+                        ================================================== --}}
+                        @if($isAllProducts)
+                            <colgroup>
+                                <col style="width:11%">
+                                <col style="width:15%">
+                                <col style="width:6%">
+                                <col style="width:8%">
+                                <col style="width:8%">
+                                <col style="width:8%">
+                                <col style="width:8%">
+                                <col style="width:8%">
+                                <col style="width:9%">
+                                <col style="width:9%">
+                                <col style="width:10%">
+                            </colgroup>
+                        @elseif($isUnavailablePage)
+                            <colgroup>
+                                <col style="width:10%">
+                                <col style="width:13%">
+                                <col style="width:6%">
+                                <col style="width:8%">
+                                <col style="width:8%">
+                                <col style="width:8%">
+                                <col style="width:8%">
+                                <col style="width:8%">
+                                <col style="width:7%">
+                                <col style="width:8%">
+                                <col style="width:7%">
+                                <col style="width:9%">
+                            </colgroup>
+                        @else
+                            <colgroup>
+                                <col style="width:13%">
+                                <col style="width:18%">
+                                <col style="width:7%">
+                                <col style="width:10%">
+                                <col style="width:10%">
+                                <col style="width:9%">
+                                <col style="width:10%">
+                                <col style="width:10%">
+                                <col style="width:13%">
+                            </colgroup>
+                        @endif
+
                         <thead>
 
                             <tr>
@@ -1240,12 +1339,6 @@
                                 <th>Marque</th>
 
                                 <th>Modèle</th>
-
-                                <th>Famille</th>
-
-                                <th>Rayon</th>
-
-                                <th>Emplacement</th>
 
 
                                 {{-- ======================================
@@ -1305,10 +1398,6 @@
 
                                 @endif
 
-
-                                <th>Min</th>
-
-                                <th>Max</th>
 
                                 <th>Prix achat</th>
 
@@ -1572,44 +1661,6 @@
                                         }}
 
                                     </td>
-
-
-                                    {{-- FAMILLE --}}
-
-                                    <td>
-
-                                        {{
-                                            $product->family?->name
-                                            ?? 'Non défini'
-                                        }}
-
-                                    </td>
-
-
-                                    {{-- RAYON --}}
-
-                                    <td>
-
-                                        {{
-                                            $product->rayon?->name
-                                            ?? 'Non défini'
-                                        }}
-
-                                    </td>
-
-
-                                    {{-- EMPLACEMENT --}}
-
-                                    <td>
-
-                                        {{
-                                            $product->location?->name
-                                            ?? 'Non défini'
-                                        }}
-
-                                    </td>
-
-
                                     {{-- ==================================
                                         PAGE TOUS LES PRODUITS
                                     ================================== --}}
@@ -1709,7 +1760,7 @@
                                                 "
                                             >
 
-                                                { 
+                                                {
                                                     number_format(
                                                         $unavailableQty,
                                                         2,
@@ -1935,45 +1986,9 @@
                                         </td>
 
                                     @endif
-
-
-                                    {{-- MIN --}}
-
-                                    <td class="numeric-cell">
-
-                                        {{
-                                            number_format(
-                                                (float)
-                                                $product->min_stock,
-                                                2,
-                                                ',',
-                                                ' '
-                                            )
-                                        }}
-
-                                    </td>
-
-
-                                    {{-- MAX --}}
-
-                                    <td class="numeric-cell">
-
-                                        {{
-                                            number_format(
-                                                (float)
-                                                $product->max_stock,
-                                                2,
-                                                ',',
-                                                ' '
-                                            )
-                                        }}
-
-                                    </td>
-
-
                                     {{-- PRIX ACHAT --}}
 
-                                    <td class="numeric-cell">
+                                    <td class="numeric-cell price-cell">
 
                                         {{
                                             number_format(
@@ -1990,7 +2005,7 @@
 
                                     {{-- PRIX VENTE --}}
 
-                                    <td class="numeric-cell">
+                                    <td class="numeric-cell price-cell">
 
                                         <strong>
 
