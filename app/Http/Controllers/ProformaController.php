@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use App\Models\Product;
+use App\Models\ProductDepotStock;
 use App\Models\Proforma;
 use App\Models\ProformaItem;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\StockMovement;
 use App\Models\Vehicle;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
@@ -250,10 +252,41 @@ class ProformaController extends Controller
 
     public function create(): View
     {
+        /*
+        |--------------------------------------------------------------------------
+        | PRODUITS DISPONIBLES DANS AU MOINS UN DÉPÔT
+        |--------------------------------------------------------------------------
+        |
+        | La source réelle du stock est product_depot_stocks.
+        | Un produit peut être présent dans plusieurs dépôts.
+        |
+        */
         $products = Product::query()
-            ->with(['brand', 'model', 'depotStocks.depot'])
-            ->where('quantity', '>', 0)
-            ->where('status', '!=', 'vendu')
+            ->with([
+                'brand',
+                'model',
+                'depotStocks' => function ($query) {
+                    $query
+                        ->where('quantity', '>', 0)
+                        ->orderBy('depot_id');
+                },
+                'depotStocks.depot',
+            ])
+            ->whereHas(
+                'depotStocks',
+                function ($query) {
+                    $query->where(
+                        'quantity',
+                        '>',
+                        0
+                    );
+                }
+            )
+            ->where(
+                'status',
+                '!=',
+                'vendu'
+            )
             ->orderBy('designation')
             ->get();
 
@@ -263,7 +296,10 @@ class ProformaController extends Controller
 
         return view(
             'proformas.create',
-            compact('products', 'customers')
+            compact(
+                'products',
+                'customers'
+            )
         );
     }
 
@@ -276,10 +312,37 @@ class ProformaController extends Controller
     public function createWithVehicle(
         Vehicle $vehicle
     ): View|RedirectResponse {
+        /*
+        |--------------------------------------------------------------------------
+        | PRODUITS DISPONIBLES DANS AU MOINS UN DÉPÔT
+        |--------------------------------------------------------------------------
+        */
         $products = Product::query()
-            ->with(['brand', 'model', 'depotStocks.depot'])
-            ->where('quantity', '>', 0)
-            ->where('status', '!=', 'vendu')
+            ->with([
+                'brand',
+                'model',
+                'depotStocks' => function ($query) {
+                    $query
+                        ->where('quantity', '>', 0)
+                        ->orderBy('depot_id');
+                },
+                'depotStocks.depot',
+            ])
+            ->whereHas(
+                'depotStocks',
+                function ($query) {
+                    $query->where(
+                        'quantity',
+                        '>',
+                        0
+                    );
+                }
+            )
+            ->where(
+                'status',
+                '!=',
+                'vendu'
+            )
             ->orderBy('designation')
             ->get();
 
@@ -290,9 +353,14 @@ class ProformaController extends Controller
         return view(
             'proformas.create',
             [
-                'products' => $products,
-                'customers' => $customers,
-                'selectedVehicle' => $vehicle,
+                'products' =>
+                    $products,
+
+                'customers' =>
+                    $customers,
+
+                'selectedVehicle' =>
+                    $vehicle,
             ]
         );
     }
@@ -352,8 +420,9 @@ class ProformaController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    public function store(Request $request): RedirectResponse
-    {
+    public function store(
+        Request $request
+    ): RedirectResponse {
         $validated = $request->validate(
             [
                 'customer_id' => [
@@ -365,18 +434,19 @@ class ProformaController extends Controller
                 'vehicle_id' => [
                     'required',
                     'integer',
-                    Rule::exists('vehicles', 'id')
-                        ->where(
-                            fn ($query) => $query->where(
-                                'customer_id',
-                                $request->input('customer_id')
-                            )
-                        ),
-                ],
 
-                'payment_type' => [
-                    'required',
-                    'in:Cash,Bon de commande,Echeance',
+                    Rule::exists(
+                        'vehicles',
+                        'id'
+                    )->where(
+                        fn ($query) =>
+                            $query->where(
+                                'customer_id',
+                                $request->input(
+                                    'customer_id'
+                                )
+                            )
+                    ),
                 ],
 
                 'discount' => [
@@ -414,9 +484,6 @@ class ProformaController extends Controller
                 'vehicle_id.exists' =>
                     'Le véhicule sélectionné n’appartient pas au client choisi.',
 
-                'payment_type.required' =>
-                    'Veuillez sélectionner le mode de paiement.',
-
                 'items.required' =>
                     'Vous devez ajouter au moins un produit.',
 
@@ -426,8 +493,14 @@ class ProformaController extends Controller
                 'items.*.product_id.required' =>
                     'Veuillez sélectionner un produit.',
 
+                'items.*.product_id.exists' =>
+                    'Le produit sélectionné est invalide.',
+
                 'items.*.quantity.required' =>
                     'La quantité est obligatoire.',
+
+                'items.*.quantity.numeric' =>
+                    'La quantité doit être numérique.',
 
                 'items.*.quantity.min' =>
                     'La quantité doit être supérieure à zéro.',
@@ -438,52 +511,128 @@ class ProformaController extends Controller
 
         try {
             $vehicle = Vehicle::query()
-                ->whereKey($validated['vehicle_id'])
-                ->where('customer_id', $validated['customer_id'])
+                ->whereKey(
+                    $validated['vehicle_id']
+                )
+                ->where(
+                    'customer_id',
+                    $validated['customer_id']
+                )
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            $subtotal = 0.00;
-            $validatedItems = [];
+            /*
+            |--------------------------------------------------------------------------
+            | AGRÉGER LES QUANTITÉS PAR PRODUIT
+            |--------------------------------------------------------------------------
+            |
+            | Empêche de contourner le stock en ajoutant plusieurs fois
+            | le même produit dans le proforma.
+            |
+            */
+            $requestedByProduct = [];
+
+            foreach ($validated['items'] as $itemData) {
+                $productId =
+                    (int) $itemData['product_id'];
+
+                $requestedByProduct[$productId] =
+                    ($requestedByProduct[$productId] ?? 0)
+                    +
+                    (float) $itemData['quantity'];
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | VÉRIFIER LE STOCK TOTAL RÉEL DANS LES DÉPÔTS
+            |--------------------------------------------------------------------------
+            */
+            foreach (
+                $requestedByProduct
+                as $productId => $requestedQuantity
+            ) {
+                $product = Product::query()
+                    ->whereKey(
+                        $productId
+                    )
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $availableQuantity = round(
+                    (float) ProductDepotStock::query()
+                        ->where(
+                            'product_id',
+                            $product->id
+                        )
+                        ->where(
+                            'quantity',
+                            '>',
+                            0
+                        )
+                        ->sum(
+                            'quantity'
+                        ),
+                    2
+                );
+
+                $requestedQuantity = round(
+                    (float) $requestedQuantity,
+                    2
+                );
+
+                if (
+                    $requestedQuantity
+                    >
+                    $availableQuantity
+                ) {
+                    throw new \RuntimeException(
+                        'Stock insuffisant pour : '
+                        . $product->reference
+                        . ' - '
+                        . $product->designation
+                        . '. Disponible dans les dépôts : '
+                        . number_format(
+                            $availableQuantity,
+                            2,
+                            ',',
+                            ' '
+                        )
+                        . ' '
+                        . (
+                            $product->unit_label
+                            ?? 'Pièce'
+                        )
+                    );
+                }
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | CALCUL DES LIGNES
+            |--------------------------------------------------------------------------
+            */
+            $subtotal =
+                0.00;
+
+            $validatedItems =
+                [];
 
             foreach ($validated['items'] as $itemData) {
                 $product = Product::query()
-                    ->lockForUpdate()
-                    ->findOrFail($itemData['product_id']);
+                    ->findOrFail(
+                        $itemData['product_id']
+                    );
 
                 $quantity = round(
                     (float) $itemData['quantity'],
                     2
                 );
 
-                $availableQuantity = round(
-                    (float) $product->quantity,
-                    2
-                );
-
-                if ($quantity > $availableQuantity) {
-                    DB::rollBack();
-
-                    return back()
-                        ->withInput()
-                        ->with(
-                            'error',
-                            'Stock insuffisant pour : '
-                            . $product->reference
-                            . ' - '
-                            . $product->designation
-                            . ' | Disponible : '
-                            . number_format(
-                                $availableQuantity,
-                                2,
-                                ',',
-                                ' '
-                            )
-                            . ' '
-                            . ($product->unit_label ?? 'Pièce')
-                        );
-                }
-
+                /*
+                |--------------------------------------------------------------------------
+                | LE PRIX VIENT TOUJOURS DE LA BASE
+                |--------------------------------------------------------------------------
+                */
                 $price = round(
                     (float) $product->sale_price,
                     2
@@ -494,43 +643,70 @@ class ProformaController extends Controller
                     2
                 );
 
-                $subtotal += $lineTotal;
+                $subtotal +=
+                    $lineTotal;
 
                 $validatedItems[] = [
-                    'product_id' => $product->id,
-                    'quantity' => $quantity,
-                    'price' => $price,
-                    'total' => $lineTotal,
+                    'product_id' =>
+                        $product->id,
+
+                    'quantity' =>
+                        $quantity,
+
+                    'price' =>
+                        $price,
+
+                    'total' =>
+                        $lineTotal,
                 ];
             }
 
-            $subtotal = round($subtotal, 2);
+            $subtotal = round(
+                $subtotal,
+                2
+            );
 
             $discountPercent = round(
-                (float) ($validated['discount'] ?? 0),
+                (float) (
+                    $validated['discount']
+                    ??
+                    0
+                ),
                 2
             );
 
             $discountAmount = round(
-                ($subtotal * $discountPercent) / 100,
+                (
+                    $subtotal
+                    *
+                    $discountPercent
+                )
+                /
+                100,
                 2
             );
 
             $taxable = max(
                 0,
                 round(
-                    $subtotal - $discountAmount,
+                    $subtotal
+                    -
+                    $discountAmount,
                     2
                 )
             );
 
             $tva = round(
-                $taxable * 0.10,
+                $taxable
+                *
+                0.10,
                 2
             );
 
             $total = round(
-                $taxable + $tva,
+                $taxable
+                +
+                $tva,
                 2
             );
 
@@ -539,8 +715,10 @@ class ProformaController extends Controller
             | NUMÉRO DU PROFORMA
             |--------------------------------------------------------------------------
             */
-
-            $nextId = ((int) Proforma::max('id')) + 1;
+            $nextId =
+                ((int) Proforma::max('id'))
+                +
+                1;
 
             $proformaNumber =
                 'PROFORMA-'
@@ -555,24 +733,43 @@ class ProformaController extends Controller
             |--------------------------------------------------------------------------
             | CRÉER LE PROFORMA
             |--------------------------------------------------------------------------
+            |
+            | Aucun mode de paiement n'est demandé ici.
+            |
             */
-
             $proforma = Proforma::create([
-                'proforma_number' => $proformaNumber,
+                'proforma_number' =>
+                    $proformaNumber,
 
-                'customer_id' => $validated['customer_id'],
-                'vehicle_id' => $vehicle->id,
-                'created_by' => auth()->id(),
+                'customer_id' =>
+                    $validated['customer_id'],
 
-                'payment_type' => $validated['payment_type'],
+                'vehicle_id' =>
+                    $vehicle->id,
 
-                'subtotal' => $subtotal,
-                'discount' => $discountPercent,
-                'discount_amount' => $discountAmount,
-                'tva' => $tva,
-                'total' => $total,
+                'created_by' =>
+                    auth()->id(),
 
-                'status' => Proforma::STATUS_VALIDATED,
+                'payment_type' =>
+                    null,
+
+                'subtotal' =>
+                    $subtotal,
+
+                'discount' =>
+                    $discountPercent,
+
+                'discount_amount' =>
+                    $discountAmount,
+
+                'tva' =>
+                    $tva,
+
+                'total' =>
+                    $total,
+
+                'status' =>
+                    Proforma::STATUS_VALIDATED,
             ]);
 
             /*
@@ -580,25 +777,35 @@ class ProformaController extends Controller
             | ENREGISTRER LES PRODUITS
             |--------------------------------------------------------------------------
             |
-            | IMPORTANT :
-            | on ne diminue PAS le stock lors de la création du proforma.
-            |--------------------------------------------------------------------------
+            | Le proforma ne réserve pas et ne diminue pas le stock.
+            |
             */
-
             foreach ($validatedItems as $item) {
                 ProformaItem::create([
-                    'proforma_id' => $proforma->id,
-                    'product_id' => $item['product_id'],
-                    'quantity' => $item['quantity'],
-                    'price' => $item['price'],
-                    'total' => $item['total'],
+                    'proforma_id' =>
+                        $proforma->id,
+
+                    'product_id' =>
+                        $item['product_id'],
+
+                    'quantity' =>
+                        $item['quantity'],
+
+                    'price' =>
+                        $item['price'],
+
+                    'total' =>
+                        $item['total'],
                 ]);
             }
 
             DB::commit();
 
             return redirect()
-                ->route('proformas.show', $proforma)
+                ->route(
+                    'proformas.show',
+                    $proforma
+                )
                 ->with(
                     'success',
                     'Le proforma a été créé avec succès.'
@@ -610,13 +817,27 @@ class ProformaController extends Controller
             Log::error(
                 'Création proforma impossible.',
                 [
-                    'message' => $e->getMessage(),
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine(),
-                    'user_id' => auth()->id(),
-                    'customer_id' => $validated['customer_id'] ?? null,
-                    'vehicle_id' => $validated['vehicle_id'] ?? null,
-                    'payment_type' => $validated['payment_type'] ?? null,
+                    'message' =>
+                        $e->getMessage(),
+
+                    'file' =>
+                        $e->getFile(),
+
+                    'line' =>
+                        $e->getLine(),
+
+                    'user_id' =>
+                        auth()->id(),
+
+                    'customer_id' =>
+                        $validated['customer_id']
+                        ??
+                        null,
+
+                    'vehicle_id' =>
+                        $validated['vehicle_id']
+                        ??
+                        null,
                 ]
             );
 
@@ -625,7 +846,8 @@ class ProformaController extends Controller
                 ->with(
                     'error',
                     app()->environment('local')
-                        ? 'ERREUR : ' . $e->getMessage()
+                        ? 'ERREUR : '
+                            . $e->getMessage()
                         : 'La création du proforma a échoué.'
                 );
         }
@@ -695,18 +917,14 @@ class ProformaController extends Controller
     public function convertToSale(
         Proforma $proforma
     ): RedirectResponse {
-
         try {
-
             $sale = DB::transaction(
                 function () use ($proforma) {
-
                     /*
                     |--------------------------------------------------------------------------
                     | VERROUILLER LE PROFORMA
                     |--------------------------------------------------------------------------
                     */
-
                     $locked = Proforma::query()
                         ->with([
                             'items.product',
@@ -717,111 +935,126 @@ class ProformaController extends Controller
                             $proforma->id
                         );
 
-
                     /*
                     |--------------------------------------------------------------------------
                     | DÉJÀ CONVERTI
                     |--------------------------------------------------------------------------
-                    |
-                    | Aucun doublon de vente.
-                    | On retourne simplement la vente existante.
-                    |
                     */
-
                     if (
                         $locked->status
                         === Proforma::STATUS_CONVERTED
                     ) {
-
                         if (!$locked->sale_id) {
-
                             throw new \RuntimeException(
                                 'Ce proforma est marqué comme converti, '
                                 . 'mais aucune vente associée n’a été trouvée.'
                             );
                         }
 
-                        return Sale::findOrFail(
-                            $locked->sale_id
-                        );
+                        return Sale::query()
+                            ->findOrFail(
+                                $locked->sale_id
+                            );
                     }
-
 
                     /*
                     |--------------------------------------------------------------------------
                     | PROFORMA ANNULÉ
                     |--------------------------------------------------------------------------
                     */
-
                     if (
                         $locked->status
                         === Proforma::STATUS_CANCELLED
                     ) {
-
                         throw new \RuntimeException(
                             'Un proforma annulé ne peut pas être converti.'
                         );
                     }
-
 
                     /*
                     |--------------------------------------------------------------------------
                     | VÉRIFIER LES ARTICLES
                     |--------------------------------------------------------------------------
                     */
-
                     if ($locked->items->isEmpty()) {
-
                         throw new \RuntimeException(
                             'Ce proforma ne contient aucun produit.'
                         );
                     }
 
-
                     /*
                     |--------------------------------------------------------------------------
-                    | VÉRIFIER LE STOCK
+                    | PRÉPARER LES AFFECTATIONS PAR DÉPÔT
                     |--------------------------------------------------------------------------
+                    |
+                    | Un produit peut exister dans plusieurs dépôts.
+                    |
+                    | Exemple :
+                    | HILAC   = 7
+                    | BALBALA = 4
+                    | Quantité proforma = 9
+                    |
+                    | La conversion créera :
+                    | - une ligne de vente de 7 depuis HILAC
+                    | - une ligne de vente de 2 depuis BALBALA
+                    |
                     */
+                    $allocations = [];
 
-                    foreach (
-                        $locked->items as $item
-                    ) {
+                    foreach ($locked->items as $item) {
+                        $product = Product::query()
+                            ->whereKey(
+                                $item->product_id
+                            )
+                            ->lockForUpdate()
+                            ->firstOrFail();
 
-                        $product =
-                            Product::query()
-                                ->lockForUpdate()
-                                ->findOrFail(
-                                    $item->product_id
-                                );
+                        $requestedQuantity = round(
+                            (float) $item->quantity,
+                            2
+                        );
 
-
-                        $requestedQuantity =
-                            round(
-                                (float) $item->quantity,
-                                2
+                        if ($requestedQuantity <= 0) {
+                            throw new \RuntimeException(
+                                'Quantité invalide pour le produit '
+                                . $product->reference
+                                . '.'
                             );
+                        }
 
+                        $depotStocks = ProductDepotStock::query()
+                            ->with('depot')
+                            ->where(
+                                'product_id',
+                                $product->id
+                            )
+                            ->where(
+                                'quantity',
+                                '>',
+                                0
+                            )
+                            ->orderByDesc('quantity')
+                            ->lockForUpdate()
+                            ->get();
 
-                        $availableQuantity =
-                            round(
-                                (float) $product->quantity,
-                                2
-                            );
-
+                        $availableQuantity = round(
+                            (float) $depotStocks->sum(
+                                'quantity'
+                            ),
+                            2
+                        );
 
                         if (
                             $requestedQuantity
-                            > $availableQuantity
+                            >
+                            $availableQuantity
                         ) {
-
                             throw new \RuntimeException(
-
                                 'Stock insuffisant pour : '
                                 . $product->reference
                                 . ' - '
                                 . $product->designation
-                                . '. Disponible : '
+                                . '. Disponible dans les dépôts : '
                                 . number_format(
                                     $availableQuantity,
                                     2,
@@ -833,22 +1066,84 @@ class ProformaController extends Controller
                                     $product->unit_label
                                     ?? 'Pièce'
                                 )
+                            );
+                        }
 
+                        $remaining = $requestedQuantity;
+
+                        foreach ($depotStocks as $depotStock) {
+                            if ($remaining <= 0) {
+                                break;
+                            }
+
+                            $availableInDepot = round(
+                                (float) $depotStock->quantity,
+                                2
+                            );
+
+                            if ($availableInDepot <= 0) {
+                                continue;
+                            }
+
+                            $take = round(
+                                min(
+                                    $remaining,
+                                    $availableInDepot
+                                ),
+                                2
+                            );
+
+                            if ($take <= 0) {
+                                continue;
+                            }
+
+                            $allocations[] = [
+                                'proforma_item' =>
+                                    $item,
+
+                                'product' =>
+                                    $product,
+
+                                'depot_stock' =>
+                                    $depotStock,
+
+                                'depot' =>
+                                    $depotStock->depot,
+
+                                'quantity' =>
+                                    $take,
+
+                                'price' =>
+                                    round(
+                                        (float) $item->price,
+                                        2
+                                    ),
+                            ];
+
+                            $remaining = round(
+                                $remaining - $take,
+                                2
+                            );
+                        }
+
+                        if ($remaining > 0.00001) {
+                            throw new \RuntimeException(
+                                'Impossible de répartir complètement le stock '
+                                . 'du produit '
+                                . $product->reference
+                                . ' entre les dépôts.'
                             );
                         }
                     }
 
-
                     /*
                     |--------------------------------------------------------------------------
-                    | NUMÉRO FACTURE
+                    | NUMÉRO DE FACTURE
                     |--------------------------------------------------------------------------
                     */
-
                     $nextSaleId =
                         ((int) Sale::max('id'))
                         + 1;
-
 
                     $invoiceNumber =
                         'FACT-'
@@ -861,23 +1156,27 @@ class ProformaController extends Controller
                             STR_PAD_LEFT
                         );
 
-
                     /*
                     |--------------------------------------------------------------------------
                     | CRÉER LA VENTE
                     |--------------------------------------------------------------------------
+                    |
+                    | Le mode de paiement est NULL ici.
+                    | Il sera demandé au moment du paiement de la facture.
+                    |
                     */
-
                     $sale = Sale::create([
-
                         'customer_id' =>
                             $locked->customer_id,
 
                         'vehicle_id' =>
                             $locked->vehicle_id,
 
+                        'user_id' =>
+                            auth()->id(),
+
                         'payment_type' =>
-                            $locked->payment_type,
+                            null,
 
                         'subtotal' =>
                             $locked->subtotal,
@@ -902,87 +1201,152 @@ class ProformaController extends Controller
 
                         'invoice_number' =>
                             $invoiceNumber,
-
                     ]);
-
 
                     /*
                     |--------------------------------------------------------------------------
-                    | CRÉER LES LIGNES DE VENTE
+                    | CRÉER LES LIGNES DE VENTE + SORTIR LE STOCK
                     |--------------------------------------------------------------------------
                     */
-
-                    foreach (
-                        $locked->items as $item
-                    ) {
-
+                    foreach ($allocations as $allocation) {
+                        /** @var Product $product */
                         $product =
-                            Product::query()
-                                ->lockForUpdate()
-                                ->findOrFail(
-                                    $item->product_id
-                                );
+                            $allocation['product'];
 
+                        /** @var ProductDepotStock $depotStock */
+                        $depotStock =
+                            $allocation['depot_stock'];
 
+                        $depot =
+                            $allocation['depot'];
+
+                        $quantity = round(
+                            (float) $allocation['quantity'],
+                            2
+                        );
+
+                        $price = round(
+                            (float) $allocation['price'],
+                            2
+                        );
+
+                        $lineTotal = round(
+                            $quantity * $price,
+                            2
+                        );
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | LIGNE DE VENTE
+                        |--------------------------------------------------------------------------
+                        */
                         SaleItem::create([
-
                             'sale_id' =>
                                 $sale->id,
 
                             'product_id' =>
                                 $product->id,
 
+                            'vehicle_id' =>
+                                $locked->vehicle_id,
+
+                            'depot_id' =>
+                                $depotStock->depot_id,
+
                             'quantity' =>
-                                $item->quantity,
+                                $quantity,
 
                             'price' =>
-                                $item->price,
+                                $price,
 
+                            'total' =>
+                                $lineTotal,
                         ]);
 
+                        /*
+                        |--------------------------------------------------------------------------
+                        | DIMINUER UNIQUEMENT LE BON DÉPÔT
+                        |--------------------------------------------------------------------------
+                        */
+                        $depotStock->quantity = max(
+                            0,
+                            round(
+                                (float) $depotStock->quantity
+                                -
+                                $quantity,
+                                2
+                            )
+                        );
+
+                        $depotStock->save();
 
                         /*
                         |--------------------------------------------------------------------------
-                        | DIMINUER LE STOCK
+                        | RECALCULER LE STOCK TOTAL DU PRODUIT
                         |--------------------------------------------------------------------------
                         */
-
-                        $product->quantity =
-                            max(
-                                0,
-                                round(
-                                    (float) $product->quantity
-                                    -
-                                    (float) $item->quantity,
-                                    2
+                        $productTotal = round(
+                            (float) ProductDepotStock::query()
+                                ->where(
+                                    'product_id',
+                                    $product->id
                                 )
-                            );
+                                ->sum(
+                                    'quantity'
+                                ),
+                            2
+                        );
 
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | STATUT PRODUIT
-                        |--------------------------------------------------------------------------
-                        */
+                        $product->quantity = max(
+                            0,
+                            $productTotal
+                        );
 
                         $product->status =
-                            $product->quantity <= 0
-                                ? 'vendu'
-                                : 'disponible';
-
+                            $product->quantity > 0
+                                ? 'disponible'
+                                : 'vendu';
 
                         $product->save();
-                    }
 
+                        /*
+                        |--------------------------------------------------------------------------
+                        | MOUVEMENT DE STOCK
+                        |--------------------------------------------------------------------------
+                        */
+                        StockMovement::create([
+                            'product_id' =>
+                                $product->id,
+
+                            'type' =>
+                                'out',
+
+                            'quantity' =>
+                                $quantity,
+
+                            'source' =>
+                                'Conversion proforma'
+                                . (
+                                    $depot
+                                        ? ' | Dépôt: '
+                                            . $depot->name
+                                        : ''
+                                ),
+
+                            'reference' =>
+                                $invoiceNumber,
+
+                            'user_id' =>
+                                auth()->id(),
+                        ]);
+                    }
 
                     /*
                     |--------------------------------------------------------------------------
                     | MARQUER LE PROFORMA COMME CONVERTI
                     |--------------------------------------------------------------------------
                     */
-
                     $locked->update([
-
                         'status' =>
                             Proforma::STATUS_CONVERTED,
 
@@ -994,57 +1358,37 @@ class ProformaController extends Controller
 
                         'converted_by' =>
                             auth()->id(),
-
                     ]);
-
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | RECHARGER LA VENTE
-                    |--------------------------------------------------------------------------
-                    */
 
                     $sale->refresh();
 
-
                     return $sale;
-
                 }
             );
 
-
             /*
             |--------------------------------------------------------------------------
-            | REDIRECTION VERS LA FACTURE HTML
+            | REDIRECTION VERS LA FACTURE
             |--------------------------------------------------------------------------
-            |
-            | IMPORTANT :
-            | cette route ne doit PAS télécharger le PDF.
-            |
             */
-
             return redirect()
                 ->route(
                     'sales.invoice',
-                    $sale->id
+                    $sale
                 )
                 ->with(
                     'success',
                     'Le proforma a été converti en vente avec succès.'
                 );
 
-
         } catch (\RuntimeException $e) {
-
             return back()
                 ->with(
                     'error',
                     $e->getMessage()
                 );
 
-
         } catch (Throwable $e) {
-
             Log::error(
                 'Conversion du proforma impossible.',
                 [
@@ -1064,7 +1408,6 @@ class ProformaController extends Controller
                         auth()->id(),
                 ]
             );
-
 
             return back()
                 ->with(

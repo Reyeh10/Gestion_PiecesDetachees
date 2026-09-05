@@ -1,49 +1,416 @@
 @extends('layouts.layoutMaster')
 
+@section('title', 'Nouveau proforma')
+
 @section('content')
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
+@php
+    /*
+    |--------------------------------------------------------------------------
+    | DONNÉES PRODUITS + STOCKS PAR DÉPÔT
+    |--------------------------------------------------------------------------
+    |
+    | Le contrôleur charge :
+    | - brand
+    | - model
+    | - depotStocks.depot
+    |
+    | Un même produit peut exister dans plusieurs dépôts.
+    |
+    */
+    $searchableProducts = $products
+        ->map(function ($product) {
+            $depots = $product->depotStocks
+                ->filter(function ($stock) {
+                    return
+                        (float) $stock->quantity > 0
+                        &&
+                        $stock->depot !== null;
+                })
+                ->map(function ($stock) {
+                    return [
+                        'depot_id' =>
+                            (int) $stock->depot_id,
+
+                        'name' =>
+                            (string) $stock->depot->name,
+
+                        'code' =>
+                            (string) ($stock->depot->code ?? ''),
+
+                        'quantity' =>
+                            (float) $stock->quantity,
+                    ];
+                })
+                ->values();
+
+            return [
+                'id' =>
+                    (int) $product->id,
+
+                'reference' =>
+                    (string) ($product->reference ?? ''),
+
+                'designation' =>
+                    (string) ($product->designation ?? ''),
+
+                'brand' =>
+                    (string) (optional($product->brand)->name ?? ''),
+
+                'model' =>
+                    (string) (optional($product->model)->name ?? ''),
+
+                'price' =>
+                    (float) ($product->sale_price ?? 0),
+
+                'unit' =>
+                    (string) ($product->unit_label ?? 'Pièce'),
+
+                'stock' =>
+                    (float) $depots->sum('quantity'),
+
+                'depots' =>
+                    $depots->all(),
+            ];
+        })
+        ->values();
+
+    $selectedCustomerId = old(
+        'customer_id',
+        isset($selectedVehicle)
+            ? $selectedVehicle->customer_id
+            : ''
+    );
+
+    $selectedVehicleId = old(
+        'vehicle_id',
+        isset($selectedVehicle)
+            ? $selectedVehicle->id
+            : ''
+    );
+@endphp
+
 <style>
-    .stcd-swal-popup {
-        border-radius: 20px !important;
-        padding: 28px 30px 30px !important;
-        box-shadow: 0 20px 60px rgba(15, 23, 42, .20) !important;
-    }
-
-    .stcd-swal-title {
-        color: #344054 !important;
-        font-size: 23px !important;
-        font-weight: 700 !important;
-    }
-
-    .stcd-swal-message {
-        color: #667085 !important;
-        font-size: 15px !important;
-        line-height: 1.6 !important;
-    }
-
-    .stcd-swal-confirm {
-        min-width: 130px !important;
-        border-radius: 9px !important;
-        font-weight: 600 !important;
-    }
-
     .proforma-card {
-        border-radius: 14px;
-        overflow: hidden;
+        border: 1px solid #e8edf3 !important;
+        border-radius: 18px;
+        box-shadow: 0 12px 35px rgba(67, 89, 113, .08);
+        overflow: visible;
     }
 
-    #itemsTable th,
-    #itemsTable td {
-        vertical-align: middle;
+    .proforma-card .card-header {
+        padding: 24px 28px 16px;
+        border: 0;
+        background: linear-gradient(
+            135deg,
+            rgba(105, 108, 255, .07),
+            #fff 70%
+        );
+        border-radius: 18px 18px 0 0;
+    }
+
+    .proforma-title {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .proforma-title-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(105, 108, 255, .12);
+        color: #696cff;
+        font-size: 24px;
+        flex: 0 0 auto;
+    }
+
+    .proforma-subtitle {
+        margin-top: 3px;
+        color: #8592a3;
+        font-size: 13px;
+    }
+
+    .proforma-section {
+        padding: 20px;
+        margin-bottom: 22px;
+        border: 1px solid #edf0f4;
+        border-radius: 14px;
+        background: #fff;
+    }
+
+    .section-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+        color: #566a7f;
+        font-size: 15px;
+        font-weight: 800;
+    }
+
+    .section-title i {
+        color: #696cff;
+        font-size: 20px;
+    }
+
+    .form-label {
+        color: #5d6b7e;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .03em;
     }
 
     .vehicle-message {
-        min-height: 18px;
+        min-height: 20px;
+    }
+
+    .product-search-wrapper {
+        position: relative;
+        z-index: 50;
+    }
+
+    .product-search-results {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        z-index: 1090;
+        max-height: 390px;
+        overflow-y: auto;
+        border: 1px solid #d9dee3;
+        border-radius: 10px;
+        background: #fff;
+        box-shadow: 0 12px 30px rgba(67, 89, 113, .18);
+    }
+
+    .product-search-result-item {
+        width: 100%;
+        padding: 12px 15px;
+        border: 0;
+        border-bottom: 1px solid #edf0f4;
+        background: #fff;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .product-search-result-item:hover {
+        background: #f6f7ff;
+    }
+
+    .product-search-reference {
+        color: #566a7f;
+        font-weight: 800;
+    }
+
+    .product-search-designation {
+        margin-top: 2px;
+        color: #697a8d;
+        font-size: 13px;
+    }
+
+    .product-search-meta {
+        margin-top: 3px;
+        color: #8592a3;
+        font-size: 12px;
+    }
+
+    .product-search-depots {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 7px;
+    }
+
+    .depot-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #f2f3ff;
+        color: #5d5fef;
+        font-size: 11px;
+        font-weight: 800;
+    }
+
+    .items-panel {
+        overflow-x: auto;
+        border: 1px solid #e5e9ef;
+        border-radius: 14px;
+    }
+
+    #itemsTable {
+        min-width: 1280px;
+        margin-bottom: 0;
+    }
+
+    #itemsTable th {
+        padding: 14px 14px;
+        white-space: nowrap;
+        vertical-align: middle;
+        background: #f4f6f8;
+        color: #607085;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+
+    #itemsTable td {
+        padding: 12px 12px;
+        vertical-align: middle;
+    }
+
+    .price-display {
+        min-width: 125px;
+        text-align: right;
+        font-weight: 800;
+    }
+
+    .depot-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        min-width: 260px;
+    }
+
+    .depot-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 9px;
+        border: 1px solid #dce3eb;
+        border-radius: 999px;
+        background: #f8fafc;
+        color: #566a7f;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .depot-badge i {
+        color: #696cff;
+        font-size: 14px;
+    }
+
+    .depot-badge strong {
+        color: #28a745;
+        font-weight: 900;
+    }
+
+    .depot-empty {
+        color: #98a2b3;
+        font-size: 12px;
+        font-style: italic;
+    }
+
+    .summary-card {
+        padding: 20px 22px;
+        border: 1px solid #e7eaf0;
+        border-radius: 16px;
+        background: linear-gradient(
+            180deg,
+            #fff,
+            #fafbff
+        );
+    }
+
+    .summary-line {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 13px;
+        color: #667085;
+    }
+
+    .summary-total {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        padding-top: 16px;
+        margin-top: 14px;
+        border-top: 1px dashed #d9dee7;
+    }
+
+    .summary-total-label {
+        color: #344054;
+        font-size: 18px;
+        font-weight: 800;
+    }
+
+    .summary-total-value {
+        color: #696cff;
+        font-size: 26px;
+        font-weight: 900;
+    }
+
+    .stock-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 9px;
+        margin-top: 18px;
+        padding: 12px 14px;
+        border-radius: 10px;
+        background: rgba(3, 195, 236, .08);
+        color: #566a7f;
+        font-size: 13px;
+    }
+
+    .stock-note i {
+        margin-top: 1px;
+        color: #03c3ec;
+        font-size: 18px;
+    }
+
+    .proforma-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 18px 28px 24px;
+        border: 0;
+        background: #fff;
+    }
+
+    .generate-btn {
+        min-width: 215px;
+        border-radius: 10px;
+        font-weight: 800;
+        box-shadow: 0 8px 20px rgba(105, 108, 255, .22);
+    }
+
+    .stcd-swal-popup {
+        border-radius: 18px !important;
+        box-shadow: 0 20px 60px rgba(15, 23, 42, .20) !important;
+    }
+
+    @media (max-width: 767.98px) {
+        .proforma-card .card-header,
+        .proforma-card .card-body,
+        .proforma-actions {
+            padding-left: 15px;
+            padding-right: 15px;
+        }
+
+        .proforma-section {
+            padding: 15px;
+        }
+
+        .proforma-actions {
+            flex-direction: column-reverse;
+        }
+
+        .proforma-actions .btn {
+            width: 100%;
+        }
     }
 </style>
-
 
 <form
     action="{{ route('proformas.store') }}"
@@ -52,10 +419,6 @@
     novalidate
 >
     @csrf
-
-    {{-- =========================================================
-         ALERTES
-    ========================================================= --}}
 
     @if(session('success'))
         <div class="alert alert-success alert-dismissible fade show">
@@ -85,246 +448,226 @@
 
     @if($errors->any())
         <div class="alert alert-danger">
-            <strong>
-                Veuillez corriger les erreurs suivantes :
-            </strong>
+            <strong>Veuillez corriger les erreurs suivantes :</strong>
 
             <ul class="mb-0 mt-2">
                 @foreach($errors->all() as $error)
-                    <li>
-                        {{ $error }}
-                    </li>
+                    <li>{{ $error }}</li>
                 @endforeach
             </ul>
         </div>
     @endif
 
+    <div class="card proforma-card">
 
-    <div class="card shadow-sm border-0 proforma-card">
+        <div class="card-header">
+            <div class="proforma-title">
 
-        {{-- =====================================================
-             HEADER
-        ===================================================== --}}
+                <div class="proforma-title-icon">
+                    <i class="bx bx-file"></i>
+                </div>
 
-        <div class="card-header bg-white border-0 pb-0">
-            <h3 class="mb-0 fw-bold">
-                Nouveau proforma
-            </h3>
+                <div>
+                    <h3 class="mb-0 fw-bold">
+                        Nouveau proforma
+                    </h3>
+
+                    <div class="proforma-subtitle">
+                        Sélectionnez le client, le véhicule et les produits.
+                        Les stocks disponibles sont détaillés par dépôt.
+                    </div>
+                </div>
+
+            </div>
         </div>
-
 
         <div class="card-body">
 
-           {{-- =========================================================
-                CLIENT / VEHICULE / PAIEMENT
-            ========================================================= --}}
+            {{-- CLIENT / VEHICULE --}}
+            <div class="proforma-section">
 
-            <div class="row g-3 mb-2">
+                <div class="section-title">
+                    <i class="bx bx-user-circle"></i>
+                    Informations du proforma
+                </div>
 
-                {{-- =====================================================
-                    CLIENT
-                ===================================================== --}}
-                <div class="col-lg-4 col-md-6">
+                <div class="row g-3">
 
-                    <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="col-lg-6">
 
                         <label
                             for="customer_id"
-                            class="form-label fw-semibold mb-0"
+                            class="form-label"
                         >
                             Client
                         </label>
 
-                        <!--button
-                            type="button"
-                            class="btn btn-primary btn-sm"
-                            data-bs-toggle="modal"
-                            data-bs-target="#customerModal"
+                        <select
+                            name="customer_id"
+                            id="customer_id"
+                            class="form-control select2"
+                            required
                         >
-                            <i class="bx bx-plus me-1"></i>
-                            Nouveau client
-                        </button-->
+                            <option value="">
+                                Sélectionner un client
+                            </option>
+
+                            @foreach($customers as $customer)
+                                <option
+                                    value="{{ $customer->id }}"
+                                    @selected(
+                                        (string) $selectedCustomerId
+                                        ===
+                                        (string) $customer->id
+                                    )
+                                >
+                                    {{ $customer->name }}
+                                </option>
+                            @endforeach
+                        </select>
+
+                        @error('customer_id')
+                            <div class="text-danger small mt-1">
+                                {{ $message }}
+                            </div>
+                        @enderror
 
                     </div>
 
-                    <select
-                        name="customer_id"
-                        id="customer_id"
-                        class="form-control select2"
-                        required
-                    >
-
-                        <option value="">
-                            Sélectionner un client
-                        </option>
-
-                        @foreach($customers as $customer)
-
-                            <option
-                                value="{{ $customer->id }}"
-                                {{ old('customer_id') == $customer->id ? 'selected' : '' }}
-                            >
-                                {{ $customer->name }}
-                            </option>
-
-                        @endforeach
-
-                    </select>
-
-                    @error('customer_id')
-                        <div class="text-danger small mt-1">
-                            {{ $message }}
-                        </div>
-                    @enderror
-
-                </div>
-
-
-                {{-- =====================================================
-                    NUMERO D'IMMATRICULATION
-                ===================================================== --}}
-                <div class="col-lg-4 col-md-6">
-
-                    {{--
-                        Zone supérieure de même hauteur que celle du client.
-                        Le padding permet d'aligner verticalement le label.
-                    --}}
-                    <div class="d-flex align-items-center mb-2 vehicle-label-zone">
+                    <div class="col-lg-6">
 
                         <label
                             for="vehicle_id"
-                            class="form-label fw-semibold mb-0"
+                            class="form-label"
                         >
                             Numéro d’immatriculation
                         </label>
 
-                    </div>
-
-                    <select
-                        name="vehicle_id"
-                        id="vehicle_id"
-                        class="form-control"
-                        data-selected="{{ old('vehicle_id', $selectedVehicle->id ?? '') }}"
-                        disabled
-                        required
-                    >
-
-                        <option value="">
-                            Sélectionnez d’abord un client
-                        </option>
-
-                    </select>
-
-                    <div class="vehicle-message">
-
-                        <div
-                            id="vehicleLoadingMessage"
-                            class="small text-muted mt-1 d-none"
+                        <select
+                            name="vehicle_id"
+                            id="vehicle_id"
+                            class="form-control"
+                            data-selected="{{ $selectedVehicleId }}"
+                            disabled
+                            required
                         >
-                            <i class="bx bx-loader-alt bx-spin"></i>
-                            Chargement des véhicules...
+                            <option value="">
+                                Sélectionnez d’abord un client
+                            </option>
+                        </select>
+
+                        <div class="vehicle-message">
+                            <div
+                                id="vehicleLoadingMessage"
+                                class="small text-muted mt-1 d-none"
+                            >
+                                <i class="bx bx-loader-alt bx-spin"></i>
+                                Chargement des véhicules...
+                            </div>
+
+                            <div
+                                id="vehicleErrorMessage"
+                                class="small text-danger mt-1 d-none"
+                            ></div>
                         </div>
 
-                        <div
-                            id="vehicleErrorMessage"
-                            class="small text-danger mt-1 d-none"
-                        ></div>
+                        @error('vehicle_id')
+                            <div class="text-danger small mt-1">
+                                {{ $message }}
+                            </div>
+                        @enderror
 
                     </div>
 
-                    @error('vehicle_id')
-                        <div class="text-danger small mt-1">
-                            {{ $message }}
-                        </div>
-                    @enderror
+                </div>
+            </div>
+
+            {{-- RECHERCHE --}}
+            <div class="proforma-section">
+
+                <div class="section-title">
+                    <i class="bx bx-search-alt-2"></i>
+                    Recherche produit
+                </div>
+
+                <label
+                    for="productGlobalSearch"
+                    class="form-label"
+                >
+                    Référence / produit
+                </label>
+
+                <div class="product-search-wrapper">
+
+                    <div class="input-group">
+
+                        <span class="input-group-text bg-white">
+                            <i class="bx bx-search"></i>
+                        </span>
+
+                        <input
+                            type="text"
+                            id="productGlobalSearch"
+                            class="form-control"
+                            placeholder="Rechercher par référence, désignation, marque ou modèle..."
+                            autocomplete="off"
+                        >
+
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            id="clearProductSearch"
+                        >
+                            <i class="bx bx-x"></i>
+                            Réinitialiser
+                        </button>
+
+                    </div>
+
+                    <div
+                        id="productSearchResults"
+                        class="product-search-results d-none"
+                    ></div>
 
                 </div>
 
-
-                {{-- =====================================================
-                    PAIEMENT
-                ===================================================== --}}
-                <div class="col-lg-4 col-md-6">
-
-                    <div class="d-flex align-items-center mb-2 vehicle-label-zone">
-
-                        <label
-                            for="payment_type"
-                            class="form-label fw-semibold mb-0"
-                        >
-                            Paiement
-                        </label>
-
-                    </div>
-
-                    <select
-                        name="payment_type"
-                        id="payment_type"
-                        class="form-control"
-                        required
-                    >
-
-                        <option
-                            value="Cash"
-                            {{ old('payment_type', 'Cash') === 'Cash' ? 'selected' : '' }}
-                        >
-                            Cash
-                        </option>
-
-                        <option
-                            value="Bon de commande"
-                            {{ old('payment_type') === 'Bon de commande' ? 'selected' : '' }}
-                        >
-                            Bon de commande
-                        </option>
-
-                        <option
-                            value="Echeance"
-                            {{ old('payment_type') === 'Echeance' ? 'selected' : '' }}
-                        >
-                            Échéance
-                        </option>
-
-                    </select>
-
-                    @error('payment_type')
-                        <div class="text-danger small mt-1">
-                            {{ $message }}
-                        </div>
-                    @enderror
-
-                </div>
+                <small class="text-muted d-block mt-2">
+                    Le stock total correspond à la somme des quantités
+                    disponibles dans tous les dépôts.
+                </small>
 
             </div>
 
+            {{-- PRODUITS --}}
+            <div class="section-title">
+                <i class="bx bx-package"></i>
+                Produits du proforma
+            </div>
 
-            {{-- =================================================
-                 PRODUITS
-            ================================================= --}}
-
-            <div class="table-responsive">
+            <div class="items-panel">
 
                 <table
-                    class="table table-bordered align-middle mb-0"
+                    class="table table-bordered align-middle"
                     id="itemsTable"
                 >
-
-                    <thead class="table-light">
-
+                    <thead>
                         <tr>
-
-                            <th style="min-width: 360px;">
-                                Référence / Produit
+                            <th style="min-width: 340px;">
+                                Référence / produit
                             </th>
 
                             <th
                                 style="min-width: 120px;"
                                 class="text-center"
                             >
-                                Stock
+                                Stock total
                             </th>
 
-                            <th style="min-width: 220px;">
+                            <th style="min-width: 300px;">
+                                Dépôts / quantités disponibles
+                            </th>
+
+                            <th style="min-width: 190px;">
                                 Prix unitaire
                             </th>
 
@@ -332,27 +675,23 @@
                                 Qté
                             </th>
 
-                            <th style="min-width: 150px;">
+                            <th style="min-width: 145px;">
                                 Total
                             </th>
 
                             <th
-                                style="min-width: 90px;"
+                                style="min-width: 80px;"
                                 class="text-center"
                             >
                                 Action
                             </th>
-
                         </tr>
-
                     </thead>
 
                     <tbody></tbody>
-
                 </table>
 
             </div>
-
 
             <button
                 type="button"
@@ -363,109 +702,92 @@
                 Ajouter produit
             </button>
 
-
             <hr class="my-4">
 
-
-            {{-- =================================================
-                 TOTAUX
-            ================================================= --}}
-
+            {{-- TOTAUX --}}
             <div class="row justify-content-end">
 
-                <div class="col-lg-5 col-md-6">
+                <div class="col-xl-5 col-lg-6 col-md-7">
 
-                    <div class="d-flex justify-content-between mb-3">
+                    <div class="summary-card">
 
-                        <strong>
-                            Sous-total :
-                        </strong>
+                        <div class="summary-line">
+                            <strong>Sous-total :</strong>
 
-                        <span>
-                            <span id="subTotal">
-                                0.00
+                            <span>
+                                <span id="subTotal">0.00</span>
+                                FDJ
                             </span>
-                            FDJ
-                        </span>
+                        </div>
 
-                    </div>
+                        <div class="mb-3">
 
+                            <label
+                                for="discount"
+                                class="form-label"
+                            >
+                                Remise (%)
+                            </label>
 
-                    <div class="mb-3">
+                            <input
+                                type="number"
+                                name="discount"
+                                id="discount"
+                                class="form-control"
+                                step="0.01"
+                                min="0"
+                                max="100"
+                                value="{{ old('discount', 0) }}"
+                            >
 
-                        <label
-                            for="discount"
-                            class="form-label fw-semibold"
-                        >
-                            Remise (%)
-                        </label>
+                        </div>
 
-                        <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            max="100"
-                            name="discount"
-                            id="discount"
-                            value="{{ old('discount', 0) }}"
-                            class="form-control"
-                        >
+                        <div class="summary-line">
+                            <strong>Montant de la remise :</strong>
 
-                    </div>
-
-
-                    <div class="d-flex justify-content-between mb-3">
-
-                        <strong>
-                            Montant de la remise :
-                        </strong>
-
-                        <span class="text-danger">
-                            -
-                            <span id="discountAmount">
-                                0.00
+                            <span class="text-danger">
+                                -
+                                <span id="discountAmount">0.00</span>
+                                FDJ
                             </span>
-                            FDJ
-                        </span>
+                        </div>
 
-                    </div>
+                        <div class="summary-line">
+                            <strong>TVA (10 %) :</strong>
 
-
-                    <div class="d-flex justify-content-between mb-3">
-
-                        <strong>
-                            TVA (10%) :
-                        </strong>
-
-                        <span>
-                            <span id="tvaAmount">
-                                0.00
+                            <span>
+                                <span id="tvaAmount">0.00</span>
+                                FDJ
                             </span>
-                            FDJ
-                        </span>
+                        </div>
 
-                    </div>
+                        <div class="summary-total">
 
-
-                    <div class="d-flex justify-content-between align-items-center mt-4">
-
-                        <h4 class="mb-0 fw-bold">
-                            Total :
-                        </h4>
-
-                        <h3 class="text-primary fw-bold mb-0">
-                            <span id="grandTotal">
-                                0.00
+                            <span class="summary-total-label">
+                                Total :
                             </span>
-                            FDJ
-                        </h3>
+
+                            <span class="summary-total-value">
+                                <span id="grandTotal">0.00</span>
+                                FDJ
+                            </span>
+
+                        </div>
+
+                        <div class="stock-note">
+                            <i class="bx bx-info-circle"></i>
+
+                            <div>
+                                La création du proforma ne diminue pas le stock.
+                                Le stock sera prélevé dans les dépôts seulement
+                                lors de la conversion en vente.
+                            </div>
+                        </div>
 
                     </div>
 
                 </div>
-
             </div>
-
 
             <input
                 type="hidden"
@@ -476,12 +798,19 @@
 
         </div>
 
+        <div class="card-footer proforma-actions">
 
-        <div class="card-footer bg-white text-end border-0">
+            <a
+                href="{{ route('proformas.index') }}"
+                class="btn btn-outline-secondary"
+            >
+                <i class="bx bx-arrow-back me-1"></i>
+                Annuler
+            </a>
 
             <button
                 type="submit"
-                class="btn btn-primary px-4"
+                class="btn btn-primary generate-btn"
             >
                 <i class="bx bx-check-circle me-1"></i>
                 Générer proforma
@@ -490,512 +819,654 @@
         </div>
 
     </div>
-
 </form>
 
-
-
-{{-- =============================================================
-     MODAL NOUVEAU CLIENT
-============================================================= --}}
-
-<div
-    class="modal fade"
-    id="customerModal"
-    tabindex="-1"
-    aria-hidden="true"
->
-    <div class="modal-dialog">
-
-        <div class="modal-content">
-
-            <div class="modal-header">
-
-                <h5 class="modal-title">
-                    Nouveau client
-                </h5>
-
-                <button
-                    type="button"
-                    class="btn-close"
-                    data-bs-dismiss="modal"
-                    aria-label="Fermer"
-                ></button>
-
-            </div>
-
-
-            <div class="modal-body">
-
-                <div
-                    id="customerModalError"
-                    class="alert alert-danger d-none"
-                ></div>
-
-
-                <div class="mb-3">
-
-                    <label
-                        for="customer_code"
-                        class="form-label"
-                    >
-                        Code *
-                    </label>
-
-                    <input
-                        type="text"
-                        id="customer_code"
-                        class="form-control"
-                        placeholder="Ex. A003"
-                        autocomplete="off"
-                        maxlength="50"
-                        style="text-transform: uppercase;"
-                    >
-
-                    <small class="text-muted">
-                        Le code client est obligatoire.
-                    </small>
-
-                </div>
-
-
-                <div class="mb-3">
-
-                    <label
-                        for="customer_name"
-                        class="form-label"
-                    >
-                        Nom *
-                    </label>
-
-                    <input
-                        type="text"
-                        id="customer_name"
-                        class="form-control"
-                    >
-
-                </div>
-
-
-                <div class="mb-3">
-
-                    <label
-                        for="customer_phone"
-                        class="form-label"
-                    >
-                        Téléphone
-                    </label>
-
-                    <input
-                        type="text"
-                        id="customer_phone"
-                        class="form-control"
-                    >
-
-                </div>
-
-
-                <div class="mb-3">
-
-                    <label
-                        for="customer_email"
-                        class="form-label"
-                    >
-                        Email
-                    </label>
-
-                    <input
-                        type="email"
-                        id="customer_email"
-                        class="form-control"
-                    >
-
-                </div>
-
-            </div>
-
-
-            <div class="modal-footer">
-
-                <button
-                    type="button"
-                    class="btn btn-secondary"
-                    data-bs-dismiss="modal"
-                >
-                    Annuler
-                </button>
-
-                <button
-                    type="button"
-                    id="saveCustomerBtn"
-                    class="btn btn-primary"
-                >
-                    Enregistrer
-                </button>
-
-            </div>
-
-        </div>
-
-    </div>
-</div>
-
-
-
-{{-- =============================================================
-     JAVASCRIPT
-============================================================= --}}
-
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-
-    let rowIndex = 0;
-
-    const itemsTableBody =
-        document.querySelector('#itemsTable tbody');
-
-    const addProductButton =
-        document.getElementById('addProductButton');
-
-    const discountInput =
-        document.getElementById('discount');
-
-    const customerSelect =
-        document.getElementById('customer_id');
-
-    const vehicleSelect =
-        document.getElementById('vehicle_id');
-
-    const proformaForm =
-        document.getElementById('proformaForm');
-
-    const vehicleLoadingMessage =
-        document.getElementById('vehicleLoadingMessage');
-
-    const vehicleErrorMessage =
-        document.getElementById('vehicleErrorMessage');
-
-    const saveCustomerBtn =
-        document.getElementById('saveCustomerBtn');
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | SELECT2
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-        window.jQuery &&
-        $.fn.select2
-    ) {
-
-        $('#customer_id').select2({
-            width: '100%',
-            placeholder: 'Sélectionner un client',
-            allowClear: true
-        });
-
-        $('#vehicle_id').select2({
-            width: '100%',
-            placeholder: 'Sélectionnez d’abord un client',
-            allowClear: true
-        });
-
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | POPUP
-    |--------------------------------------------------------------------------
-    */
-
-    function showWarning(
-        title,
-        message
-    ) {
-        Swal.fire({
-            icon: 'warning',
-            title: title,
-            text: message,
-            confirmButtonText: 'Compris',
-            confirmButtonColor: '#696cff',
-            width: 440,
-            padding: '2rem',
-            allowOutsideClick: false,
-            showCloseButton: true,
-            customClass: {
-                popup: 'stcd-swal-popup',
-                title: 'stcd-swal-title',
-                htmlContainer: 'stcd-swal-message',
-                confirmButton: 'stcd-swal-confirm'
-            }
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | FORMATAGE
-    |--------------------------------------------------------------------------
-    */
-
-    function formatNumber(value) {
-        return new Intl.NumberFormat(
-            'fr-FR',
-            {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            }
-        ).format(value);
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | AJOUTER PRODUIT
-    |--------------------------------------------------------------------------
-    */
-
-    function addRow(
-        oldItem = null
-    ) {
-
-        const currentIndex =
-            rowIndex;
-
-        const row =
-            document.createElement('tr');
-
-        row.innerHTML = `
-            <td>
-
-                <select
-                    name="items[${currentIndex}][product_id]"
-                    class="form-control product-select"
-                    required
-                >
-
-                    <option value="">
-                        Choisir un produit
-                    </option>
-
-                    @foreach($products as $product)
-
-                        <option
-                            value="{{ $product->id }}"
-                            data-price="{{ $product->sale_price }}"
-                            data-stock="{{ $product->quantity }}"
-                            data-unit="{{ $product->unit_label ?? 'Pièce' }}"
-                        >
-                            {{ $product->reference }}
-                            |
-                            {{ $product->designation }}
-                            |
-                            {{ $product->brand->name ?? '' }}
-                            |
-                            {{ $product->model->name ?? '' }}
-                            |
-                            Stock disponible :
-                            {{ number_format($product->quantity, 2) }}
-                            {{ $product->unit_label ?? 'Pièce' }}
-                        </option>
-
-                    @endforeach
-
-                </select>
-
-            </td>
-
-
-            <td class="text-center fw-bold">
-
-                <span id="stock_${currentIndex}">
-                    0
-                </span>
-
-                <br>
-
-                <small
-                    id="stock_unit_${currentIndex}"
-                    class="text-muted"
-                >
-                    Pièce
-                </small>
-
-            </td>
-
-
-            <td>
-
-                <input
-                    type="hidden"
-                    name="items[${currentIndex}][price]"
-                    id="price_${currentIndex}"
-                    value="0"
-                >
-
-                <div class="d-flex align-items-center gap-2">
-
-                    <div
-                        class="form-control text-end fw-bold bg-white"
-                        id="price_display_${currentIndex}"
-                    >
-                        0.00
-                    </div>
-
-                    <span class="text-nowrap">
-                        FDJ
-                    </span>
-
-                </div>
-
-            </td>
-
-
-            <td>
-
-                <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    name="items[${currentIndex}][quantity]"
-                    id="qty_${currentIndex}"
-                    class="form-control"
-                    value="1"
-                    required
-                >
-
-            </td>
-
-
-            <td class="fw-bold text-end">
-
-                <span
-                    id="total_${currentIndex}"
-                    class="line-total"
-                >
-                    0.00
-                </span>
-
-                FDJ
-
-            </td>
-
-
-            <td class="text-center">
-
-                <button
-                    type="button"
-                    class="btn btn-danger btn-sm remove-row"
-                    title="Supprimer"
-                >
-                    <i class="bx bx-trash"></i>
-                </button>
-
-            </td>
-        `;
-
-        itemsTableBody
-            .appendChild(row);
-
-        const productSelect =
-            row.querySelector(
-                '.product-select'
+document.addEventListener(
+    'DOMContentLoaded',
+    function () {
+        let rowIndex = 0;
+
+        const products =
+            @json($searchableProducts);
+
+        const itemsTableBody =
+            document.querySelector(
+                '#itemsTable tbody'
             );
 
-        const quantityInput =
-            row.querySelector(
-                `#qty_${currentIndex}`
+        const addProductButton =
+            document.getElementById(
+                'addProductButton'
             );
 
-        const removeButton =
-            row.querySelector(
-                '.remove-row'
+        const discountInput =
+            document.getElementById(
+                'discount'
             );
 
+        const customerSelect =
+            document.getElementById(
+                'customer_id'
+            );
 
-        if (
-            window.jQuery &&
-            $.fn.select2
+        const vehicleSelect =
+            document.getElementById(
+                'vehicle_id'
+            );
+
+        const proformaForm =
+            document.getElementById(
+                'proformaForm'
+            );
+
+        const productGlobalSearch =
+            document.getElementById(
+                'productGlobalSearch'
+            );
+
+        const productSearchResults =
+            document.getElementById(
+                'productSearchResults'
+            );
+
+        const clearProductSearch =
+            document.getElementById(
+                'clearProductSearch'
+            );
+
+        const vehicleLoadingMessage =
+            document.getElementById(
+                'vehicleLoadingMessage'
+            );
+
+        const vehicleErrorMessage =
+            document.getElementById(
+                'vehicleErrorMessage'
+            );
+
+        function showWarning(
+            title,
+            message
         ) {
+            Swal.fire({
+                icon:
+                    'warning',
 
-            $(productSelect)
-                .select2({
-                    width: '100%',
-                    placeholder:
-                        'Rechercher par référence, désignation, marque ou modèle',
-                    allowClear: true
-                });
+                title:
+                    title,
 
-            $(productSelect)
-                .on(
-                    'change',
-                    function () {
+                text:
+                    message,
 
-                        updatePriceAndStock(
-                            this,
-                            currentIndex
-                        );
+                confirmButtonText:
+                    'Compris',
 
-                    }
-                );
+                confirmButtonColor:
+                    '#696cff',
 
-        } else {
-
-            productSelect
-                .addEventListener(
-                    'change',
-                    function () {
-
-                        updatePriceAndStock(
-                            this,
-                            currentIndex
-                        );
-
-                    }
-                );
-
+                customClass: {
+                    popup:
+                        'stcd-swal-popup'
+                }
+            });
         }
 
+        function formatNumber(value) {
+            return new Intl.NumberFormat(
+                'fr-FR',
+                {
+                    minimumFractionDigits:
+                        2,
 
-        quantityInput
-            .addEventListener(
-                'input',
-                function () {
+                    maximumFractionDigits:
+                        2
+                }
+            ).format(
+                parseFloat(value)
+                ||
+                0
+            );
+        }
+
+        function normalize(value) {
+            return String(
+                value
+                ||
+                ''
+            )
+            .normalize('NFD')
+            .replace(
+                /[\u0300-\u036f]/g,
+                ''
+            )
+            .toLowerCase()
+            .trim();
+        }
+
+        function escapeHtml(value) {
+            const div =
+                document.createElement(
+                    'div'
+                );
+
+            div.textContent =
+                String(
+                    value
+                    ??
+                    ''
+                );
+
+            return div.innerHTML;
+        }
+
+        function productById(id) {
+            return products.find(
+                product =>
+                    String(product.id)
+                    ===
+                    String(id)
+            );
+        }
+
+        function hideSearchResults() {
+            productSearchResults.innerHTML =
+                '';
+
+            productSearchResults.classList.add(
+                'd-none'
+            );
+        }
+
+        function searchProducts(value) {
+            const search =
+                normalize(value);
+
+            if (!search) {
+                hideSearchResults();
+                return;
+            }
+
+            const results =
+                products
+                    .filter(
+                        function (product) {
+                            if (
+                                parseFloat(
+                                    product.stock
+                                )
+                                <=
+                                0
+                            ) {
+                                return false;
+                            }
+
+                            const haystack =
+                                normalize([
+                                    product.reference,
+                                    product.designation,
+                                    product.brand,
+                                    product.model
+                                ].join(' '));
+
+                            return haystack.includes(
+                                search
+                            );
+                        }
+                    )
+                    .slice(
+                        0,
+                        20
+                    );
+
+            if (
+                results.length
+                ===
+                0
+            ) {
+                productSearchResults.innerHTML =
+                    `
+                        <div class="p-3 text-center text-muted">
+                            Aucun produit disponible trouvé.
+                        </div>
+                    `;
+
+                productSearchResults.classList.remove(
+                    'd-none'
+                );
+
+                return;
+            }
+
+            productSearchResults.innerHTML =
+                results
+                    .map(
+                        function (product) {
+                            const depots =
+                                (
+                                    product.depots
+                                    ||
+                                    []
+                                )
+                                .map(
+                                    function (depot) {
+                                        return `
+                                            <span class="depot-chip">
+                                                <i class="bx bx-building-house"></i>
+                                                ${escapeHtml(depot.name)}
+                                                :
+                                                ${formatNumber(depot.quantity)}
+                                                ${escapeHtml(product.unit)}
+                                            </span>
+                                        `;
+                                    }
+                                )
+                                .join('');
+
+                            const brandModel =
+                                [
+                                    product.brand,
+                                    product.model
+                                ]
+                                .filter(Boolean)
+                                .join(' - ');
+
+                            return `
+                                <button
+                                    type="button"
+                                    class="product-search-result-item"
+                                    data-product-id="${product.id}"
+                                >
+                                    <div class="product-search-reference">
+                                        ${escapeHtml(product.reference)}
+                                    </div>
+
+                                    <div class="product-search-designation">
+                                        ${escapeHtml(product.designation)}
+                                    </div>
+
+                                    ${
+                                        brandModel
+                                            ? `
+                                                <div class="product-search-meta">
+                                                    ${escapeHtml(brandModel)}
+                                                </div>
+                                            `
+                                            : ''
+                                    }
+
+                                    <div class="product-search-meta">
+                                        Stock total :
+                                        <strong>
+                                            ${formatNumber(product.stock)}
+                                            ${escapeHtml(product.unit)}
+                                        </strong>
+                                        —
+                                        Prix :
+                                        <strong>
+                                            ${formatNumber(product.price)}
+                                            FDJ
+                                        </strong>
+                                    </div>
+
+                                    <div class="product-search-depots">
+                                        ${depots}
+                                    </div>
+                                </button>
+                            `;
+                        }
+                    )
+                    .join('');
+
+            productSearchResults.classList.remove(
+                'd-none'
+            );
+        }
+
+        function buildDepotBadges(product) {
+            const depots =
+                product?.depots
+                ||
+                [];
+
+            if (
+                depots.length
+                ===
+                0
+            ) {
+                return `
+                    <span class="depot-empty">
+                        Aucun stock dépôt
+                    </span>
+                `;
+            }
+
+            return depots
+                .map(
+                    function (depot) {
+                        return `
+                            <span class="depot-badge">
+                                <i class="bx bx-building-house"></i>
+                                ${escapeHtml(depot.name)}
+                                ${
+                                    depot.code
+                                        ? `(${escapeHtml(depot.code)})`
+                                        : ''
+                                }
+                                <strong>
+                                    ${formatNumber(depot.quantity)}
+                                    ${escapeHtml(product.unit)}
+                                </strong>
+                            </span>
+                        `;
+                    }
+                )
+                .join('');
+        }
+
+        function addRow(oldItem = null) {
+            const currentIndex =
+                rowIndex;
+
+            const row =
+                document.createElement(
+                    'tr'
+                );
+
+            row.innerHTML = `
+                <td>
+                    <select
+                        name="items[${currentIndex}][product_id]"
+                        class="form-control product-select"
+                        required
+                    >
+                        <option value="">
+                            Choisir un produit
+                        </option>
+
+                        @foreach($products as $product)
+                            <option
+                                value="{{ $product->id }}"
+                            >
+                                {{ $product->reference }}
+                                |
+                                {{ $product->designation }}
+                                |
+                                {{ $product->brand->name ?? '' }}
+                                |
+                                {{ $product->model->name ?? '' }}
+                            </option>
+                        @endforeach
+                    </select>
+                </td>
+
+                <td class="text-center fw-bold">
+                    <span
+                        id="stock_${currentIndex}"
+                    >
+                        0.00
+                    </span>
+
+                    <br>
+
+                    <small
+                        id="stock_unit_${currentIndex}"
+                        class="text-muted"
+                    >
+                        Pièce
+                    </small>
+                </td>
+
+                <td>
+                    <div
+                        id="depot_list_${currentIndex}"
+                        class="depot-list"
+                    >
+                        <span class="depot-empty">
+                            Sélectionnez un produit
+                        </span>
+                    </div>
+                </td>
+
+                <td>
+                    <input
+                        type="hidden"
+                        name="items[${currentIndex}][price]"
+                        id="price_${currentIndex}"
+                        value="0"
+                    >
+
+                    <div class="d-flex align-items-center gap-2 justify-content-end">
+                        <div
+                            class="form-control price-display bg-white"
+                            id="price_display_${currentIndex}"
+                        >
+                            0.00
+                        </div>
+
+                        <span class="text-nowrap">
+                            FDJ
+                        </span>
+                    </div>
+                </td>
+
+                <td>
+                    <input
+                        type="number"
+                        name="items[${currentIndex}][quantity]"
+                        id="qty_${currentIndex}"
+                        class="form-control"
+                        min="0.01"
+                        step="0.01"
+                        value="1"
+                        required
+                    >
+                </td>
+
+                <td class="text-end fw-bold">
+                    <span
+                        id="total_${currentIndex}"
+                        class="line-total"
+                    >
+                        0.00
+                    </span>
+                    FDJ
+                </td>
+
+                <td class="text-center">
+                    <button
+                        type="button"
+                        class="btn btn-danger btn-sm remove-row"
+                        title="Supprimer"
+                    >
+                        <i class="bx bx-trash"></i>
+                    </button>
+                </td>
+            `;
+
+            itemsTableBody.appendChild(
+                row
+            );
+
+            const productSelect =
+                row.querySelector(
+                    '.product-select'
+                );
+
+            const quantityInput =
+                row.querySelector(
+                    `#qty_${currentIndex}`
+                );
+
+            const removeButton =
+                row.querySelector(
+                    '.remove-row'
+                );
+
+            function productChanged() {
+                const product =
+                    productById(
+                        productSelect.value
+                    );
+
+                const stockElement =
+                    document.getElementById(
+                        `stock_${currentIndex}`
+                    );
+
+                const unitElement =
+                    document.getElementById(
+                        `stock_unit_${currentIndex}`
+                    );
+
+                const priceInput =
+                    document.getElementById(
+                        `price_${currentIndex}`
+                    );
+
+                const priceDisplay =
+                    document.getElementById(
+                        `price_display_${currentIndex}`
+                    );
+
+                const depotList =
+                    document.getElementById(
+                        `depot_list_${currentIndex}`
+                    );
+
+                if (!product) {
+                    stockElement.textContent =
+                        '0.00';
+
+                    unitElement.textContent =
+                        'Pièce';
+
+                    priceInput.value =
+                        '0';
+
+                    priceDisplay.textContent =
+                        '0.00';
+
+                    quantityInput.removeAttribute(
+                        'max'
+                    );
+
+                    depotList.innerHTML =
+                        `
+                            <span class="depot-empty">
+                                Sélectionnez un produit
+                            </span>
+                        `;
 
                     calculateRow(
                         currentIndex
                     );
 
+                    return;
+                }
+
+                stockElement.textContent =
+                    formatNumber(
+                        product.stock
+                    );
+
+                unitElement.textContent =
+                    product.unit;
+
+                priceInput.value =
+                    parseFloat(
+                        product.price
+                        ||
+                        0
+                    ).toFixed(2);
+
+                priceDisplay.textContent =
+                    formatNumber(
+                        product.price
+                    );
+
+                quantityInput.max =
+                    String(
+                        product.stock
+                    );
+
+                depotList.innerHTML =
+                    buildDepotBadges(
+                        product
+                    );
+
+                calculateRow(
+                    currentIndex
+                );
+            }
+
+            if (
+                window.jQuery
+                &&
+                $.fn.select2
+            ) {
+                $(productSelect)
+                    .select2({
+                        width:
+                            '100%',
+
+                        placeholder:
+                            'Rechercher un produit',
+
+                        allowClear:
+                            true
+                    });
+
+                $(productSelect)
+                    .on(
+                        'change',
+                        productChanged
+                    );
+            } else {
+                productSelect.addEventListener(
+                    'change',
+                    productChanged
+                );
+            }
+
+            quantityInput.addEventListener(
+                'input',
+                function () {
+                    calculateRow(
+                        currentIndex
+                    );
                 }
             );
 
-
-        removeButton
-            .addEventListener(
+            removeButton.addEventListener(
                 'click',
                 function () {
-
                     if (
-                        window.jQuery &&
-                        $.fn.select2 &&
+                        window.jQuery
+                        &&
+                        $.fn.select2
+                        &&
                         $(productSelect)
                             .hasClass(
                                 'select2-hidden-accessible'
                             )
                     ) {
                         $(productSelect)
-                            .select2('destroy');
+                            .select2(
+                                'destroy'
+                            );
                     }
 
                     row.remove();
 
                     if (
                         itemsTableBody
-                            .querySelectorAll('tr')
-                            .length === 0
+                            .querySelectorAll(
+                                'tr'
+                            )
+                            .length
+                        ===
+                        0
                     ) {
                         addRow();
                     }
@@ -1004,462 +1475,328 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             );
 
-
-        if (
-            oldItem &&
-            oldItem.product_id
-        ) {
-
-            /*
-            |--------------------------------------------------------------------------
-            | RESTAURER LE PRODUIT APRÈS UNE ERREUR SERVEUR
-            |--------------------------------------------------------------------------
-            |
-            | Important :
-            | on force d'abord la vraie valeur du <select>, puis on lit directement
-            | l'option sélectionnée pour remettre PRIX + STOCK avant de recalculer
-            | la quantité. Cela évite le faux "Stock disponible : 0".
-            |
-            */
-
-            productSelect.value =
-                String(
-                    oldItem.product_id
-                );
-
-            /*
-            | Mettre immédiatement à jour le stock et le prix depuis data-*.
-            */
-            updatePriceAndStock(
-                productSelect,
-                currentIndex
-            );
-
-            /*
-            | Ensuite seulement restaurer la quantité.
-            */
-            quantityInput.value =
-                oldItem.quantity ?? 1;
-
-            calculateRow(
-                currentIndex
-            );
-
-            /*
-            | Rafraîchir Select2 visuellement sans relancer la logique métier.
-            */
             if (
-                window.jQuery &&
-                $.fn.select2
+                oldItem
+                &&
+                oldItem.product_id
             ) {
-                $(productSelect)
-                    .val(
+                if (
+                    window.jQuery
+                    &&
+                    $.fn.select2
+                ) {
+                    $(productSelect)
+                        .val(
+                            String(
+                                oldItem.product_id
+                            )
+                        )
+                        .trigger(
+                            'change'
+                        );
+                } else {
+                    productSelect.value =
                         String(
                             oldItem.product_id
-                        )
-                    )
-                    .trigger(
-                        'change.select2'
-                    );
+                        );
+
+                    productChanged();
+                }
+
+                quantityInput.value =
+                    oldItem.quantity
+                    ??
+                    1;
+
+                calculateRow(
+                    currentIndex
+                );
             }
+
+            rowIndex++;
+
+            return productSelect;
         }
 
-        rowIndex++;
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | PRIX / STOCK
-    |--------------------------------------------------------------------------
-    */
-
-    function updatePriceAndStock(
-        select,
-        index
-    ) {
-
-        const selectedOption =
-            select.options[
-                select.selectedIndex
-            ];
-
-        const price =
-            parseFloat(
-                selectedOption?.dataset?.price || 0
-            ) || 0;
-
-        const stock =
-            parseFloat(
-                selectedOption?.dataset?.stock || 0
-            ) || 0;
-
-        const unit =
-            selectedOption?.dataset?.unit ||
-            'Pièce';
-
-        document.getElementById(
-            `price_${index}`
-        ).value =
-            price.toFixed(2);
-
-        document.getElementById(
-            `price_display_${index}`
-        ).textContent =
-            formatNumber(price);
-
-        document.getElementById(
-            `stock_${index}`
-        ).textContent =
-            stock;
-
-        document.getElementById(
-            `stock_unit_${index}`
-        ).textContent =
-            unit;
-
-        calculateRow(
+        function calculateRow(
             index
-        );
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | CALCUL LIGNE
-    |--------------------------------------------------------------------------
-    */
-
-    function calculateRow(
-        index
-    ) {
-
-        const price =
-            parseFloat(
+        ) {
+            const priceInput =
                 document.getElementById(
                     `price_${index}`
-                ).value
-            ) || 0;
+                );
 
-        let quantity =
-            parseFloat(
+            const quantityInput =
                 document.getElementById(
                     `qty_${index}`
-                ).value
-            ) || 0;
+                );
 
-        let stock =
-            parseFloat(
+            const totalElement =
+                document.getElementById(
+                    `total_${index}`
+                );
+
+            const stockElement =
                 document.getElementById(
                     `stock_${index}`
-                ).textContent
-            ) || 0;
+                );
 
-        let unit =
-            document.getElementById(
-                `stock_unit_${index}`
-            ).textContent ||
-            'Pièce';
+            const unitElement =
+                document.getElementById(
+                    `stock_unit_${index}`
+                );
 
-        /*
-        |--------------------------------------------------------------------------
-        | SÉCURITÉ : RELIRE LE STOCK DEPUIS L'OPTION PRODUIT
-        |--------------------------------------------------------------------------
-        |
-        | Après un retour withInput(), certains navigateurs/Select2 peuvent
-        | restaurer le produit visuellement avant que le stock affiché soit remis.
-        | On relit donc data-stock / data-unit avant d'afficher une alerte.
-        |
-        */
+            if (
+                !priceInput
+                ||
+                !quantityInput
+                ||
+                !totalElement
+                ||
+                !stockElement
+            ) {
+                return;
+            }
 
-        const row =
-            document.getElementById(
-                `qty_${index}`
-            )?.closest('tr');
-
-        const productSelect =
-            row?.querySelector(
-                '.product-select'
-            );
-
-        const selectedOption =
-            productSelect?.options[
-                productSelect.selectedIndex
-            ];
-
-        if (
-            productSelect &&
-            productSelect.value &&
-            selectedOption
-        ) {
-
-            const optionStock =
+            const price =
                 parseFloat(
-                    selectedOption.dataset.stock || 0
-                ) || 0;
+                    priceInput.value
+                )
+                ||
+                0;
 
-            const optionUnit =
-                selectedOption.dataset.unit ||
+            let quantity =
+                parseFloat(
+                    quantityInput.value
+                )
+                ||
+                0;
+
+            const stock =
+                parseFloat(
+                    String(
+                        stockElement.textContent
+                    )
+                    .replace(
+                        /\s/g,
+                        ''
+                    )
+                    .replace(
+                        ',',
+                        '.'
+                    )
+                )
+                ||
+                0;
+
+            const unit =
+                unitElement?.textContent
+                ||
                 'Pièce';
 
             if (
-                stock <= 0 &&
-                optionStock > 0
+                quantity > stock
+                &&
+                stock >= 0
             ) {
+                showWarning(
+                    'Stock insuffisant',
+                    `Stock total disponible dans les dépôts : ${formatNumber(stock)} ${unit}`
+                );
 
-                stock =
-                    optionStock;
+                quantity =
+                    stock;
 
-                unit =
-                    optionUnit;
-
-                document.getElementById(
-                    `stock_${index}`
-                ).textContent =
-                    optionStock;
-
-                document.getElementById(
-                    `stock_unit_${index}`
-                ).textContent =
-                    optionUnit;
+                quantityInput.value =
+                    stock;
             }
+
+            const lineTotal =
+                price
+                *
+                quantity;
+
+            totalElement.textContent =
+                lineTotal.toFixed(2);
+
+            calculateGrandTotal();
         }
 
-        if (
-            quantity > stock &&
-            stock >= 0
-        ) {
+        function calculateGrandTotal() {
+            let subtotal =
+                0;
 
-            showWarning(
-                'Stock insuffisant',
-                `Stock disponible : ${stock} ${unit}`
-            );
+            document
+                .querySelectorAll(
+                    '.line-total'
+                )
+                .forEach(
+                    function (element) {
+                        subtotal +=
+                            parseFloat(
+                                element.textContent
+                            )
+                            ||
+                            0;
+                    }
+                );
 
-            quantity =
-                stock;
+            let discount =
+                parseFloat(
+                    discountInput.value
+                )
+                ||
+                0;
+
+            discount =
+                Math.max(
+                    0,
+                    Math.min(
+                        100,
+                        discount
+                    )
+                );
+
+            discountInput.value =
+                discount;
+
+            const discountAmount =
+                subtotal
+                *
+                discount
+                /
+                100;
+
+            const taxable =
+                Math.max(
+                    0,
+                    subtotal
+                    -
+                    discountAmount
+                );
+
+            const tva =
+                taxable
+                *
+                0.10;
+
+            const total =
+                taxable
+                +
+                tva;
 
             document.getElementById(
-                `qty_${index}`
+                'subTotal'
+            ).textContent =
+                subtotal.toFixed(2);
+
+            document.getElementById(
+                'discountAmount'
+            ).textContent =
+                discountAmount.toFixed(2);
+
+            document.getElementById(
+                'tvaAmount'
+            ).textContent =
+                tva.toFixed(2);
+
+            document.getElementById(
+                'grandTotal'
+            ).textContent =
+                total.toFixed(2);
+
+            document.getElementById(
+                'final_total_input'
             ).value =
-                stock;
+                total.toFixed(2);
         }
 
-        const lineTotal =
-            price * quantity;
-
-        document.getElementById(
-            `total_${index}`
-        ).textContent =
-            lineTotal.toFixed(2);
-
-        calculateGrandTotal();
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | TOTAL
-    |--------------------------------------------------------------------------
-    */
-
-    function calculateGrandTotal()
-    {
-        let subtotal = 0;
-
-        document
-            .querySelectorAll(
-                '.line-total'
-            )
-            .forEach(
-                function (element) {
-
-                    subtotal +=
-                        parseFloat(
-                            element.textContent
-                        ) || 0;
-
-                }
+        async function loadVehicles(
+            customerId,
+            selectedVehicleId = null
+        ) {
+            vehicleErrorMessage.classList.add(
+                'd-none'
             );
 
-        let discountPercent =
-            parseFloat(
-                discountInput.value
-            ) || 0;
-
-        if (
-            discountPercent < 0
-        ) {
-            discountPercent = 0;
-            discountInput.value = 0;
-        }
-
-        if (
-            discountPercent > 100
-        ) {
-            discountPercent = 100;
-            discountInput.value = 100;
-        }
-
-        const discountAmount =
-            subtotal *
-            discountPercent /
-            100;
-
-        const taxable =
-            Math.max(
-                0,
-                subtotal - discountAmount
-            );
-        const tva = taxable * 0.10;
-
-        const total =
-            taxable + tva;
-
-        document.getElementById(
-            'subTotal'
-        ).textContent =
-            subtotal.toFixed(2);
-
-        document.getElementById(
-            'discountAmount'
-        ).textContent =
-            discountAmount.toFixed(2);
-
-        document.getElementById(
-            'tvaAmount'
-        ).textContent =
-            tva.toFixed(2);
-
-        document.getElementById(
-            'grandTotal'
-        ).textContent =
-            total.toFixed(2);
-
-        document.getElementById(
-            'final_total_input'
-        ).value =
-            total.toFixed(2);
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | CLIENT -> VÉHICULE
-    |--------------------------------------------------------------------------
-    */
-
-    async function loadVehicles(
-        customerId,
-        selectedVehicleId = null
-    ) {
-
-        vehicleErrorMessage
-            .classList
-            .add('d-none');
-
-        vehicleErrorMessage.textContent =
-            '';
-
-        vehicleSelect.innerHTML =
-            '';
-
-        if (!customerId) {
+            vehicleErrorMessage.textContent =
+                '';
 
             vehicleSelect.innerHTML =
-                '<option value="">Sélectionnez d’abord un client</option>';
+                '';
+
+            if (!customerId) {
+                vehicleSelect.innerHTML =
+                    '<option value="">Sélectionnez d’abord un client</option>';
+
+                vehicleSelect.disabled =
+                    true;
+
+                return;
+            }
+
+            vehicleLoadingMessage.classList.remove(
+                'd-none'
+            );
 
             vehicleSelect.disabled =
                 true;
 
-            if (window.jQuery) {
-                $('#vehicle_id')
-                    .trigger(
-                        'change.select2'
-                    );
-            }
-
-            return;
-        }
-
-        vehicleLoadingMessage
-            .classList
-            .remove('d-none');
-
-        vehicleSelect.disabled =
-            true;
-
-        vehicleSelect.innerHTML =
-            '<option value="">Chargement des véhicules...</option>';
-
-        try {
-
-            const url =
-                "{{ url('/proformas/customers') }}/"
-                + encodeURIComponent(
-                    customerId
-                )
-                + "/vehicles";
-
-            const response =
-                await fetch(
-                    url,
-                    {
-                        method: 'GET',
-
-                        headers: {
-                            'Accept':
-                                'application/json',
-
-                            'X-Requested-With':
-                                'XMLHttpRequest'
-                        },
-
-                        cache:
-                            'no-store'
-                    }
-                );
-
-            if (!response.ok) {
-                throw new Error(
-                    'Erreur HTTP '
-                    + response.status
-                );
-            }
-
-            const data =
-                await response.json();
-
             vehicleSelect.innerHTML =
-                '';
+                '<option value="">Chargement...</option>';
 
-            const defaultOption =
-                document.createElement(
-                    'option'
-                );
+            try {
+                const url =
+                    "{{ url('/proformas/customers') }}/"
+                    +
+                    encodeURIComponent(
+                        customerId
+                    )
+                    +
+                    "/vehicles";
 
-            defaultOption.value =
-                '';
+                const response =
+                    await fetch(
+                        url,
+                        {
+                            headers: {
+                                'Accept':
+                                    'application/json',
 
-            defaultOption.textContent =
-                'Sélectionner une immatriculation';
+                                'X-Requested-With':
+                                    'XMLHttpRequest'
+                            },
 
-            vehicleSelect
-                .appendChild(
-                    defaultOption
-                );
+                            cache:
+                                'no-store'
+                        }
+                    );
 
-            if (
-                data.success === true &&
-                Array.isArray(
-                    data.vehicles
-                ) &&
-                data.vehicles.length > 0
-            ) {
+                if (!response.ok) {
+                    throw new Error(
+                        'Erreur HTTP '
+                        +
+                        response.status
+                    );
+                }
 
-                data.vehicles
-                    .forEach(
+                const data =
+                    await response.json();
+
+                vehicleSelect.innerHTML =
+                    '<option value="">Sélectionner une immatriculation</option>';
+
+                if (
+                    data.success
+                    &&
+                    Array.isArray(
+                        data.vehicles
+                    )
+                    &&
+                    data.vehicles.length > 0
+                ) {
+                    data.vehicles.forEach(
                         function (vehicle) {
-
                             const option =
                                 document.createElement(
                                     'option'
@@ -1469,18 +1806,17 @@ document.addEventListener('DOMContentLoaded', function () {
                                 vehicle.id;
 
                             option.textContent =
-                                vehicle.label ||
-                                vehicle.plate_number ||
-                                (
-                                    'Véhicule #'
-                                    + vehicle.id
-                                );
+                                vehicle.label
+                                ||
+                                vehicle.plate_number;
 
                             if (
-                                selectedVehicleId &&
+                                selectedVehicleId
+                                &&
                                 String(
                                     vehicle.id
-                                ) ===
+                                )
+                                ===
                                 String(
                                     selectedVehicleId
                                 )
@@ -1489,497 +1825,267 @@ document.addEventListener('DOMContentLoaded', function () {
                                     true;
                             }
 
-                            vehicleSelect
-                                .appendChild(
-                                    option
-                                );
+                            vehicleSelect.appendChild(
+                                option
+                            );
                         }
                     );
 
-                vehicleSelect.disabled =
-                    false;
-
-                if (
-                    selectedVehicleId
-                ) {
-                    vehicleSelect.value =
-                        String(
-                            selectedVehicleId
-                        );
+                    vehicleSelect.disabled =
+                        false;
                 } else {
-                    vehicleSelect.value =
-                        '';
+                    vehicleSelect.innerHTML =
+                        '<option value="">Aucun véhicule associé à ce client</option>';
+
+                    vehicleErrorMessage.classList.remove(
+                        'd-none'
+                    );
+
+                    vehicleErrorMessage.textContent =
+                        'Ce client ne possède aucun véhicule associé.';
                 }
 
                 if (
                     window.jQuery
+                    &&
+                    $.fn.select2
                 ) {
                     $('#vehicle_id')
                         .trigger(
                             'change.select2'
                         );
                 }
-
-            } else {
+            } catch (error) {
+                console.error(
+                    error
+                );
 
                 vehicleSelect.innerHTML =
-                    '<option value="">Aucun véhicule associé à ce client</option>';
+                    '<option value="">Erreur lors du chargement</option>';
 
-                vehicleSelect.disabled =
-                    true;
-
-                vehicleErrorMessage
-                    .classList
-                    .remove('d-none');
+                vehicleErrorMessage.classList.remove(
+                    'd-none'
+                );
 
                 vehicleErrorMessage.textContent =
-                    'Ce client ne possède aucun véhicule associé.';
+                    'Impossible de charger les véhicules.';
+            } finally {
+                vehicleLoadingMessage.classList.add(
+                    'd-none'
+                );
             }
-
-        } catch (error) {
-
-            console.error(
-                'Erreur chargement véhicules :',
-                error
-            );
-
-            vehicleSelect.innerHTML =
-                '<option value="">Erreur lors du chargement</option>';
-
-            vehicleSelect.disabled =
-                true;
-
-            vehicleErrorMessage
-                .classList
-                .remove('d-none');
-
-            vehicleErrorMessage.textContent =
-                'Impossible de charger les véhicules du client.';
-
-        } finally {
-
-            vehicleLoadingMessage
-                .classList
-                .add('d-none');
         }
-    }
 
+        if (
+            window.jQuery
+            &&
+            $.fn.select2
+        ) {
+            $('#customer_id')
+                .select2({
+                    width:
+                        '100%',
 
-    /*
-    |--------------------------------------------------------------------------
-    | CHANGEMENT CLIENT
-    |--------------------------------------------------------------------------
-    */
+                    placeholder:
+                        'Rechercher un client',
 
-    if (
-        window.jQuery
-    ) {
+                    allowClear:
+                        true
+                });
 
-        $('#customer_id')
-            .on(
+            $('#vehicle_id')
+                .select2({
+                    width:
+                        '100%',
+
+                    placeholder:
+                        'Sélectionner une immatriculation',
+
+                    allowClear:
+                        true
+                });
+
+            $('#customer_id')
+                .on(
+                    'change',
+                    function () {
+                        loadVehicles(
+                            $(this).val()
+                        );
+                    }
+                );
+        } else {
+            customerSelect.addEventListener(
                 'change',
                 function () {
-
-                    loadVehicles(
-                        $(this).val()
-                    );
-
-                }
-            );
-
-    } else {
-
-        customerSelect
-            .addEventListener(
-                'change',
-                function () {
-
                     loadVehicles(
                         this.value
                     );
-
                 }
             );
+        }
 
-    }
-
-
-    const customerCodeInput =
-        document.getElementById(
-            'customer_code'
-        );
-
-    if (customerCodeInput) {
-
-        customerCodeInput.addEventListener(
+        productGlobalSearch.addEventListener(
             'input',
             function () {
-                this.value =
-                    this.value.toUpperCase();
+                searchProducts(
+                    this.value
+                );
             }
         );
-    }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | NOUVEAU CLIENT
-    |--------------------------------------------------------------------------
-    */
-
-    saveCustomerBtn
-        .addEventListener(
+        productSearchResults.addEventListener(
             'click',
-            async function () {
-
-                const code =
-                    document.getElementById(
-                        'customer_code'
-                    ).value.trim().toUpperCase();
-
-                const name =
-                    document.getElementById(
-                        'customer_name'
-                    ).value.trim();
-
-                const phone =
-                    document.getElementById(
-                        'customer_phone'
-                    ).value.trim();
-
-                const email =
-                    document.getElementById(
-                        'customer_email'
-                    ).value.trim();
-
-                const errorBox =
-                    document.getElementById(
-                        'customerModalError'
+            function (event) {
+                const button =
+                    event.target.closest(
+                        '.product-search-result-item'
                     );
 
-                errorBox
-                    .classList
-                    .add('d-none');
+                if (!button) {
+                    return;
+                }
 
-                errorBox.innerHTML =
+                let productSelect =
+                    Array.from(
+                        itemsTableBody.querySelectorAll(
+                            '.product-select'
+                        )
+                    )
+                    .find(
+                        select =>
+                            !select.value
+                    );
+
+                if (!productSelect) {
+                    productSelect =
+                        addRow();
+                }
+
+                if (
+                    window.jQuery
+                    &&
+                    $.fn.select2
+                ) {
+                    $(productSelect)
+                        .val(
+                            String(
+                                button.dataset.productId
+                            )
+                        )
+                        .trigger(
+                            'change'
+                        );
+                } else {
+                    productSelect.value =
+                        String(
+                            button.dataset.productId
+                        );
+
+                    productSelect.dispatchEvent(
+                        new Event(
+                            'change',
+                            {
+                                bubbles:
+                                    true
+                            }
+                        )
+                    );
+                }
+
+                productGlobalSearch.value =
                     '';
 
-                if (!code) {
+                hideSearchResults();
 
-                    errorBox.innerHTML =
-                        'Le code du client est obligatoire.';
+                const row =
+                    productSelect.closest(
+                        'tr'
+                    );
 
-                    errorBox
-                        .classList
-                        .remove('d-none');
-
-                    document.getElementById(
-                        'customer_code'
-                    ).focus();
-
-                    return;
-                }
-
-                if (!name) {
-
-                    errorBox.innerHTML =
-                        'Le nom du client est obligatoire.';
-
-                    errorBox
-                        .classList
-                        .remove('d-none');
-
-                    document.getElementById(
-                        'customer_name'
-                    ).focus();
-
-                    return;
-                }
-
-                try {
-
-                    const response =
-                        await fetch(
-                            "{{ route('customers.store') }}",
-                            {
-                                method:
-                                    'POST',
-
-                                headers: {
-                                    'Content-Type':
-                                        'application/json',
-
-                                    'X-CSRF-TOKEN':
-                                        '{{ csrf_token() }}',
-
-                                    'Accept':
-                                        'application/json'
-                                },
-
-                                body:
-                                    JSON.stringify({
-                                        code: code,
-                                        name: name,
-                                        phone: phone,
-                                        email: email
-                                    })
-                            }
-                        );
-
-                    const data =
-                        await response.json();
-
-                    if (!response.ok) {
-                        throw data;
-                    }
-
-                    if (
-                        !data.success ||
-                        !data.customer
-                    ) {
-                        throw new Error(
-                            'Réponse serveur invalide.'
-                        );
-                    }
-
-                    const customerLabel =
-                        (
-                            data.customer.code
-                                ? data.customer.code + ' - '
-                                : ''
-                        )
-                        + data.customer.name;
-
-                    const option =
-                        new Option(
-                            customerLabel,
-                            data.customer.id,
-                            true,
-                            true
-                        );
-
-                    customerSelect
-                        .add(
-                            option
-                        );
-
-                    if (
-                        window.jQuery
-                    ) {
-
-                        $('#customer_id')
-                            .val(
-                                String(
-                                    data.customer.id
-                                )
-                            )
-                            .trigger(
-                                'change'
-                            );
-
-                    } else {
-
-                        customerSelect.value =
-                            String(
-                                data.customer.id
-                            );
-
-                        customerSelect
-                            .dispatchEvent(
-                                new Event(
-                                    'change'
-                                )
-                            );
-
-                    }
-
-                    document.getElementById(
-                        'customer_code'
-                    ).value = '';
-
-                    document.getElementById(
-                        'customer_name'
-                    ).value = '';
-
-                    document.getElementById(
-                        'customer_phone'
-                    ).value = '';
-
-                    document.getElementById(
-                        'customer_email'
-                    ).value = '';
-
-                    const modalElement =
-                        document.getElementById(
-                            'customerModal'
-                        );
-
-                    if (
-                        window.bootstrap &&
-                        modalElement
-                    ) {
-
-                        const modal =
-                            bootstrap.Modal
-                                .getInstance(
-                                    modalElement
-                                );
-
-                        if (modal) {
-                            modal.hide();
-                        }
-                    }
-
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Client créé',
-                        text:
-                            'Le client a été créé avec succès.',
-                        confirmButtonColor:
-                            '#696cff'
-                    });
-
-                } catch (error) {
-
-                    let message =
-                        'Erreur lors de la création du client.';
-
-                    if (
-                        error &&
-                        error.errors
-                    ) {
-                        message =
-                            Object
-                                .values(
-                                    error.errors
-                                )
-                                .flat()
-                                .join('<br>');
-                    } else if (
-                        error &&
-                        error.message
-                    ) {
-                        message =
-                            error.message;
-                    }
-
-                    errorBox.innerHTML =
-                        message;
-
-                    errorBox
-                        .classList
-                        .remove('d-none');
-                }
-
+                row
+                    ?.querySelector(
+                        'input[name$="[quantity]"]'
+                    )
+                    ?.focus();
             }
         );
 
+        clearProductSearch.addEventListener(
+            'click',
+            function () {
+                productGlobalSearch.value =
+                    '';
 
-    /*
-    |--------------------------------------------------------------------------
-    | ÉVÉNEMENTS
-    |--------------------------------------------------------------------------
-    */
+                productGlobalSearch.focus();
 
-    addProductButton
-        .addEventListener(
+                hideSearchResults();
+            }
+        );
+
+        document.addEventListener(
+            'click',
+            function (event) {
+                if (
+                    !event.target.closest(
+                        '.product-search-wrapper'
+                    )
+                ) {
+                    hideSearchResults();
+                }
+            }
+        );
+
+        addProductButton.addEventListener(
             'click',
             function () {
                 addRow();
             }
         );
 
-    discountInput
-        .addEventListener(
+        discountInput.addEventListener(
             'input',
             calculateGrandTotal
         );
 
+        @if(
+            is_array(old('items'))
+            &&
+            count(old('items')) > 0
+        )
+            const oldItems =
+                @json(old('items'));
 
-    /*
-    |--------------------------------------------------------------------------
-    | OLD ITEMS
-    |--------------------------------------------------------------------------
-    */
-
-    @if(is_array(old('items')) && count(old('items')) > 0)
-
-        const oldItems =
-            @json(old('items'));
-
-        oldItems
-            .forEach(
+            oldItems.forEach(
                 function (item) {
-
                     addRow(
                         item
                     );
-
                 }
             );
+        @else
+            addRow();
+        @endif
 
-    @else
+        const initialCustomerId =
+            customerSelect.value;
 
-        addRow();
+        const initialVehicleId =
+            vehicleSelect.dataset.selected
+            ||
+            null;
 
-    @endif
+        if (initialCustomerId) {
+            loadVehicles(
+                initialCustomerId,
+                initialVehicleId
+            );
+        }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | OLD CLIENT / VEHICULE
-    |--------------------------------------------------------------------------
-    */
-
-    const initialCustomerId =
-        customerSelect.value;
-
-    const oldVehicleId =
-        vehicleSelect.dataset.selected ||
-        null;
-
-    if (
-        initialCustomerId
-    ) {
-
-        loadVehicles(
-            initialCustomerId,
-            oldVehicleId
-        );
-
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | VALIDATION
-    |--------------------------------------------------------------------------
-    */
-
-    proformaForm
-        .addEventListener(
+        proformaForm.addEventListener(
             'submit',
             function (event) {
-
-                if (
-                    !customerSelect.value &&
-                    !vehicleSelect.value
-                ) {
-
-                    event.preventDefault();
-
-                    showWarning(
-                        'Informations obligatoires',
-                        'Veuillez sélectionner le client et son véhicule.'
-                    );
-
-                    return;
-                }
-
-                if (
-                    !customerSelect.value
-                ) {
-
+                if (!customerSelect.value) {
                     event.preventDefault();
 
                     showWarning(
@@ -1990,30 +2096,67 @@ document.addEventListener('DOMContentLoaded', function () {
                     return;
                 }
 
-                if (
-                    !vehicleSelect.value
-                ) {
-
+                if (!vehicleSelect.value) {
                     event.preventDefault();
 
                     showWarning(
                         'Véhicule obligatoire',
-                        'Veuillez sélectionner le véhicule associé au client.'
+                        'Veuillez sélectionner le véhicule du client.'
                     );
 
                     return;
                 }
 
                 const rows =
-                    itemsTableBody
-                        .querySelectorAll(
-                            'tr'
-                        );
+                    itemsTableBody.querySelectorAll(
+                        'tr'
+                    );
 
-                if (
-                    rows.length === 0
-                ) {
+                let validLine =
+                    false;
 
+                let invalidQuantity =
+                    false;
+
+                rows.forEach(
+                    function (row) {
+                        const productSelect =
+                            row.querySelector(
+                                '.product-select'
+                            );
+
+                        if (
+                            !productSelect
+                            ||
+                            !productSelect.value
+                        ) {
+                            return;
+                        }
+
+                        validLine =
+                            true;
+
+                        const quantityInput =
+                            row.querySelector(
+                                'input[name$="[quantity]"]'
+                            );
+
+                        if (
+                            !quantityInput
+                            ||
+                            parseFloat(
+                                quantityInput.value
+                            )
+                            <=
+                            0
+                        ) {
+                            invalidQuantity =
+                                true;
+                        }
+                    }
+                );
+
+                if (!validLine) {
                     event.preventDefault();
 
                     showWarning(
@@ -2024,49 +2167,22 @@ document.addEventListener('DOMContentLoaded', function () {
                     return;
                 }
 
-                let validProduct =
-                    false;
-
-                rows.forEach(
-                    function (row) {
-
-                        const select =
-                            row.querySelector(
-                                '.product-select'
-                            );
-
-                        if (
-                            select &&
-                            select.value
-                        ) {
-                            validProduct =
-                                true;
-                        }
-
-                    }
-                );
-
-                if (
-                    !validProduct
-                ) {
-
+                if (invalidQuantity) {
                     event.preventDefault();
 
                     showWarning(
-                        'Produit obligatoire',
-                        'Veuillez sélectionner au moins un produit.'
+                        'Quantité invalide',
+                        'La quantité doit être supérieure à zéro.'
                     );
 
                     return;
                 }
-
             }
         );
 
-
-    calculateGrandTotal();
-
-});
+        calculateGrandTotal();
+    }
+);
 </script>
 
 @endsection
