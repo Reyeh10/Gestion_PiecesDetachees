@@ -2,225 +2,243 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Customer;
+use App\Models\Depot;
+use App\Models\Payment;
 use App\Models\Product;
+use App\Models\ProductDepotStock;
 use App\Models\Sale;
 use App\Models\SaleItem;
-use App\Models\Payment;
 use App\Models\StockMovement;
-use App\Models\Customer;
-use App\Models\ProductDepotStock;
 use App\Models\Vehicle;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Validation\Rule;
-
 use Barryvdh\DomPDF\Facade\Pdf;
-use NumberToWords\NumberToWords;
-
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use NumberToWords\NumberToWords;
 
-    class SaleController extends Controller
+class SaleController extends Controller
+{
+    /*
+    |--------------------------------------------------------------------------
+    | INDEX
+    |--------------------------------------------------------------------------
+    */
+   public function index(Request $request)
     {
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | INDEX
-        |--------------------------------------------------------------------------
-        */
-
-        public function index(Request $request)
-        {
-            $sales = Sale::with([
-
-                    'customer',
-
-                    'items.product.brand',
-
-                    'items.product.model',
-
-                    'payments',
-
-                ])
-
-                /*
-                |--------------------------------------------------------------------------
-                | AFFICHER UNIQUEMENT LES VENTES
-                |--------------------------------------------------------------------------
-                */
-                ->where('document_type', 'sale')
-
-                /*
-                |--------------------------------------------------------------------------
-                | EXCLURE LES PROFORMAS
-                |--------------------------------------------------------------------------
-                */
-                ->where('invoice_number', 'NOT LIKE', 'PRO-%')
-
-                /*
-                |--------------------------------------------------------------------------
-                | RECHERCHE CLIENT
-                |--------------------------------------------------------------------------
-                */
-               ->when($request->client, function ($query) use ($request) {
-
-                    $query->where(function ($q) use ($request) {
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | SEARCH CLIENT
-                        |--------------------------------------------------------------------------
-                        */
-
-                        $q->whereHas('customer', function ($customer) use ($request) {
-
-                            $customer->where(
-                                'name',
-                                'like',
-                                '%' . $request->client . '%'
-                            );
-                        })
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | SEARCH FACTURE
-                        |--------------------------------------------------------------------------
-                        */
-
-                        ->orWhere(
-                            'invoice_number',
-                            'like',
-                            '%' . $request->client . '%'
-                        );
-
-                    });
-
-                })
-
-                /*
-                |--------------------------------------------------------------------------
-                | RECHERCHE REFERENCE
-                |--------------------------------------------------------------------------
-                */
-                ->when($request->reference, function ($query) use ($request) {
-
-                    $query->whereHas('items.product', function ($q) use ($request) {
-
-                        $q->where(
-                            'reference',
-                            'like',
-                            '%' . $request->reference . '%'
-                        );
-
-                    });
-
-                })
-
-                /*
-                |--------------------------------------------------------------------------
-                | RECHERCHE DESIGNATION
-                |--------------------------------------------------------------------------
-                */
-                ->when($request->designation, function ($query) use ($request) {
-
-                    $query->whereHas('items.product', function ($q) use ($request) {
-
-                        $q->where(
-                            'designation',
-                            'like',
-                            '%' . $request->designation . '%'
-                        );
-
-                    });
-
-                })
-
-                /*
-                |--------------------------------------------------------------------------
-                | RECHERCHE DATE
-                |--------------------------------------------------------------------------
-                */
-                ->when($request->filled('date'), function ($query) use ($request) {
-
-                        $query->whereDate(
-                            'created_at',
-                            '=',
-                            $request->date
-                        );
-
-                    })
-
-                /*
-                |--------------------------------------------------------------------------
-                | TRI
-                |--------------------------------------------------------------------------
-                */
-                ->latest()
-
-                /*
-                |--------------------------------------------------------------------------
-                | PAGINATION
-                |--------------------------------------------------------------------------
-                */
-                ->paginate(10);
+        $sales = Sale::query()
+            ->with([
+                'customer',
+                'vehicle',
+                'items.product.brand',
+                'items.product.model',
+                'items.depot',
+                'payments',
+            ])
 
             /*
             |--------------------------------------------------------------------------
-            | VIEW
+            | UNIQUEMENT LES VENTES
             |--------------------------------------------------------------------------
             */
+            ->where(
+                'document_type',
+                'sale'
+            )
 
-            return view(
+            /*
+            |--------------------------------------------------------------------------
+            | EXCLURE LES PROFORMAS
+            |--------------------------------------------------------------------------
+            */
+            ->where(
+                'invoice_number',
+                'NOT LIKE',
+                'PRO-%'
+            )
 
-                'sales.index',
+            /*
+            |--------------------------------------------------------------------------
+            | RECHERCHE CLIENT / FACTURE
+            |--------------------------------------------------------------------------
+            */
+            ->when(
+                $request->filled('client'),
+                function ($query) use ($request) {
 
-                compact('sales')
+                    $search = trim(
+                        (string) $request->client
+                    );
 
-            );
-        }
+                    $query->where(
+                        function ($q) use ($search) {
+
+                            $q->whereHas(
+                                'customer',
+                                function ($customer) use ($search) {
+
+                                    $customer->where(
+                                        'name',
+                                        'like',
+                                        '%' . $search . '%'
+                                    );
+                                }
+                            )
+                            ->orWhere(
+                                'invoice_number',
+                                'like',
+                                '%' . $search . '%'
+                            );
+                        }
+                    );
+                }
+            )
+
+            /*
+            |--------------------------------------------------------------------------
+            | RECHERCHE RÉFÉRENCE PRODUIT
+            |--------------------------------------------------------------------------
+            */
+            ->when(
+                $request->filled('reference'),
+                function ($query) use ($request) {
+
+                    $search = trim(
+                        (string) $request->reference
+                    );
+
+                    $query->whereHas(
+                        'items.product',
+                        function ($q) use ($search) {
+
+                            $q->where(
+                                'reference',
+                                'like',
+                                '%' . $search . '%'
+                            );
+                        }
+                    );
+                }
+            )
+
+            /*
+            |--------------------------------------------------------------------------
+            | RECHERCHE DÉSIGNATION
+            |--------------------------------------------------------------------------
+            */
+            ->when(
+                $request->filled('designation'),
+                function ($query) use ($request) {
+
+                    $search = trim(
+                        (string) $request->designation
+                    );
+
+                    $query->whereHas(
+                        'items.product',
+                        function ($q) use ($search) {
+
+                            $q->where(
+                                'designation',
+                                'like',
+                                '%' . $search . '%'
+                            );
+                        }
+                    );
+                }
+            )
+
+            /*
+            |--------------------------------------------------------------------------
+            | RECHERCHE PAR DATE
+            |--------------------------------------------------------------------------
+            */
+            ->when(
+                $request->filled('date'),
+                function ($query) use ($request) {
+
+                    $query->whereDate(
+                        'created_at',
+                        $request->date
+                    );
+                }
+            )
+
+            /*
+            |--------------------------------------------------------------------------
+            | TRI
+            |--------------------------------------------------------------------------
+            */
+            ->latest()
+
+            /*
+            |--------------------------------------------------------------------------
+            | PAGINATION
+            |--------------------------------------------------------------------------
+            */
+            ->paginate(10);
+
         /*
         |--------------------------------------------------------------------------
-        | CREATE
+        | CONSERVER LES FILTRES DANS LA PAGINATION
         |--------------------------------------------------------------------------
+        |
+        | Utilisation de appends() à la place de withQueryString()
+        | pour éviter le faux avertissement Intelephense.
+        |
         */
+        $sales->appends(
+            $request->query()
+        );
 
-        /**
-     * Afficher le formulaire de création d'une vente.
-     */
+        return view(
+            'sales.index',
+            compact('sales')
+        );
+    }
+    /*
+    |--------------------------------------------------------------------------
+    | CREATE
+    |--------------------------------------------------------------------------
+    |
+    | La disponibilité provient de product_depot_stocks.
+    | Un produit peut exister dans plusieurs dépôts.
+    |
+    */
     public function create()
     {
-        /*
-        |--------------------------------------------------------------------------
-        | PRODUITS DISPONIBLES
-        |--------------------------------------------------------------------------
-        */
-
-        $products = Product::with([
+        $products = Product::query()
+            ->with([
                 'brand',
                 'model',
+                'depotStocks' => function ($query) {
+                    $query
+                        ->where('quantity', '>', 0)
+                        ->orderBy('depot_id');
+                },
                 'depotStocks.depot',
             ])
-            ->where('quantity', '>', 0)
-            ->where('status', '!=', 'vendu')
+            ->whereHas(
+                'depotStocks',
+                function ($query) {
+                    $query->where(
+                        'quantity',
+                        '>',
+                        0
+                    );
+                }
+            )
             ->orderBy('designation')
             ->get();
 
-        /*
-        |--------------------------------------------------------------------------
-        | CLIENTS
-        |--------------------------------------------------------------------------
-        */
-
-        $customers = Customer::orderBy('name')
+        $customers = Customer::query()
+            ->orderBy('name')
             ->get();
 
-        /*
-        |--------------------------------------------------------------------------
-        | VÉHICULES
-        |--------------------------------------------------------------------------
-        */
-
-        $vehicles = Vehicle::with('customer')
+        $vehicles = Vehicle::query()
+            ->with('customer')
             ->orderBy('plate_number')
             ->get();
 
@@ -234,1253 +252,1329 @@ use Illuminate\Support\Facades\DB;
         );
     }
 
-        /*
-        |--------------------------------------------------------------------------
-        | VÉHICULES ASSOCIÉS AU CLIENT — AJAX
-        |--------------------------------------------------------------------------
-        */
-
-        public function vehiclesByCustomer(Customer $customer): JsonResponse
-        {
-            $vehicles = Vehicle::query()
-                ->where('customer_id', $customer->id)
-                ->orderBy('plate_number')
-                ->get([
-                    'id',
-                    'customer_id',
-                    'plate_number',
-                    'brand',
-                    'model',
-                ])
-                ->map(function (Vehicle $vehicle): array {
+    /*
+    |--------------------------------------------------------------------------
+    | VÉHICULES ASSOCIÉS AU CLIENT
+    |--------------------------------------------------------------------------
+    */
+    public function vehiclesByCustomer(
+        Customer $customer
+    ): JsonResponse {
+        $vehicles = Vehicle::query()
+            ->where(
+                'customer_id',
+                $customer->id
+            )
+            ->orderBy('plate_number')
+            ->get([
+                'id',
+                'customer_id',
+                'plate_number',
+                'brand',
+                'model',
+            ])
+            ->map(
+                function (Vehicle $vehicle): array {
                     $description = trim(
-                        implode(' ', array_filter([
-                            $vehicle->brand,
-                            $vehicle->model,
-                        ]))
+                        implode(
+                            ' ',
+                            array_filter([
+                                $vehicle->brand,
+                                $vehicle->model,
+                            ])
+                        )
                     );
 
                     return [
-                        'id' => $vehicle->id,
-                        'customer_id' => $vehicle->customer_id,
-                        'plate_number' => $vehicle->plate_number,
+                        'id' =>
+                            $vehicle->id,
 
-                        'label' => $description !== ''
-                            ? $vehicle->plate_number . ' - ' . $description
-                            : $vehicle->plate_number,
+                        'customer_id' =>
+                            $vehicle->customer_id,
+
+                        'plate_number' =>
+                            $vehicle->plate_number,
+
+                        'label' =>
+                            $description !== ''
+                                ? $vehicle->plate_number
+                                    . ' - '
+                                    . $description
+                                : $vehicle->plate_number,
                     ];
-                })
-                ->values();
+                }
+            )
+            ->values();
 
-            return response()->json([
-                'success' => true,
-                'vehicles' => $vehicles,
-            ]);
-        }
-        /*
-        |--------------------------------------------------------------------------
-        | STORE
-        |--------------------------------------------------------------------------
-        */
+        return response()->json([
+            'success' =>
+                true,
 
-        public function store(Request $request)
-        {
-           $request->validate(
-                [
-                    'customer_id' => [
-                        'nullable',
-                        'exists:customers,id',
-                    ],
+            'vehicles' =>
+                $vehicles,
+        ]);
+    }
 
-                     'vehicle_id' => [
-                        'required',
-                        'integer',
-
-                        Rule::exists('vehicles', 'id')
-                            ->where(
-                                fn ($query) => $query->where(
-                                    'customer_id',
-                                    $request->input('customer_id')
-                                )
-                            ),
-                    ],
-
-                    'payment_type' => [
-                        'required',
-                        'string',
-                    ],
-
-                    'items' => [
-                        'required',
-                        'array',
-                        'min:1',
-                    ],
-
-                    'items.*.product_id' => [
-                        'required',
-                        'exists:products,id',
-                    ],
-
-                    'items.*.quantity' => [
-                        'required',
-                        'numeric',
-                        'min:0.01',
-                    ],
-
-
+    /*
+    |--------------------------------------------------------------------------
+    | STORE
+    |--------------------------------------------------------------------------
+    |
+    | Règles :
+    | - chaque ligne choisit son dépôt ;
+    | - la quantité est contrôlée dans ce dépôt précis ;
+    | - sale_items.depot_id mémorise le dépôt utilisé ;
+    | - products.quantity est recalculé comme somme des dépôts ;
+    | - le mode de paiement n'est PAS demandé ici.
+    |
+    */
+    public function store(
+        Request $request
+    ): RedirectResponse {
+        $request->validate(
+            [
+                'customer_id' => [
+                    'required',
+                    'integer',
+                    'exists:customers,id',
                 ],
-                [
-                    'items.required' =>
-                        'Vous devez ajouter au moins un produit.',
 
-                    'items.*.product_id.required' =>
-                        'Veuillez sélectionner un produit.',
+                'vehicle_id' => [
+                    'required',
+                    'integer',
 
-                    'items.*.product_id.exists' =>
-                        'Le produit sélectionné est invalide.',
+                    Rule::exists(
+                        'vehicles',
+                        'id'
+                    )->where(
+                        fn ($query) =>
+                            $query->where(
+                                'customer_id',
+                                $request->input(
+                                    'customer_id'
+                                )
+                            )
+                    ),
+                ],
 
-                    'items.*.quantity.required' =>
-                        'La quantité est obligatoire.',
+                'items' => [
+                    'required',
+                    'array',
+                    'min:1',
+                ],
 
-                    'items.*.quantity.min' =>
-                        'La quantité doit être supérieure à zéro.',
+                'items.*.product_id' => [
+                    'required',
+                    'integer',
+                    'exists:products,id',
+                ],
 
-                    'items.*.vehicle_id.exists' =>
-                        'Le véhicule sélectionné est invalide.',
+                'items.*.depot_id' => [
+                    'required',
+                    'integer',
+                    'exists:depots,id',
+                ],
 
-                    'items.*.plate_number.max' =>
-                        'L’immatriculation ne doit pas dépasser 50 caractères.',
-                ]
-            );
+                'items.*.quantity' => [
+                    'required',
+                    'numeric',
+                    'min:0.01',
+                ],
 
-            DB::beginTransaction();
+                'discount' => [
+                    'nullable',
+                    'numeric',
+                    'min:0',
+                    'max:100',
+                ],
+            ],
+            [
+                'customer_id.required' =>
+                    'Veuillez sélectionner un client.',
 
-            try {
+                'vehicle_id.required' =>
+                    'Veuillez sélectionner le véhicule associé au client.',
 
-                /*
-                |--------------------------------------------------------------------------
-                | CALCULS
-                |--------------------------------------------------------------------------
-                */
+                'vehicle_id.exists' =>
+                    'Le véhicule sélectionné n’appartient pas au client choisi.',
 
-                $subtotal = 0;
+                'items.required' =>
+                    'Vous devez ajouter au moins un produit.',
 
-                $validatedItems = [];
+                'items.*.product_id.required' =>
+                    'Veuillez sélectionner un produit.',
 
-                $vehicle = Vehicle::findOrFail(
+                'items.*.product_id.exists' =>
+                    'Le produit sélectionné est invalide.',
+
+                'items.*.depot_id.required' =>
+                    'Veuillez sélectionner un dépôt pour chaque produit.',
+
+                'items.*.depot_id.exists' =>
+                    'Le dépôt sélectionné est invalide.',
+
+                'items.*.quantity.required' =>
+                    'La quantité est obligatoire.',
+
+                'items.*.quantity.numeric' =>
+                    'La quantité doit être numérique.',
+
+                'items.*.quantity.min' =>
+                    'La quantité doit être supérieure à zéro.',
+
+                'discount.max' =>
+                    'La remise ne peut pas dépasser 100 %.',
+            ]
+        );
+
+        DB::beginTransaction();
+
+        try {
+            $vehicle = Vehicle::query()
+                ->where(
+                    'id',
                     $request->vehicle_id
+                )
+                ->where(
+                    'customer_id',
+                    $request->customer_id
+                )
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            /*
+            |--------------------------------------------------------------------------
+            | AGRÉGER LES QUANTITÉS PAR PRODUIT + DÉPÔT
+            |--------------------------------------------------------------------------
+            |
+            | Empêche un dépassement de stock lorsque le même couple
+            | produit/dépôt est présent plusieurs fois dans le formulaire.
+            |
+            */
+            $requestedByProductDepot = [];
+
+            foreach ($request->items as $row) {
+                $productId =
+                    (int) $row['product_id'];
+
+                $depotId =
+                    (int) $row['depot_id'];
+
+                $quantity =
+                    round(
+                        (float) $row['quantity'],
+                        2
+                    );
+
+                $key =
+                    $productId
+                    . ':'
+                    . $depotId;
+
+                $requestedByProductDepot[$key] =
+                    ($requestedByProductDepot[$key] ?? 0)
+                    + $quantity;
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | VERROUILLER ET CONTRÔLER LES STOCKS
+            |--------------------------------------------------------------------------
+            */
+            $locked = [];
+
+            foreach (
+                $requestedByProductDepot
+                as $key => $requestedQty
+            ) {
+                [$productId, $depotId] =
+                    array_map(
+                        'intval',
+                        explode(
+                            ':',
+                            $key
+                        )
+                    );
+
+                $product = Product::query()
+                    ->where(
+                        'id',
+                        $productId
+                    )
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                $depot = Depot::query()
+                    ->where(
+                        'id',
+                        $depotId
+                    )
+                    ->firstOrFail();
+
+                $depotStock =
+                    ProductDepotStock::query()
+                        ->where(
+                            'product_id',
+                            $productId
+                        )
+                        ->where(
+                            'depot_id',
+                            $depotId
+                        )
+                        ->lockForUpdate()
+                        ->first();
+
+                if (!$depotStock) {
+                    throw new \RuntimeException(
+                        'Le produit '
+                        . $product->reference
+                        . ' n’est pas disponible dans le dépôt '
+                        . $depot->name
+                        . '.'
+                    );
+                }
+
+                $available =
+                    round(
+                        (float) $depotStock->quantity,
+                        2
+                    );
+
+                $requestedQty =
+                    round(
+                        (float) $requestedQty,
+                        2
+                    );
+
+                if ($requestedQty > $available) {
+                    throw new \RuntimeException(
+                        'Stock insuffisant pour '
+                        . $product->reference
+                        . ' - '
+                        . $product->designation
+                        . ' dans le dépôt '
+                        . $depot->name
+                        . '. Disponible : '
+                        . number_format(
+                            $available,
+                            2,
+                            ',',
+                            ' '
+                        )
+                        . '.'
+                    );
+                }
+
+                $locked[$key] = [
+                    'product' =>
+                        $product,
+
+                    'depot' =>
+                        $depot,
+
+                    'stock' =>
+                        $depotStock,
+                ];
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | CALCULER LE SOUS-TOTAL
+            |--------------------------------------------------------------------------
+            */
+            $subtotal =
+                0.0;
+
+            $validatedItems =
+                [];
+
+            foreach ($request->items as $row) {
+                $productId =
+                    (int) $row['product_id'];
+
+                $depotId =
+                    (int) $row['depot_id'];
+
+                $quantity =
+                    round(
+                        (float) $row['quantity'],
+                        2
+                    );
+
+                $key =
+                    $productId
+                    . ':'
+                    . $depotId;
+
+                $product =
+                    $locked[$key]['product'];
+
+                $depot =
+                    $locked[$key]['depot'];
+
+                $price =
+                    round(
+                        (float) $product->sale_price,
+                        2
+                    );
+
+                $lineTotal =
+                    round(
+                        $quantity * $price,
+                        2
+                    );
+
+                $subtotal +=
+                    $lineTotal;
+
+                $validatedItems[] = [
+                    'product' =>
+                        $product,
+
+                    'depot' =>
+                        $depot,
+
+                    'quantity' =>
+                        $quantity,
+
+                    'price' =>
+                        $price,
+                ];
+            }
+
+            $subtotal =
+                round(
+                    $subtotal,
+                    2
                 );
 
-                $vehicle->customer_id =
-                    $request->customer_id;
+            /*
+            |--------------------------------------------------------------------------
+            | REMISE / TVA / TOTAL
+            |--------------------------------------------------------------------------
+            */
+            $discountPercent =
+                min(
+                    100,
+                    max(
+                        0,
+                        (float) (
+                            $request->discount
+                            ?? 0
+                        )
+                    )
+                );
+
+            $discountAmount =
+                round(
+                    (
+                        $subtotal
+                        *
+                        $discountPercent
+                    )
+                    /
+                    100,
+                    2
+                );
+
+            $taxable =
+                max(
+                    0,
+                    $subtotal
+                    -
+                    $discountAmount
+                );
+
+            $tva =
+                round(
+                    $taxable * 0.10,
+                    2
+                );
+
+            $total =
+                (int) round(
+                    $taxable + $tva
+                );
+
+            /*
+            |--------------------------------------------------------------------------
+            | NUMÉRO DE FACTURE
+            |--------------------------------------------------------------------------
+            */
+            $nextId =
+                ((int) Sale::max('id'))
+                +
+                1;
+
+            $invoiceNumber =
+                'FACT-'
+                . date('Y')
+                . '-'
+                . str_pad(
+                    (string) $nextId,
+                    4,
+                    '0',
+                    STR_PAD_LEFT
+                );
+
+            /*
+            |--------------------------------------------------------------------------
+            | CRÉER LA VENTE
+            |--------------------------------------------------------------------------
+            |
+            | payment_type = NULL.
+            | Il sera renseigné lors du paiement.
+            |
+            */
+            $sale = Sale::create([
+                'customer_id' =>
+                    $request->customer_id,
+
+                'vehicle_id' =>
+                    $vehicle->id,
+
+                'user_id' =>
+                    auth()->id(),
+
+                'payment_type' =>
+                    null,
+
+                'subtotal' =>
+                    $subtotal,
+
+                'discount' =>
+                    $discountPercent,
+
+                'discount_amount' =>
+                    $discountAmount,
+
+                'tva' =>
+                    $tva,
 
-                $vehicle->save();
+                'total' =>
+                    $total,
 
-                foreach ($request->items as $item) {
+                'status' =>
+                    'vendu',
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | PRODUIT
-                    |--------------------------------------------------------------------------
-                    */
+                'document_type' =>
+                    'sale',
 
-                    $product = Product::findOrFail(
-                        $item['product_id']
-                    );
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | RECHERCHE OU CRÉATION DU VÉHICULE
-                    |--------------------------------------------------------------------------
-                    */
-
-
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | PRIX AUTO
-                    |--------------------------------------------------------------------------
-                    */
-
-                    $price = $product->sale_price;
-
-
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | STOCK DISPONIBLE
-                    |--------------------------------------------------------------------------
-                    */
-
-                  $availableQty = $product->quantity;
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | VERIFICATION STOCK
-                    |--------------------------------------------------------------------------
-                    */
-
-                    if ($item['quantity'] > $availableQty) {
-
-                        DB::rollBack();
-
-                        return redirect()
-                            ->back()
-                            ->withInput()
-                            ->with(
-                                'error',
-                                'Stock insuffisant pour : '
-                                . $product->reference
-                                . ' - '
-                                . $product->designation
-                                . ' | Disponible : '
-                                . $availableQty
-                            );
-                    }
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | TOTAL
-                    |--------------------------------------------------------------------------
-                    */
-
-                   $lineTotal =
-                     $item['quantity'] * $price;
-
-                     $subtotal += $lineTotal;
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | SAVE TEMP
-                    |--------------------------------------------------------------------------
-                    */
-
-                    $validatedItems[] = [
-
-                        'product' => $product,
-                        //'vehicle' => $vehicle,
-
-                        'quantity' => $item['quantity'],
-
-                        'price' => $price,
-
-                        'line_total' => $lineTotal,
-                    ];
-                }
-
-                /*
-                |--------------------------------------------------------------------------
-                | REMISE %
-                |--------------------------------------------------------------------------
-                */
-
-                $discountPercent = $request->discount ?? 0;
-
-                /*
-                |--------------------------------------------------------------------------
-                | MONTANT REMISE
-                |--------------------------------------------------------------------------
-                */
-
-                $discountAmount =
-                    ($subtotal * $discountPercent) / 100;
-
-                            /*
-                            |--------------------------------------------------------------------------
-                            | TVA
-                            |--------------------------------------------------------------------------
-                            */
-
-                        $taxable = $subtotal - $discountAmount;
-                             $tva = $taxable * 0.10;
-                /*
-                |--------------------------------------------------------------------------
-                | TOTAL FINAL
-                |--------------------------------------------------------------------------
-                */
-
-              $total = round($taxable + $tva);
-                /*
-                |--------------------------------------------------------------------------
-                | STATUS INITIAL
-                |--------------------------------------------------------------------------
-                */
-
-              $status = 'vendu';
-
-                /*
-                |--------------------------------------------------------------------------
-                | FACTURE NUMBER
-                |--------------------------------------------------------------------------
-                */
-
-                $nextId = Sale::max('id') + 1;
-
-                $invoiceNumber =
-                   'FACT-' .
-                    date('Y') .
-                    '-' .
-                    str_pad(
-                        $nextId,
-                        4,
-                        '0',
-                        STR_PAD_LEFT
-                    );
-
-                /*
-                |--------------------------------------------------------------------------
-                | CREATE SALE
-                |--------------------------------------------------------------------------
-                */
-
-                $sale = Sale::create([
-
-                    'customer_id' =>
-                        $request->customer_id,
-
-                    'vehicle_id' =>
-                        $vehicle->id,
-
-                    'user_id' => auth()->id(),
-
-                    'payment_type' =>
-                        $request->payment_type,
-
-                    'subtotal' =>
-                        $subtotal,
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | POURCENTAGE REMISE
-                    |--------------------------------------------------------------------------
-                    */
-
-                    'discount' =>
-                        $discountPercent,
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | MONTANT REMISE
-                    |--------------------------------------------------------------------------
-                    */
-
-                    'discount_amount' =>
-                        $discountAmount,
-
-                    'tva' =>
-                        $tva,
-
-                    'total' =>
-                        $total,
-
-                    'status' =>
-                        $status,
-
-                    'document_type' =>
-                        'sale',
-
-                    'invoice_number' =>
-                        $invoiceNumber,
-                ]);
-
-                /*
-                |--------------------------------------------------------------------------
-                | CREATE ITEMS
-                |--------------------------------------------------------------------------
-                */
-
-                foreach ($validatedItems as $item) {
-
-                    $product = $item['product'];
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | CREATE SALE ITEM
-                    |--------------------------------------------------------------------------
-                    */
-
-                    SaleItem::create([
-
-                        'sale_id' =>
-                            $sale->id,
-
-                        'product_id' =>
-                            $product->id,
-
-                        'quantity' =>
-                            $item['quantity'],
-
-                        'price' =>
-                            $item['price'],
-                    ]);
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | DIMINUER LE STOCK REEL
-                    |--------------------------------------------------------------------------
-                    */
-
-                    $product->quantity =
-                        $product->quantity - $item['quantity'];
-
-                    $product->quantity =
-                            max(0, $product->quantity);
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | EVITER STOCK NEGATIF
-                    |--------------------------------------------------------------------------
-                    */
-
-                    if ($product->quantity < 0) {
-
-                        $product->quantity = 0;
-                    }
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | STATUS
-                    |--------------------------------------------------------------------------
-                    */
-
-                    if ($product->quantity <= 0) {
-
-                        $product->status = 'vendu';
-
-                    } else {
-
-                        $product->status = 'disponible';
-                    }
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | SAVE PRODUCT
-                    |--------------------------------------------------------------------------
-                    */
-
-                    $product->save();
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | MISE A JOUR STOCK DEPOT
-                    |--------------------------------------------------------------------------
-                    */
-
-                    $depotStock = ProductDepotStock::where(
-
-                        'product_id',
-                        $product->id
-
-                    )->first();
-
-                    if ($depotStock) {
-
-                        $depotStock->quantity =
-                            $depotStock->quantity - $item['quantity'];
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | EVITER NEGATIF
-                        |--------------------------------------------------------------------------
-                        */
-
-                        if ($depotStock->quantity < 0) {
-
-                            $depotStock->quantity = 0;
-                        }
-
-                        $depotStock->save();
-                    }
-                    /*
-                    |--------------------------------------------------------------------------
-                    | STOCK MOVEMENT
-                    |--------------------------------------------------------------------------
-                    */
-
-                    StockMovement::create([
-
-                        'product_id' =>
-                            $product->id,
-
-                        'type' =>
-                            'out',
-
-                        'quantity' =>
-                            $item['quantity'],
-
-                        'source' =>
-                            'Vente',
-
-                        'reference' =>
-                            $sale->invoice_number,
-
-                        'user_id' =>
-                            auth()->id(),
-                    ]);
-                }
-
-                DB::commit();
-
-               return redirect()
-                    ->route('sales.invoice', $sale)
-                    ->with(
-                        'success',
-                        'Vente enregistrée avec succès.'
-                    );
-
-            } catch (\Exception $e) {
-
-                DB::rollBack();
-
-                return redirect()
-                    ->back()
-                    ->withInput()
-                    ->with(
-                        'error',
-                        $e->getMessage()
-                    );
-            }
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | SHOW
-        |--------------------------------------------------------------------------
-        */
-
-        public function show(Sale $sale)
-
-        {
-            return redirect()
-                ->route('sales.invoice', $sale);
-        }
-       /* {
-            $sale->load([
-
-                'customer',
-
-                'vehicle',
-
-                'items.product.brand',
-
-                'items.product.model',
-
-                'payments',
+                'invoice_number' =>
+                    $invoiceNumber,
             ]);
 
             /*
             |--------------------------------------------------------------------------
-            | TOTAL EN LETTRES
+            | LIGNES + SORTIES DE STOCK
             |--------------------------------------------------------------------------
             */
+            foreach ($validatedItems as $item) {
+                $product =
+                    $item['product'];
 
-          /*  $numberToWords = new NumberToWords();
+                $depot =
+                    $item['depot'];
 
-                        $numberTransformer =
-                            $numberToWords->getNumberTransformer('fr');
+                $key =
+                    $product->id
+                    . ':'
+                    . $depot->id;
 
-                    $totalRounded = (int) round(
-                (float) $sale->total
-            );
+                $depotStock =
+                    $locked[$key]['stock'];
 
-            $totalInWords =
-                strtoupper(
-                    $numberTransformer->toWords(
-                        $totalRounded
-                    )
-                )
-                . ' FDJ';
-            /*
-            |--------------------------------------------------------------------------
-            | VIEW
-            |--------------------------------------------------------------------------
-            */
+                SaleItem::create([
+                    'sale_id' =>
+                        $sale->id,
 
-           /* return view(
-                'sales.show',
-                compact(
-                    'sale',
-                    'totalInWords'
-                )
-            );
-        }*/
+                    'product_id' =>
+                        $product->id,
 
-        /*
-        |--------------------------------------------------------------------------
-        | EDIT
-        |--------------------------------------------------------------------------
-        */
+                    'depot_id' =>
+                        $depot->id,
 
-        public function edit(Sale $sale)
-        {
-            return redirect()
-                ->route('sales.show', $sale);
-        }
+                    'quantity' =>
+                        $item['quantity'],
 
-        /*
-        |--------------------------------------------------------------------------
-        | UPDATE
-        |--------------------------------------------------------------------------
-        */
+                    'price' =>
+                        $item['price'],
+                ]);
 
-        public function update(
-            Request $request,
-            Sale $sale
-        ) {
-            return redirect()
-                ->route('sales.show', $sale);
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | DESTROY
-        |--------------------------------------------------------------------------
-        */
-
-        public function destroy(Sale $sale)
-        {
-
-            if(
-                    !in_array(auth()->user()->role, [
-                        'admin',
-                        'chef_magasinier'
-                    ])
-                ){
-                    abort(403);
-                }
-            DB::beginTransaction();
-
-            try {
-
-              foreach ($sale->items as $item) {
-
-                    $product = $item->product;
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | REMETTRE LE STOCK
-                    |--------------------------------------------------------------------------
-                    */
-
-                    $product->quantity =
-                        $product->quantity + $item->quantity;
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | STATUS PRODUIT
-                    |--------------------------------------------------------------------------
-                    */
-
-                    if ($product->quantity > 0) {
-
-                        $product->status = 'disponible';
-
-                    } else {
-
-                        $product->status = 'vendu';
-                    }
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | SAVE
-                    |--------------------------------------------------------------------------
-                    */
-
-                    $product->save();
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | MOUVEMENT STOCK
-                    |--------------------------------------------------------------------------
-                    */
-
-                    StockMovement::create([
-
-                        'product_id' =>
-                            $item->product_id,
-
-                        'type' =>
-                            'in',
-
-                        'quantity' =>
-                            $item->quantity,
-
-                        'source' =>
-                            'Annulation vente',
-
-                        'reference' =>
-                            $sale->invoice_number,
-
-                        'user_id' =>
-                            auth()->id(),
-                    ]);
-                }
-                $sale->delete();
-
-                DB::commit();
-
-                return redirect()
-                    ->route('sales.index')
-                    ->with(
-                        'success',
-                        'Vente supprimée avec succès.'
+                $depotStock->quantity =
+                    max(
+                        0,
+                        round(
+                            (float) $depotStock->quantity
+                            -
+                            (float) $item['quantity'],
+                            2
+                        )
                     );
 
-            } catch (\Exception $e) {
+                $depotStock->save();
 
-                DB::rollBack();
+                $this->syncProductQuantityFromDepots(
+                    $product
+                );
 
-                return back()->with(
+                StockMovement::create([
+                    'product_id' =>
+                        $product->id,
+
+                    'type' =>
+                        'out',
+
+                    'quantity' =>
+                        $item['quantity'],
+
+                    'source' =>
+                        'Vente | Dépôt: '
+                        . $depot->name,
+
+                    'reference' =>
+                        $sale->invoice_number,
+
+                    'user_id' =>
+                        auth()->id(),
+                ]);
+            }
+
+            DB::commit();
+
+            return redirect()
+                ->route(
+                    'sales.invoice',
+                    $sale
+                )
+                ->with(
+                    'success',
+                    'Vente enregistrée avec succès.'
+                );
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            report($e);
+
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with(
                     'error',
                     $e->getMessage()
                 );
-            }
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | SHOW
+    |--------------------------------------------------------------------------
+    */
+    public function show(
+        Sale $sale
+    ): RedirectResponse {
+        return redirect()
+            ->route(
+                'sales.invoice',
+                $sale
+            );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | EDIT
+    |--------------------------------------------------------------------------
+    */
+    public function edit(
+        Sale $sale
+    ): RedirectResponse {
+        return redirect()
+            ->route(
+                'sales.invoice',
+                $sale
+            );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | UPDATE
+    |--------------------------------------------------------------------------
+    */
+    public function update(
+        Request $request,
+        Sale $sale
+    ): RedirectResponse {
+        return redirect()
+            ->route(
+                'sales.invoice',
+                $sale
+            );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | DESTROY
+    |--------------------------------------------------------------------------
+    */
+    public function destroy(
+        Sale $sale
+    ): RedirectResponse {
+        if (
+            !in_array(
+                auth()->user()->role,
+                [
+                    'admin',
+                    'chef_magasinier',
+                ],
+                true
+            )
+        ) {
+            abort(403);
         }
 
-        /*
+        DB::beginTransaction();
+
+        try {
+            $sale->load([
+                'items.product',
+                'items.depot',
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | NE PAS RESTAURER DEUX FOIS UNE VENTE DÉJÀ ANNULÉE
+            |--------------------------------------------------------------------------
+            */
+            if (!$this->isCancelled($sale)) {
+                foreach ($sale->items as $item) {
+                    $this->restoreSaleItemToDepot(
+                        $item,
+                        $sale,
+                        'Suppression vente'
+                    );
+                }
+            }
+
+            $sale->payments()->delete();
+            $sale->items()->delete();
+            $sale->delete();
+
+            DB::commit();
+
+            return redirect()
+                ->route('sales.index')
+                ->with(
+                    'success',
+                    'Vente supprimée avec succès.'
+                );
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            report($e);
+
+            return back()->with(
+                'error',
+                $e->getMessage()
+            );
+        }
+    }
+
+    /*
     |--------------------------------------------------------------------------
     | CANCEL SALE
     |--------------------------------------------------------------------------
     */
-
-    public function cancel(Sale $sale)
-    {
-        /*
-        |--------------------------------------------------------------------------
-        | DEJA ANNULEE
-        |--------------------------------------------------------------------------
-        */
-
-        if ($sale->status === 'cancelled') {
-
+    public function cancel(
+        Sale $sale
+    ): RedirectResponse {
+        if ($this->isCancelled($sale)) {
             return back()->with(
                 'error',
                 'Cette facture est déjà annulée.'
             );
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | RETOUR STOCK
-        |--------------------------------------------------------------------------
-        */
+        DB::beginTransaction();
 
-        foreach ($sale->items as $item) {
+        try {
+            $sale->load([
+                'items.product',
+                'items.depot',
+            ]);
 
-            $product = $item->product;
-
-            if ($product) {
-
-                /*
-                |--------------------------------------------------------------------------
-                | RETOUR QUANTITE
-                |--------------------------------------------------------------------------
-                */
-
-                $product->quantity += $item->quantity;
-
-                /*
-                |--------------------------------------------------------------------------
-                | STATUS DISPONIBLE
-                |--------------------------------------------------------------------------
-                */
-
-                $product->status = 'disponible';
-
-                $product->save();
-
-                /*
-                |--------------------------------------------------------------------------
-                | MOUVEMENT STOCK
-                |--------------------------------------------------------------------------
-                */
-
-                StockMovement::create([
-
-                    'product_id' => $product->id,
-
-                    'type' => 'in',
-
-                    'quantity' => $item->quantity,
-
-                    'source' => 'Annulation facture',
-
-                    'reference' => $sale->invoice_number,
-
-                    'user_id' => auth()->id(),
-                ]);
-            }
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | STATUS FACTURE
-        |--------------------------------------------------------------------------
-        */
-
-        $sale->status = 'cancelled';
-
-        $sale->save();
-
-       return redirect()
-            ->route('sales.invoice', $sale)
-            ->with(
-                'success',
-                'Facture annulée avec succès.'
-            );
-    }
-
-        /*
-        |--------------------------------------------------------------------------
-        | ADD PAYMENT
-        |--------------------------------------------------------------------------
-        */
-
-        public function addPayment(
-            Request $request,
-            Sale $sale
-        ) {
-            /*
-            |--------------------------------------------------------------------------
-            | INTERDIRE LE PAIEMENT D'UNE FACTURE ANNULÉE
-            |--------------------------------------------------------------------------
-            */
-            if (
-                in_array(
-                    strtolower((string) $sale->status),
-                    ['cancelled', 'annulé', 'annule'],
-                    true
-                )
-            ) {
-                return back()->with(
-                    'error',
-                    'Impossible de payer une facture annulée.'
+            foreach ($sale->items as $item) {
+                $this->restoreSaleItemToDepot(
+                    $item,
+                    $sale,
+                    'Annulation facture'
                 );
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | VALIDATION
-            |--------------------------------------------------------------------------
-            */
-            $request->validate(
-                [
-                    'amount' => [
-                        'required',
-                        'numeric',
-                        'min:1',
-                    ],
+            $sale->status =
+                'cancelled';
 
-                    'method' => [
-                        'nullable',
-                        'string',
-                        'max:255',
-                    ],
-                ],
-                [
-                    'amount.required' =>
-                        'Veuillez saisir le montant du paiement.',
+            $sale->save();
 
-                    'amount.numeric' =>
-                        'Le montant du paiement doit être un nombre.',
+            DB::commit();
 
-                    'amount.min' =>
-                        'Le montant du paiement doit être supérieur à zéro.',
-                ]
+            return redirect()
+                ->route(
+                    'sales.invoice',
+                    $sale
+                )
+                ->with(
+                    'success',
+                    'Facture annulée avec succès. Les stocks ont été remis dans leurs dépôts d’origine.'
+                );
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            report($e);
+
+            return back()->with(
+                'error',
+                $e->getMessage()
             );
+        }
+    }
 
-            /*
-            |--------------------------------------------------------------------------
-            | TOTAL FACTURE ARRONDI EN FDJ
-            |--------------------------------------------------------------------------
-            |
-            | On compare toujours le paiement avec le total ARRONDI affiché.
-            |
-            */
-            $invoiceTotal = (int) round(
+    /*
+    |--------------------------------------------------------------------------
+    | ADD PAYMENT
+    |--------------------------------------------------------------------------
+    |
+    | Le mode de paiement est demandé uniquement ici.
+    |
+    */
+    public function addPayment(
+        Request $request,
+        Sale $sale
+    ): RedirectResponse {
+        if ($this->isCancelled($sale)) {
+            return back()->with(
+                'error',
+                'Impossible de payer une facture annulée.'
+            );
+        }
+
+        $request->validate(
+            [
+                'amount' => [
+                    'required',
+                    'numeric',
+                    'min:1',
+                ],
+
+                'method' => [
+                    'required',
+                    'string',
+                    'max:255',
+                ],
+            ],
+            [
+                'amount.required' =>
+                    'Veuillez saisir le montant du paiement.',
+
+                'amount.numeric' =>
+                    'Le montant du paiement doit être un nombre.',
+
+                'amount.min' =>
+                    'Le montant du paiement doit être supérieur à zéro.',
+
+                'method.required' =>
+                    'Veuillez sélectionner un mode de paiement.',
+            ]
+        );
+
+        $invoiceTotal =
+            (int) round(
                 (float) $sale->total
             );
 
-            /*
-            |--------------------------------------------------------------------------
-            | TOTAL DÉJÀ PAYÉ
-            |--------------------------------------------------------------------------
-            */
-            $alreadyPaid = (int) round(
-                (float) $sale->payments()->sum('amount')
+        $alreadyPaid =
+            (int) round(
+                (float) $sale->payments()
+                    ->sum('amount')
             );
 
-            /*
-            |--------------------------------------------------------------------------
-            | RESTE À PAYER AVANT LE NOUVEAU PAIEMENT
-            |--------------------------------------------------------------------------
-            */
-            $remainingAmount = max(
+        $remainingAmount =
+            max(
                 0,
-                $invoiceTotal - $alreadyPaid
+                $invoiceTotal
+                -
+                $alreadyPaid
             );
 
-            /*
-            |--------------------------------------------------------------------------
-            | FACTURE DÉJÀ PAYÉE
-            |--------------------------------------------------------------------------
-            */
-            if ($remainingAmount <= 0) {
-
-                if ($sale->status !== 'payé') {
-                    $sale->update([
-                        'status' => 'payé',
-                    ]);
-                }
-
-                return back()->with(
-                    'success',
-                    'Cette facture est déjà entièrement payée.'
-                );
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | MONTANT SAISI ARRONDI EN FDJ
-            |--------------------------------------------------------------------------
-            */
-            $paymentAmount = (int) round(
-                (float) $request->amount
-            );
-
-            /*
-            |--------------------------------------------------------------------------
-            | INTERDIRE LE SURPAIEMENT
-            |--------------------------------------------------------------------------
-            */
-            if ($paymentAmount > $remainingAmount) {
-
-                return back()
-                    ->withInput()
-                    ->with(
-                        'error',
-                        'Le montant saisi dépasse le reste à payer de '
-                        . number_format(
-                            $remainingAmount,
-                            0,
-                            ',',
-                            ' '
-                        )
-                        . ' FDJ.'
-                    );
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | ENREGISTRER LE PAIEMENT
-            |--------------------------------------------------------------------------
-            */
-            Payment::create([
-                'sale_id' =>
-                    $sale->id,
-
-                'amount' =>
-                    $paymentAmount,
-
-                'method' =>
-                    $request->method ?? 'Cash',
-            ]);
-
-            /*
-            |--------------------------------------------------------------------------
-            | RECALCULER LE TOTAL PAYÉ
-            |--------------------------------------------------------------------------
-            */
-            $paid = (int) round(
-                (float) $sale->payments()->sum('amount')
-            );
-
-            /*
-            |--------------------------------------------------------------------------
-            | RECALCULER LE RESTE
-            |--------------------------------------------------------------------------
-            */
-            $remaining = max(
-                0,
-                $invoiceTotal - $paid
-            );
-
-            /*
-            |--------------------------------------------------------------------------
-            | METTRE À JOUR LE STATUT
-            |--------------------------------------------------------------------------
-            */
-            if ($remaining <= 0) {
-
+        if ($remainingAmount <= 0) {
+            if ($sale->status !== 'payé') {
                 $sale->update([
-                    'status' => 'payé',
+                    'status' =>
+                        'payé',
                 ]);
-
-            } elseif ($paid > 0) {
-
-                $sale->update([
-                    'status' => 'partiel',
-                ]);
-
-            } else {
-
-                $sale->update([
-                    'status' => 'vendu',
-                ]);
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | MESSAGE
-            |--------------------------------------------------------------------------
-            */
-            if ($remaining <= 0) {
-
-                return back()->with(
-                    'success',
-                    'Paiement enregistré. La facture est entièrement payée.'
-                );
             }
 
             return back()->with(
                 'success',
-                'Paiement enregistré avec succès. Reste à payer : '
-                . number_format(
-                    $remaining,
-                    0,
-                    ',',
-                    ' '
-                )
-                . ' FDJ.'
+                'Cette facture est déjà entièrement payée.'
             );
         }
 
-       /*
-        |--------------------------------------------------------------------------
-        | AFFICHER LA FACTURE DANS LE NAVIGATEUR
-        |--------------------------------------------------------------------------
-        |
-        | Cette méthode affiche la facture.
-        | Elle ne télécharge PAS automatiquement le PDF.
-        |
-        */
+        $paymentAmount =
+            (int) round(
+                (float) $request->amount
+            );
 
-        public function invoice(Sale $sale)
-        {
-            /*
-            |--------------------------------------------------------------------------
-            | CHARGER LES RELATIONS
-            |--------------------------------------------------------------------------
-            */
-
-            $sale->load([
-                'customer',
-                'vehicle',
-                 'user',
-                'items.product.brand',
-                'items.product.model',
-                'payments',
-            ]);
-
-
-            /*
-            |--------------------------------------------------------------------------
-            | NUMÉRO DE FACTURE
-            |--------------------------------------------------------------------------
-            */
-
-            $invoiceNumber =
-                $sale->invoice_number
-                ?: 'FACTURE-' . str_pad(
-                    (string) $sale->id,
-                    6,
-                    '0',
-                    STR_PAD_LEFT
+        if (
+            $paymentAmount
+            >
+            $remainingAmount
+        ) {
+            return back()
+                ->withInput()
+                ->with(
+                    'error',
+                    'Le montant saisi dépasse le reste à payer de '
+                    . number_format(
+                        $remainingAmount,
+                        0,
+                        ',',
+                        ' '
+                    )
+                    . ' FDJ.'
                 );
+        }
 
+        DB::transaction(
+            function () use (
+                $sale,
+                $paymentAmount,
+                $request,
+                $invoiceTotal
+            ) {
+                $method =
+                    trim(
+                        (string) $request->method
+                    );
 
-            /*
-            |--------------------------------------------------------------------------
-            | TOTAL EN LETTRES
-            |--------------------------------------------------------------------------
-            */
+                Payment::create([
+                    'sale_id' =>
+                        $sale->id,
 
-            $numberToWords = new NumberToWords();
+                    'amount' =>
+                        $paymentAmount,
 
-                        $numberTransformer =
-                            $numberToWords->getNumberTransformer('fr');
+                    'method' =>
+                        $method,
+                ]);
 
+                /*
+                |--------------------------------------------------------------------------
+                | MÉMORISER LE MODE DE PAIEMENT SUR LA FACTURE
+                |--------------------------------------------------------------------------
+                */
+                $sale->payment_type =
+                    $method;
 
-                    $totalRounded = (int) round(
+                $paid =
+                    (int) round(
+                        (float) $sale->payments()
+                            ->sum('amount')
+                    );
+
+                $remaining =
+                    max(
+                        0,
+                        $invoiceTotal
+                        -
+                        $paid
+                    );
+
+                if ($remaining <= 0) {
+                    $sale->status =
+                        'payé';
+                } elseif ($paid > 0) {
+                    $sale->status =
+                        'partiel';
+                } else {
+                    $sale->status =
+                        'vendu';
+                }
+
+                $sale->save();
+            }
+        );
+
+        $paid =
+            (int) round(
+                (float) $sale->payments()
+                    ->sum('amount')
+            );
+
+        $remaining =
+            max(
+                0,
+                $invoiceTotal
+                -
+                $paid
+            );
+
+        if ($remaining <= 0) {
+            return back()->with(
+                'success',
+                'Paiement enregistré. La facture est entièrement payée.'
+            );
+        }
+
+        return back()->with(
+            'success',
+            'Paiement enregistré avec succès. Reste à payer : '
+            . number_format(
+                $remaining,
+                0,
+                ',',
+                ' '
+            )
+            . ' FDJ.'
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | AFFICHER LA FACTURE
+    |--------------------------------------------------------------------------
+    */
+    public function invoice(
+        Sale $sale
+    ) {
+        $sale->load([
+            'customer',
+            'vehicle',
+            'user',
+            'items.product.brand',
+            'items.product.model',
+            'items.depot',
+            'payments',
+        ]);
+
+        $invoiceNumber =
+            $sale->invoice_number
+            ?:
+            'FACTURE-'
+            . str_pad(
+                (string) $sale->id,
+                6,
+                '0',
+                STR_PAD_LEFT
+            );
+
+        $totalInWords =
+            $this->totalInWords(
                 (float) $sale->total
             );
 
-            $totalInWords =
-                strtoupper(
-                    $numberTransformer->toWords(
-                        $totalRounded
-                    )
-                )
-                . ' FDJ';
+        return view(
+            'sales.invoice',
+            [
+                'sale' =>
+                    $sale,
 
+                'invoiceNumber' =>
+                    $invoiceNumber,
 
-            /*
-            |--------------------------------------------------------------------------
-            | AFFICHER LA FACTURE
-            |--------------------------------------------------------------------------
-            |
-            | IMPORTANT :
-            |
-            | Votre projet possède déjà :
-            |
-            | resources/views/sales/invoice_pdf.blade.php
-            |
-            | On utilise donc cette vue pour l'affichage navigateur.
-            |
-            */
+                'totalInWords' =>
+                    $totalInWords,
 
-            return view(
-                'sales.invoice',
-                [
-                    'sale' =>
-                        $sale,
+                'isPdf' =>
+                    false,
+            ]
+        );
+    }
 
-                    'invoiceNumber' =>
-                        $invoiceNumber,
+    /*
+    |--------------------------------------------------------------------------
+    | TÉLÉCHARGER LA FACTURE PDF
+    |--------------------------------------------------------------------------
+    */
+    public function downloadInvoice(
+        Sale $sale
+    ) {
+        $sale->load([
+            'customer',
+            'vehicle',
+            'user',
+            'items.product.brand',
+            'items.product.model',
+            'items.depot',
+            'payments',
+        ]);
 
-                    'totalInWords' =>
-                        $totalInWords,
-
-                    'isPdf' =>
-                        false,
-                ]
+        $invoiceNumber =
+            $sale->invoice_number
+            ?:
+            'FACTURE-'
+            . str_pad(
+                (string) $sale->id,
+                6,
+                '0',
+                STR_PAD_LEFT
             );
+
+        $totalInWords =
+            $this->totalInWords(
+                (float) $sale->total
+            );
+
+        $safeInvoiceNumber =
+            preg_replace(
+                '/[^A-Za-z0-9\-_]/',
+                '-',
+                $invoiceNumber
+            );
+
+        $pdf = Pdf::loadView(
+            'sales.invoice_pdf',
+            [
+                'sale' =>
+                    $sale,
+
+                'invoiceNumber' =>
+                    $invoiceNumber,
+
+                'totalInWords' =>
+                    $totalInWords,
+
+                'isPdf' =>
+                    true,
+            ]
+        )
+        ->setPaper(
+            'a4',
+            'portrait'
+        );
+
+        return $pdf->download(
+            $safeInvoiceNumber
+            . '.pdf'
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | SYNCHRONISER products.quantity
+    |--------------------------------------------------------------------------
+    */
+    private function syncProductQuantityFromDepots(
+        Product $product
+    ): void {
+        $total =
+            round(
+                (float) ProductDepotStock::query()
+                    ->where(
+                        'product_id',
+                        $product->id
+                    )
+                    ->sum('quantity'),
+                2
+            );
+
+        $product->quantity =
+            max(
+                0,
+                $total
+            );
+
+        $product->status =
+            $product->quantity > 0
+                ? 'disponible'
+                : 'vendu';
+
+        if (
+            $product->quantity
+            <=
+            0
+        ) {
+            $product->supply_status =
+                'rupture';
+        } elseif (
+            $product->supply_status
+            ===
+            'rupture'
+        ) {
+            $product->supply_status =
+                null;
         }
 
+        $product->save();
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | RESTAURER UNE LIGNE DE VENTE DANS SON DÉPÔT
+    |--------------------------------------------------------------------------
+    */
+    private function restoreSaleItemToDepot(
+        SaleItem $item,
+        Sale $sale,
+        string $source
+    ): void {
+        $product = Product::query()
+            ->where(
+                'id',
+                $item->product_id
+            )
+            ->lockForUpdate()
+            ->first();
+
+        if (!$product) {
+            return;
+        }
 
         /*
         |--------------------------------------------------------------------------
-        | TÉLÉCHARGER LA FACTURE PDF
+        | ANCIENNES VENTES SANS depot_id
         |--------------------------------------------------------------------------
         |
-        | Cette méthode est appelée uniquement lorsque
-        | l'utilisateur clique sur "Télécharger PDF".
+        | Impossible de deviner de quel dépôt elles provenaient.
         |
         */
-
-        public function downloadInvoice(Sale $sale)
-        {
-            /*
-            |--------------------------------------------------------------------------
-            | CHARGER LES RELATIONS
-            |--------------------------------------------------------------------------
-            */
-
-            $sale->load([
-                'customer',
-                'vehicle',
-                'items.product.brand',
-                'items.product.model',
-                'payments',
-            ]);
-
-
-            /*
-            |--------------------------------------------------------------------------
-            | NUMÉRO DE FACTURE
-            |--------------------------------------------------------------------------
-            */
-
-            $invoiceNumber =
-                $sale->invoice_number
-                ?: 'FACTURE-' . str_pad(
-                    (string) $sale->id,
-                    6,
-                    '0',
-                    STR_PAD_LEFT
-                );
-
-
-            /*
-            |--------------------------------------------------------------------------
-            | TOTAL EN LETTRES
-            |--------------------------------------------------------------------------
-            */
-
-            $numberToWords =
-                new NumberToWords();
-
-
-            $numberTransformer =
-                $numberToWords
-                    ->getNumberTransformer(
-                        'fr'
-                    );
-
-
-                        $totalRounded = (int) round(
-                    (float) $sale->total
-                );
-
-                $totalInWords =
-                    strtoupper(
-                        $numberTransformer->toWords(
-                            $totalRounded
-                        )
-                    )
-                    . ' FDJ';
-
-
-            /*
-            |--------------------------------------------------------------------------
-            | NOM DU FICHIER
-            |--------------------------------------------------------------------------
-            */
-
-            $safeInvoiceNumber =
-                preg_replace(
-                    '/[^A-Za-z0-9\-_]/',
-                    '-',
-                    $invoiceNumber
-                );
-
-
-            /*
-            |--------------------------------------------------------------------------
-            | GÉNÉRER LE PDF
-            |--------------------------------------------------------------------------
-            */
-
-            $pdf = Pdf::loadView(
-                'sales.invoice_pdf',
-                [
-                    'sale' =>
-                        $sale,
-
-                    'invoiceNumber' =>
-                        $invoiceNumber,
-
-                    'totalInWords' =>
-                        $totalInWords,
-
-                    'isPdf' =>
-                        true,
-                ]
-            )
-            ->setPaper(
-                'a4',
-                'portrait'
-            );
-
-
-            /*
-            |--------------------------------------------------------------------------
-            | TÉLÉCHARGEMENT
-            |--------------------------------------------------------------------------
-            */
-
-            return $pdf->download(
-                $safeInvoiceNumber . '.pdf'
+        if (!$item->depot_id) {
+            throw new \RuntimeException(
+                'Impossible de restaurer automatiquement le produit '
+                . (
+                    $product->reference
+                    ??
+                    '#' . $product->id
+                )
+                . ' : cette ancienne ligne de vente ne contient pas de dépôt.'
             );
         }
+
+        $depot = Depot::query()
+            ->find(
+                $item->depot_id
+            );
+
+        if (!$depot) {
+            throw new \RuntimeException(
+                'Le dépôt d’origine de la ligne de vente est introuvable.'
+            );
+        }
+
+        $depotStock =
+            ProductDepotStock::query()
+                ->where(
+                    'product_id',
+                    $product->id
+                )
+                ->where(
+                    'depot_id',
+                    $depot->id
+                )
+                ->lockForUpdate()
+                ->first();
+
+        if (!$depotStock) {
+            $depotStock =
+                ProductDepotStock::create([
+                    'product_id' =>
+                        $product->id,
+
+                    'depot_id' =>
+                        $depot->id,
+
+                    'quantity' =>
+                        0,
+                ]);
+        }
+
+        $depotStock->quantity =
+            round(
+                (float) $depotStock->quantity
+                +
+                (float) $item->quantity,
+                2
+            );
+
+        $depotStock->save();
+
+        $this->syncProductQuantityFromDepots(
+            $product
+        );
+
+        StockMovement::create([
+            'product_id' =>
+                $product->id,
+
+            'type' =>
+                'in',
+
+            'quantity' =>
+                $item->quantity,
+
+            'source' =>
+                $source
+                . ' | Dépôt: '
+                . $depot->name,
+
+            'reference' =>
+                $sale->invoice_number,
+
+            'user_id' =>
+                auth()->id(),
+        ]);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | FACTURE ANNULÉE ?
+    |--------------------------------------------------------------------------
+    */
+    private function isCancelled(
+        Sale $sale
+    ): bool {
+        return in_array(
+            strtolower(
+                trim(
+                    (string) $sale->status
+                )
+            ),
+            [
+                'cancelled',
+                'annulé',
+                'annule',
+            ],
+            true
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | TOTAL EN LETTRES
+    |--------------------------------------------------------------------------
+    */
+    private function totalInWords(
+        float $total
+    ): string {
+        $numberToWords =
+            new NumberToWords();
+
+        $numberTransformer =
+            $numberToWords
+                ->getNumberTransformer(
+                    'fr'
+                );
+
+        $totalRounded =
+            (int) round(
+                $total
+            );
+
+        return strtoupper(
+            $numberTransformer->toWords(
+                $totalRounded
+            )
+        )
+        . ' FDJ';
+    }
 }

@@ -10,27 +10,41 @@ class SaleItem extends Model
 {
     use HasFactory;
 
+    /*
+    |--------------------------------------------------------------------------
+    | MASS ASSIGNMENT
+    |--------------------------------------------------------------------------
+    */
     protected $fillable = [
         'sale_id',
         'product_id',
         'vehicle_id',
+        'depot_id',
         'quantity',
         'price',
         'total',
     ];
 
+    /*
+    |--------------------------------------------------------------------------
+    | CASTS
+    |--------------------------------------------------------------------------
+    */
     protected $casts = [
         'sale_id' => 'integer',
         'product_id' => 'integer',
         'vehicle_id' => 'integer',
+        'depot_id' => 'integer',
         'quantity' => 'decimal:2',
         'price' => 'decimal:2',
-        'total'    => 'decimal:2',
+        'total' => 'decimal:2',
     ];
 
-    /**
-     * Vente correspondante.
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | RELATION : VENTE
+    |--------------------------------------------------------------------------
+    */
     public function sale(): BelongsTo
     {
         return $this->belongsTo(
@@ -39,9 +53,11 @@ class SaleItem extends Model
         );
     }
 
-    /**
-     * Produit vendu.
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | RELATION : PRODUIT
+    |--------------------------------------------------------------------------
+    */
     public function product(): BelongsTo
     {
         return $this->belongsTo(
@@ -50,9 +66,11 @@ class SaleItem extends Model
         );
     }
 
-    /**
-     * Véhicule concerné par la pièce.
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | RELATION : VÉHICULE
+    |--------------------------------------------------------------------------
+    */
     public function vehicle(): BelongsTo
     {
         return $this->belongsTo(
@@ -61,13 +79,36 @@ class SaleItem extends Model
         );
     }
 
-    /**
-     * Total de la ligne.
-     */
+    /*
+    |--------------------------------------------------------------------------
+    | RELATION : DÉPÔT
+    |--------------------------------------------------------------------------
+    |
+    | Dépôt dans lequel le stock a été prélevé au moment de la vente.
+    | Cette information permet de remettre le stock dans le bon dépôt
+    | lors d'une annulation ou suppression de vente.
+    |
+    */
+    public function depot(): BelongsTo
+    {
+        return $this->belongsTo(
+            Depot::class,
+            'depot_id'
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | TOTAL DE LA LIGNE
+    |--------------------------------------------------------------------------
+    */
     public function getLineTotalAttribute(): float
     {
-        return
-            (float) $this->quantity *
-            (float) $this->price;
+        return round(
+            (float) $this->quantity
+            *
+            (float) $this->price,
+            2
+        );
     }
 }
