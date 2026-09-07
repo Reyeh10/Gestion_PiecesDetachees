@@ -1538,9 +1538,14 @@
                                     |--------------------------------------------------------------------------
                                     */
 
+                                   $unitType = strtolower(
+                                        trim((string) ($product->unit_type ?? 'piece'))
+                                    );
+
                                     $unitLabel =
-                                        $product->unit_label
-                                        ?: 'Pièce';
+                                        $unitType === 'litre'
+                                            ? 'L'
+                                            : 'Pièce';
 
 
                                  /*

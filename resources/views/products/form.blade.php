@@ -674,7 +674,49 @@
     @endif
 
 
-    <div class="row">
+      <div class="row">
+
+        {{-- DÉPÔT --}}
+        @if(!$isEdit)
+            <div class="col-md-4 mb-3">
+
+                <label for="depot_id" class="form-label">
+                    Dépôt <span class="text-danger">*</span>
+                </label>
+
+                <select
+                    name="depot_id"
+                    id="depot_id"
+                    class="form-control select2 @error('depot_id') is-invalid @enderror"
+                    required
+                >
+                    <option value="">
+                        Sélectionner un dépôt
+                    </option>
+
+                    @foreach($depots as $depot)
+                        <option
+                            value="{{ $depot->id }}"
+                            {{ (string) old('depot_id') === (string) $depot->id ? 'selected' : '' }}
+                        >
+                            {{ $depot->name }}
+                        </option>
+                    @endforeach
+                </select>
+
+                @error('depot_id')
+                    <div class="invalid-feedback">
+                        {{ $message }}
+                    </div>
+                @enderror
+
+                <div class="product-form-help">
+                    Dépôt dans lequel le stock initial sera enregistré.
+                </div>
+
+            </div>
+        @endif
+
 
         {{-- QUANTITÉ --}}
         <div class="col-md-4 mb-3">

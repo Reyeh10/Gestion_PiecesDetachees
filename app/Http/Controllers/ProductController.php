@@ -193,6 +193,7 @@ class ProductController extends Controller
             'file' => 'required|mimes:xlsx,xls,csv',
             'supplier_id' => 'required|exists:suppliers,id',
             'depot_id' => 'required|exists:depots,id',
+
         ]);
 
         /*
@@ -1576,7 +1577,7 @@ class ProductController extends Controller
             $products->appends(
                 $request->query()
             );
-                    
+
 
 
         return view(
@@ -1707,6 +1708,9 @@ public function create()
     $subfamilies = Subfamily::orderBy('name')->get();
     $rayons = Rayon::orderBy('name')->get();
     $locations = Location::orderBy('name')->get();
+    $depots = Depot::where('is_active', true)
+            ->orderBy('name')
+            ->get();
 
     return view(
         'products.create',
@@ -1716,7 +1720,9 @@ public function create()
             'families',
             'subfamilies',
             'rayons',
-            'locations'
+            'locations',
+            'depots'
+
         )
     );
 }
@@ -1798,6 +1804,11 @@ public function store(Request $request)
             'nullable',
             'exists:locations,id',
         ],
+
+        'depot_id' => [
+                'required',
+                'exists:depots,id',
+            ],
 
         /*
         |--------------------------------------------------------------------------
@@ -2006,7 +2017,7 @@ public function store(Request $request)
     |--------------------------------------------------------------------------
     */
 
-    Product::create([
+  $product = Product::create([
 
         /*
         |--------------------------------------------------------------------------
@@ -2135,6 +2146,16 @@ public function store(Request $request)
         'unit_label' =>
             $request->unit_label ?? 'Pièce',
     ]);
+
+        ProductDepotStock::updateOrCreate(
+        [
+            'product_id' => $product->id,
+            'depot_id' => $request->depot_id,
+        ],
+        [
+            'quantity' => $availableQuantity,
+        ]
+    );
 
     /*
     |--------------------------------------------------------------------------
@@ -2270,6 +2291,7 @@ public function exportExcel()
             'designation' =>
                 'required|string|max:255',
 
+
             'brand_id' =>
                 'required|exists:brands,id',
 
@@ -2314,7 +2336,21 @@ public function exportExcel()
 
             'coef_sale' =>
                 'required|numeric|min:0',
+
+                'unit_type' => [
+                    'required',
+                    'string',
+                    'in:piece,litre',
+                ],
+
+                'unit_label' => [
+                    'nullable',
+                    'string',
+                    'max:50',
+                ],
         ]);
+
+
 
         /*
         |--------------------------------------------------------------------------
@@ -2350,6 +2386,14 @@ public function exportExcel()
 
             'designation' =>
                 $request->designation,
+
+            'unit_type' =>
+                $request->unit_type,
+
+            'unit_label' =>
+                $request->unit_type === 'litre'
+                    ? 'L'
+                    : 'Pièce',
 
             'brand_id' =>
                 $request->brand_id,
