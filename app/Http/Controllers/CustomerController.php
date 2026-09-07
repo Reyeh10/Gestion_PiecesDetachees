@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class CustomerController extends Controller
 {
@@ -155,7 +156,7 @@ class CustomerController extends Controller
         $customers = $query
             ->latest('id')
             ->paginate(15);
-           
+
 
       /*
     |--------------------------------------------------------------------------
@@ -230,27 +231,32 @@ class CustomerController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        $lastCustomer = Customer::where('code', 'like', 'CL%')
-            ->orderByRaw(
-                "CAST(SUBSTRING(code, 3) AS UNSIGNED) DESC"
+     $lastNumber = DB::table('customers')
+            ->whereNotNull('code')
+            ->where('code', 'like', 'CL%')
+            ->selectRaw(
+                'MAX(CAST(SUBSTRING(code, 3) AS UNSIGNED)) as max_number'
             )
-            ->first();
+            ->value('max_number');
 
-        if ($lastCustomer && preg_match('/^CL(\d+)$/', $lastCustomer->code, $matches)) {
+        $nextNumber = ((int) $lastNumber) + 1;
 
-            $nextNumber = (int) $matches[1] + 1;
+        do {
 
-        } else {
+            $nextCode = 'CL' . str_pad(
+                $nextNumber,
+                3,
+                '0',
+                STR_PAD_LEFT
+            );
 
-            $nextNumber = 1;
-        }
+            $exists = DB::table('customers')
+                ->where('code', $nextCode)
+                ->exists();
 
-        $nextCode = 'CL' . str_pad(
-            $nextNumber,
-            3,
-            '0',
-            STR_PAD_LEFT
-        );
+            $nextNumber++;
+
+        } while ($exists);
 
         return view(
             'customers.create',
@@ -292,27 +298,32 @@ class CustomerController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        $lastCustomer = Customer::where('code', 'like', 'CL%')
-            ->orderByRaw(
-                "CAST(SUBSTRING(code, 3) AS UNSIGNED) DESC"
+     $lastNumber = DB::table('customers')
+            ->whereNotNull('code')
+            ->where('code', 'like', 'CL%')
+            ->selectRaw(
+                'MAX(CAST(SUBSTRING(code, 3) AS UNSIGNED)) as max_number'
             )
-            ->first();
+            ->value('max_number');
 
-        if ($lastCustomer && preg_match('/^CL(\d+)$/', $lastCustomer->code, $matches)) {
+        $nextNumber = ((int) $lastNumber) + 1;
 
-            $nextNumber = (int) $matches[1] + 1;
+        do {
 
-        } else {
+            $customerCode = 'CL' . str_pad(
+                $nextNumber,
+                3,
+                '0',
+                STR_PAD_LEFT
+            );
 
-            $nextNumber = 1;
-        }
+            $exists = DB::table('customers')
+                ->where('code', $customerCode)
+                ->exists();
 
-        $customerCode = 'CL' . str_pad(
-            $nextNumber,
-            3,
-            '0',
-            STR_PAD_LEFT
-        );
+            $nextNumber++;
+
+        } while ($exists);
 
         /*
         |--------------------------------------------------------------------------
