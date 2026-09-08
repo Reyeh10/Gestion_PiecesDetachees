@@ -2,16 +2,22 @@
 
 @section('content')
 
-<form action="{{ route('inventory-adjustments.store') }}"
-      method="POST"
-      id="inventoryAdjustmentForm">
-
+<form
+    action="{{ route('inventory-adjustments.store') }}"
+    method="POST"
+    id="inventoryAdjustmentForm"
+>
     @csrf
 
     <div class="card shadow-sm border-0">
 
+        {{-- ============================================================ --}}
         {{-- HEADER --}}
-        <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
+        {{-- ============================================================ --}}
+        <div
+            class="card-header bg-white border-bottom
+                   d-flex justify-content-between align-items-center"
+        >
 
             <div>
 
@@ -25,41 +31,46 @@
 
             </div>
 
-            <a href="{{ route('inventory-adjustments.index') }}"
-               class="btn btn-secondary">
-
+            <a
+                href="{{ route('inventory-adjustments.index') }}"
+                class="btn btn-secondary"
+            >
                 <i class="bx bx-arrow-back me-1"></i>
-
                 Retour
-
             </a>
 
         </div>
 
+        {{-- ============================================================ --}}
         {{-- BODY --}}
+        {{-- ============================================================ --}}
         <div class="card-body">
 
             @include('inventory_adjustments.form')
 
         </div>
 
+        {{-- ============================================================ --}}
         {{-- FOOTER --}}
+        {{-- ============================================================ --}}
         <div class="card-footer bg-white text-end">
 
-            <a href="{{ route('inventory-adjustments.index') }}"
-               class="btn btn-light me-2">
-
+            <a
+                href="{{ route('inventory-adjustments.index') }}"
+                class="btn btn-light me-2"
+            >
+                <i class="bx bx-x me-1"></i>
                 Annuler
-
             </a>
 
-            <button type="submit"
-                    class="btn btn-primary">
-
+            <button
+                type="submit"
+                class="btn btn-primary"
+                id="submitAdjustmentButton"
+                disabled
+            >
                 <i class="bx bx-save me-1"></i>
-
                 Enregistrer ajustement
-
             </button>
 
         </div>

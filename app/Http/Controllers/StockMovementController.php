@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\StockMovement;
-
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\View\View;
 
 class StockMovementController extends Controller
 {
@@ -12,53 +14,46 @@ class StockMovementController extends Controller
     |--------------------------------------------------------------------------
     | INDEX
     |--------------------------------------------------------------------------
+    |
+    | Affiche tous les mouvements de stock.
+    | La recherche "reference" concerne maintenant la référence PRODUIT.
+    |
     */
-
-    public function index(Request $request)
+    public function index(Request $request): View
     {
-        $query = StockMovement::with([
-
-            'product.brand',
-            'product.model',
-            'user',
-
-        ]);
+        $query = $this->baseQuery();
 
         /*
         |--------------------------------------------------------------------------
-        | RECHERCHE REFERENCE
+        | RECHERCHE RÉFÉRENCE PRODUIT
         |--------------------------------------------------------------------------
         */
+        if ($request->filled('reference')) {
+            $reference = trim((string) $request->input('reference'));
 
-        if ($request->reference) {
-
-            $query->where(
-
-                'reference',
-                'like',
-                '%' . $request->reference . '%'
-
-            );
+            $query->whereHas('product', function (Builder $productQuery) use ($reference) {
+                $productQuery->where(
+                    'reference',
+                    'like',
+                    '%' . $reference . '%'
+                );
+            });
         }
 
         /*
         |--------------------------------------------------------------------------
-        | RECHERCHE DESIGNATION
+        | RECHERCHE DÉSIGNATION PRODUIT
         |--------------------------------------------------------------------------
         */
+        if ($request->filled('designation')) {
+            $designation = trim((string) $request->input('designation'));
 
-        if ($request->designation) {
-
-            $query->whereHas('product', function ($q) use ($request) {
-
-                $q->where(
-
+            $query->whereHas('product', function (Builder $productQuery) use ($designation) {
+                $productQuery->where(
                     'designation',
                     'like',
-                    '%' . $request->designation . '%'
-
+                    '%' . $designation . '%'
                 );
-
             });
         }
 
@@ -67,15 +62,12 @@ class StockMovementController extends Controller
         | FILTRE TYPE
         |--------------------------------------------------------------------------
         */
+        if ($request->filled('type')) {
+            $type = $request->input('type');
 
-        if ($request->type) {
-
-            $query->where(
-
-                'type',
-                $request->type
-
-            );
+            if (in_array($type, ['in', 'out'], true)) {
+                $query->where('type', $type);
+            }
         }
 
         /*
@@ -83,31 +75,23 @@ class StockMovementController extends Controller
         | FILTRE DATE UNIQUE
         |--------------------------------------------------------------------------
         */
-
-        if ($request->date) {
-
+        if ($request->filled('date')) {
             $query->whereDate(
-
                 'created_at',
-                $request->date
-
+                $request->input('date')
             );
         }
 
         /*
         |--------------------------------------------------------------------------
-        | FILTRE DATE DEBUT
+        | FILTRE DATE DÉBUT
         |--------------------------------------------------------------------------
         */
-
-        if ($request->date_from) {
-
+        if ($request->filled('date_from')) {
             $query->whereDate(
-
                 'created_at',
                 '>=',
-                $request->date_from
-
+                $request->input('date_from')
             );
         }
 
@@ -116,56 +100,69 @@ class StockMovementController extends Controller
         | FILTRE DATE FIN
         |--------------------------------------------------------------------------
         */
-
-        if ($request->date_to) {
-
+        if ($request->filled('date_to')) {
             $query->whereDate(
-
                 'created_at',
                 '<=',
-                $request->date_to
-
+                $request->input('date_to')
             );
         }
 
         /*
         |--------------------------------------------------------------------------
-        | ANCIENNE RECHERCHE GENERALE
+        | RECHERCHE GÉNÉRALE
         |--------------------------------------------------------------------------
+        |
+        | Recherche :
+        | - référence produit
+        | - désignation produit
+        | - référence document/mouvement
+        | - source
+        |
         */
+        if ($request->filled('search')) {
+            $search = trim((string) $request->input('search'));
 
-        if ($request->search) {
-
-            $query->whereHas('product', function ($q) use ($request) {
-
-                $q->where(
-                    'designation',
-                    'like',
-                    '%' . $request->search . '%'
-                )
-
-                ->orWhere(
-                    'reference',
-                    'like',
-                    '%' . $request->search . '%'
-                );
-
+            $query->where(function (Builder $movementQuery) use ($search) {
+                $movementQuery
+                    ->where(
+                        'reference',
+                        'like',
+                        '%' . $search . '%'
+                    )
+                    ->orWhere(
+                        'source',
+                        'like',
+                        '%' . $search . '%'
+                    )
+                    ->orWhereHas('product', function (Builder $productQuery) use ($search) {
+                        $productQuery
+                            ->where(
+                                'reference',
+                                'like',
+                                '%' . $search . '%'
+                            )
+                            ->orWhere(
+                                'designation',
+                                'like',
+                                '%' . $search . '%'
+                            );
+                    });
             });
         }
 
         /*
         |--------------------------------------------------------------------------
-        | RESULTATS
+        | RÉSULTATS
         |--------------------------------------------------------------------------
         */
-
-       $movements = $query
-        ->latest()
-        ->get();
+        $movements = $query
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get();
 
         return view(
             'stock_movements.index',
-
             compact('movements')
         );
     }
@@ -175,8 +172,7 @@ class StockMovementController extends Controller
     | SHOW
     |--------------------------------------------------------------------------
     */
-
-    public function show(StockMovement $stockMovement)
+    public function show(StockMovement $stockMovement): View
     {
         $stockMovement->load([
             'product.brand',
@@ -193,13 +189,13 @@ class StockMovementController extends Controller
             compact('stockMovement')
         );
     }
-        /*
+
+    /*
     |--------------------------------------------------------------------------
     | EDIT
     |--------------------------------------------------------------------------
     */
-
-    public function edit(StockMovement $stockMovement)
+    public function edit(StockMovement $stockMovement): View
     {
         $stockMovement->load([
             'product.brand',
@@ -218,25 +214,52 @@ class StockMovementController extends Controller
     | UPDATE
     |--------------------------------------------------------------------------
     */
+    public function update(
+        Request $request,
+        StockMovement $stockMovement
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'quantity' => [
+                'required',
+                'numeric',
+                'min:0',
+            ],
 
-    public function update(Request $request, StockMovement $stockMovement)
-    {
-        $request->validate([
+            'source' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
 
-            'quantity' => 'required|numeric|min:0',
-            'source' => 'nullable|string|max:255',
-            'reference' => 'nullable|string|max:255',
+            /*
+            |--------------------------------------------------------------------------
+            | RÉFÉRENCE DU DOCUMENT / MOUVEMENT
+            |--------------------------------------------------------------------------
+            |
+            | Attention :
+            | ceci n'est PAS la référence produit.
+            |
+            | Exemples :
+            | FACT-2026-0110
+            | ADJ-16
+            | TRANS-001
+            |
+            */
+            'reference' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
         ]);
 
         $stockMovement->update([
-
-            'quantity' => $request->quantity,
-            'source' => $request->source,
-            'reference' => $request->reference,
+            'quantity' => $validated['quantity'],
+            'source' => $validated['source'] ?? null,
+            'reference' => $validated['reference'] ?? null,
         ]);
 
         return redirect()
-            ->route('stock-movements.index')
+            ->route('stock-movements.show', $stockMovement)
             ->with(
                 'success',
                 'Mouvement modifié avec succès.'
@@ -245,80 +268,22 @@ class StockMovementController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | ENTREES
+    | ENTRÉES
     |--------------------------------------------------------------------------
     */
-
-   /*
-|--------------------------------------------------------------------------
-| ENTREES
-|--------------------------------------------------------------------------
-*/
-
-    public function entries(Request $request)
+    public function entries(Request $request): View
     {
-        $query = StockMovement::with([
-            'product.brand',
-            'product.model',
-            'user',
-        ])
-        ->where('type', 'in');
+        $query = $this->baseQuery()
+            ->where('type', 'in');
 
-        /*
-        |--------------------------------------------------------------------------
-        | RECHERCHE REFERENCE
-        |--------------------------------------------------------------------------
-        */
-
-        if ($request->filled('reference')) {
-
-            $query->where(
-                'reference',
-                'like',
-                '%' . trim($request->reference) . '%'
-            );
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | RECHERCHE DESIGNATION
-        |--------------------------------------------------------------------------
-        */
-
-        if ($request->filled('designation')) {
-
-            $query->whereHas('product', function ($q) use ($request) {
-
-                $q->where(
-                    'designation',
-                    'like',
-                    '%' . trim($request->designation) . '%'
-                );
-            });
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | DATE
-        |--------------------------------------------------------------------------
-        */
-
-        if ($request->filled('date')) {
-
-            $query->whereDate(
-                'created_at',
-                $request->date
-            );
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | RESULTATS
-        |--------------------------------------------------------------------------
-        */
+        $this->applyCommonFilters(
+            $query,
+            $request
+        );
 
         $movements = $query
-            ->latest()
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->get();
 
         return view(
@@ -332,77 +297,19 @@ class StockMovementController extends Controller
     | SORTIES
     |--------------------------------------------------------------------------
     */
-
-   /*
-    |--------------------------------------------------------------------------
-    | SORTIES
-    |--------------------------------------------------------------------------
-    */
-
-    public function exits(Request $request)
+    public function exits(Request $request): View
     {
-        $query = StockMovement::with([
-            'product.brand',
-            'product.model',
-            'user',
-        ])
-        ->where('type', 'out');
+        $query = $this->baseQuery()
+            ->where('type', 'out');
 
-        /*
-        |--------------------------------------------------------------------------
-        | RECHERCHE REFERENCE
-        |--------------------------------------------------------------------------
-        */
-
-        if ($request->filled('reference')) {
-
-            $query->where(
-                'reference',
-                'like',
-                '%' . trim($request->reference) . '%'
-            );
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | RECHERCHE DESIGNATION
-        |--------------------------------------------------------------------------
-        */
-
-        if ($request->filled('designation')) {
-
-            $query->whereHas('product', function ($q) use ($request) {
-
-                $q->where(
-                    'designation',
-                    'like',
-                    '%' . trim($request->designation) . '%'
-                );
-            });
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | DATE
-        |--------------------------------------------------------------------------
-        */
-
-        if ($request->filled('date')) {
-
-            $query->whereDate(
-                'created_at',
-                $request->date
-            );
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | RESULTATS
-        |--------------------------------------------------------------------------
-        */
+        $this->applyCommonFilters(
+            $query,
+            $request
+        );
 
         $movements = $query
-            ->latest()
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->get();
 
         return view(
@@ -416,16 +323,165 @@ class StockMovementController extends Controller
     | DESTROY
     |--------------------------------------------------------------------------
     */
-
-    public function destroy(StockMovement $stockMovement)
-    {
+    public function destroy(
+        StockMovement $stockMovement
+    ): RedirectResponse {
         $stockMovement->delete();
 
         return redirect()
-            ->route('stock-movements.index')
+            ->back()
             ->with(
                 'success',
                 'Mouvement supprimé avec succès.'
             );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | QUERY DE BASE
+    |--------------------------------------------------------------------------
+    */
+    private function baseQuery(): Builder
+    {
+        return StockMovement::query()
+            ->with([
+                'product.brand',
+                'product.model',
+                'user',
+            ]);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | FILTRES COMMUNS
+    |--------------------------------------------------------------------------
+    |
+    | Utilisés par :
+    | - Entrées
+    | - Sorties
+    |
+    */
+    private function applyCommonFilters(
+        Builder $query,
+        Request $request
+    ): void {
+        /*
+        |--------------------------------------------------------------------------
+        | RÉFÉRENCE PRODUIT
+        |--------------------------------------------------------------------------
+        */
+        if ($request->filled('reference')) {
+            $reference = trim((string) $request->input('reference'));
+
+            $query->whereHas(
+                'product',
+                function (Builder $productQuery) use ($reference) {
+                    $productQuery->where(
+                        'reference',
+                        'like',
+                        '%' . $reference . '%'
+                    );
+                }
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | DÉSIGNATION PRODUIT
+        |--------------------------------------------------------------------------
+        */
+        if ($request->filled('designation')) {
+            $designation = trim((string) $request->input('designation'));
+
+            $query->whereHas(
+                'product',
+                function (Builder $productQuery) use ($designation) {
+                    $productQuery->where(
+                        'designation',
+                        'like',
+                        '%' . $designation . '%'
+                    );
+                }
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | DATE UNIQUE
+        |--------------------------------------------------------------------------
+        */
+        if ($request->filled('date')) {
+            $query->whereDate(
+                'created_at',
+                $request->input('date')
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | DATE DÉBUT
+        |--------------------------------------------------------------------------
+        */
+        if ($request->filled('date_from')) {
+            $query->whereDate(
+                'created_at',
+                '>=',
+                $request->input('date_from')
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | DATE FIN
+        |--------------------------------------------------------------------------
+        */
+        if ($request->filled('date_to')) {
+            $query->whereDate(
+                'created_at',
+                '<=',
+                $request->input('date_to')
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | RECHERCHE GÉNÉRALE
+        |--------------------------------------------------------------------------
+        */
+        if ($request->filled('search')) {
+            $search = trim((string) $request->input('search'));
+
+            $query->where(
+                function (Builder $movementQuery) use ($search) {
+                    $movementQuery
+                        ->where(
+                            'reference',
+                            'like',
+                            '%' . $search . '%'
+                        )
+                        ->orWhere(
+                            'source',
+                            'like',
+                            '%' . $search . '%'
+                        )
+                        ->orWhereHas(
+                            'product',
+                            function (Builder $productQuery) use ($search) {
+                                $productQuery
+                                    ->where(
+                                        'reference',
+                                        'like',
+                                        '%' . $search . '%'
+                                    )
+                                    ->orWhere(
+                                        'designation',
+                                        'like',
+                                        '%' . $search . '%'
+                                    );
+                            }
+                        );
+                }
+            );
+        }
     }
 }

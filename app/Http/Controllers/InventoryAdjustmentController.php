@@ -84,8 +84,23 @@ class InventoryAdjustmentController extends Controller
     | CREATE - AJUSTEMENT UNITAIRE
     |--------------------------------------------------------------------------
     */
-    public function create(): View
+  public function create(): View
     {
+        /*
+        |--------------------------------------------------------------------------
+        | DÉPÔTS ACTIFS
+        |--------------------------------------------------------------------------
+        */
+        $depots = Depot::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRODUITS
+        |--------------------------------------------------------------------------
+        */
         $products = Product::query()
             ->with([
                 'brand',
@@ -96,16 +111,42 @@ class InventoryAdjustmentController extends Controller
             ->orderBy('designation')
             ->get();
 
-        $depots = Depot::query()
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get();
+        /*
+        |--------------------------------------------------------------------------
+        | STOCKS PAR DÉPÔT
+        |--------------------------------------------------------------------------
+        |
+        | Structure envoyée à JavaScript :
+        |
+        | [
+        |     depot_id => [
+        |         product_id => quantity
+        |     ]
+        | ]
+        |
+        */
+        $depotStocks = ProductDepotStock::query()
+            ->select([
+                'depot_id',
+                'product_id',
+                'quantity',
+            ])
+            ->get()
+            ->groupBy('depot_id')
+            ->map(function ($stocks) {
+                return $stocks
+                    ->keyBy('product_id')
+                    ->map(function ($stock) {
+                        return round((float) $stock->quantity, 2);
+                    });
+            });
 
         return view(
             'inventory_adjustments.create',
             compact(
                 'products',
-                'depots'
+                'depots',
+                'depotStocks'
             )
         );
     }
@@ -122,23 +163,31 @@ class InventoryAdjustmentController extends Controller
     | - la localisation n'est pas modifiée
     |
     */
-    public function store(Request $request): RedirectResponse
+   public function store(Request $request): RedirectResponse
     {
+        /*
+        |--------------------------------------------------------------------------
+        | VALIDATION
+        |--------------------------------------------------------------------------
+        */
         $request->validate(
             [
-                'product_id' => [
-                    'required',
-                    'exists:products,id',
-                ],
                 'depot_id' => [
                     'required',
                     'exists:depots,id',
                 ],
+
+                'product_id' => [
+                    'required',
+                    'exists:products,id',
+                ],
+
                 'new_qty' => [
                     'required',
                     'numeric',
                     'min:0',
                 ],
+
                 'reason' => [
                     'required',
                     'string',
@@ -146,28 +195,54 @@ class InventoryAdjustmentController extends Controller
                 ],
             ],
             [
-                'product_id.required' =>
-                    'Veuillez sélectionner un produit.',
                 'depot_id.required' =>
                     'Veuillez sélectionner un dépôt.',
+
                 'depot_id.exists' =>
                     'Le dépôt sélectionné est invalide.',
+
+                'product_id.required' =>
+                    'Veuillez sélectionner un produit.',
+
+                'product_id.exists' =>
+                    'Le produit sélectionné est invalide.',
+
                 'new_qty.required' =>
                     'Veuillez saisir la nouvelle quantité.',
+
+                'new_qty.numeric' =>
+                    'La nouvelle quantité doit être numérique.',
+
                 'new_qty.min' =>
                     'La quantité ne peut pas être négative.',
+
                 'reason.required' =>
-                    'Veuillez préciser la raison.',
+                    'Veuillez préciser la raison de l’ajustement.',
+
+                'reason.max' =>
+                    'La raison ne doit pas dépasser 1000 caractères.',
             ]
         );
 
         try {
+
             DB::transaction(function () use ($request) {
+
+                /*
+                |--------------------------------------------------------------------------
+                | PRODUIT
+                |--------------------------------------------------------------------------
+                */
                 $product = Product::query()
                     ->where('id', $request->product_id)
                     ->lockForUpdate()
                     ->firstOrFail();
 
+                /*
+                |--------------------------------------------------------------------------
+                | DÉPÔT
+                |--------------------------------------------------------------------------
+                */
                 $depot = Depot::query()
                     ->where('id', $request->depot_id)
                     ->where('is_active', true)
@@ -179,74 +254,153 @@ class InventoryAdjustmentController extends Controller
                     );
                 }
 
+                /*
+                |--------------------------------------------------------------------------
+                | STOCK ACTUEL DU PRODUIT DANS LE DÉPÔT
+                |--------------------------------------------------------------------------
+                */
+                $depotStock = ProductDepotStock::query()
+                    ->where('product_id', $product->id)
+                    ->where('depot_id', $depot->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                /*
+                |--------------------------------------------------------------------------
+                | ANCIENNE QUANTITÉ
+                |--------------------------------------------------------------------------
+                |
+                | La quantité actuelle est maintenant celle du dépôt sélectionné.
+                |
+                */
                 $oldQty = round(
-                    (float) $product->quantity,
+                    (float) ($depotStock?->quantity ?? 0),
                     2
                 );
 
+                /*
+                |--------------------------------------------------------------------------
+                | NOUVELLE QUANTITÉ
+                |--------------------------------------------------------------------------
+                */
                 $newQty = round(
                     (float) $request->new_qty,
                     2
                 );
 
+                /*
+                |--------------------------------------------------------------------------
+                | DIFFÉRENCE
+                |--------------------------------------------------------------------------
+                */
                 $difference = round(
                     $newQty - $oldQty,
                     2
                 );
 
+                /*
+                |--------------------------------------------------------------------------
+                | AJUSTEMENT
+                |--------------------------------------------------------------------------
+                */
                 $adjustment = InventoryAdjustment::create([
                     'product_id' => $product->id,
                     'depot_id' => $depot->id,
+
                     'rayon_id' => $product->rayon_id,
                     'location_id' => $product->location_id,
+
                     'old_qty' => $oldQty,
                     'new_qty' => $newQty,
-                    'reason' => trim((string) $request->reason),
+
+                    'reason' => trim(
+                        (string) $request->reason
+                    ),
+
                     'approved_by' => auth()->id(),
                 ]);
 
                 /*
                 |--------------------------------------------------------------------------
-                | REGLE METIER : UN PRODUIT = UN SEUL DEPOT COURANT
+                | METTRE À JOUR LE STOCK DU DÉPÔT
+                |--------------------------------------------------------------------------
+                */
+                if ($depotStock) {
+
+                    $depotStock->quantity = $newQty;
+                    $depotStock->save();
+
+                } else {
+
+                    ProductDepotStock::create([
+                        'product_id' => $product->id,
+                        'depot_id' => $depot->id,
+                        'quantity' => $newQty,
+                    ]);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | QUANTITÉ GLOBALE DISPONIBLE DU PRODUIT
                 |--------------------------------------------------------------------------
                 |
-                | On verrouille les anciennes lignes, puis on supprime
-                | TOUTES les présences actuelles du produit dans les dépôts.
-                | Ensuite on recrée uniquement le dépôt sélectionné.
+                | La quantité globale correspond à la somme de tous les dépôts.
                 |
                 */
-                ProductDepotStock::query()
+                $totalQuantity = ProductDepotStock::query()
                     ->where('product_id', $product->id)
-                    ->lockForUpdate()
-                    ->get();
+                    ->sum('quantity');
 
-                ProductDepotStock::query()
-                    ->where('product_id', $product->id)
-                    ->delete();
+                $product->quantity = round(
+                    (float) $totalQuantity,
+                    2
+                );
 
-                ProductDepotStock::create([
-                    'product_id' => $product->id,
-                    'depot_id' => $depot->id,
-                    'quantity' => $newQty,
-                ]);
+                $product->save();
 
-                DB::table('products')
-                    ->where('id', $product->id)
-                    ->update([
-                        'quantity' => $newQty,
-                        'updated_at' => now(),
-                    ]);
-
+                /*
+                |--------------------------------------------------------------------------
+                | MOUVEMENT DE STOCK
+                |--------------------------------------------------------------------------
+                */
                 if (abs($difference) > 0.00001) {
+
+                    $source =
+                        'Ajustement inventaire'
+                        . ' | Dépôt: '
+                        . $depot->name;
+
+                    if ($product->rayon) {
+                        $source .=
+                            ' | Rayon: '
+                            . $product->rayon->name;
+                    }
+
+                    if ($product->location) {
+                        $source .=
+                            ' | Emplacement: '
+                            . $product->location->name;
+                    }
+
                     StockMovement::create([
                         'product_id' => $product->id,
-                        'type' => $difference > 0 ? 'in' : 'out',
-                        'quantity' => abs($difference),
+
+                        'type' =>
+                            $difference > 0
+                                ? 'in'
+                                : 'out',
+
+                        'quantity' =>
+                            abs($difference),
+
                         'source' =>
-                            'Ajustement inventaire | Dépôt: '
-                            . $depot->name,
-                        'reference' => 'ADJ-' . $adjustment->id,
-                        'user_id' => auth()->id(),
+                            $source,
+
+                        'reference' =>
+                            'ADJ-' . $adjustment->id,
+
+                        'user_id' =>
+                            auth()->id(),
                     ]);
                 }
             });
@@ -257,7 +411,9 @@ class InventoryAdjustmentController extends Controller
                     'success',
                     'Ajustement inventaire enregistré avec succès.'
                 );
+
         } catch (\Throwable $e) {
+
             report($e);
 
             return back()

@@ -109,180 +109,169 @@
         </div>
 
         </form>
-        <div class="table-responsive">
+       <div class="table-responsive">
             <table class="table table-bordered align-middle">
 
                 <thead>
+                    <tr>
+                        <th>
+                            Référence produit
+                        </th>
+
+                        <th>
+                            Désignation
+                        </th>
+
+                        <th>
+                            Document
+                        </th>
+
+                        <th>
+                            Source
+                        </th>
+
+                        <th>
+                            Quantité
+                        </th>
+
+                        <th>
+                            Type
+                        </th>
+
+                        <th>
+                            Date
+                        </th>
+
+                        <th width="140">
+                            Actions
+                        </th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    @forelse($movements as $movement)
 
                         <tr>
 
-                            <th>
-                                Référence
-                            </th>
+                            {{-- RÉFÉRENCE PRODUIT --}}
+                            <td class="fw-semibold">
+                                {{ $movement->product->reference ?? '-' }}
+                            </td>
 
-                            <th>
-                                Désignation
-                            </th>
+                            {{-- DÉSIGNATION --}}
+                            <td>
+                                {{ $movement->product->designation ?? '-' }}
+                            </td>
 
-                            <th>
-                                Source
-                            </th>
-
-                            <th>
-                                Quantité
-                            </th>
-
-                            <th>
-                                Type
-                            </th>
-
-                            <th>
-                                Date
-                            </th>
-
-                            <th width="140">
-                                Actions
-                            </th>
-
-                        </tr>
-
-                    </thead>
-
-                    <tbody>
-
-                        @forelse($movements as $movement)
-
-                            <tr>
-
-                                {{-- REFERENCE --}}
-                                <td class="fw-semibold">
-
+                            {{-- RÉFÉRENCE DOCUMENT / MOUVEMENT --}}
+                            <td>
+                                <span class="fw-semibold text-primary">
                                     {{ $movement->reference ?? '-' }}
+                                </span>
+                            </td>
 
-                                </td>
+                            {{-- SOURCE --}}
+                            <td>
+                                {{ $movement->source ?? '-' }}
+                            </td>
 
-                                {{-- DESIGNATION --}}
-                                <td>
+                            {{-- QUANTITÉ --}}
+                            <td>
+                                <span class="fw-bold">
+                                    {{ number_format($movement->quantity, 2) }}
+                                </span>
+                            </td>
 
-                                    {{ $movement->product->designation ?? '-' }}
+                            {{-- TYPE --}}
+                            <td>
 
-                                </td>
+                                @if($movement->type === 'in')
 
-                                {{-- SOURCE --}}
-                                <td>
-
-                                    {{ $movement->source ?? '-' }}
-
-                                </td>
-
-                                {{-- QUANTITE --}}
-                                <td>
-
-                                    <span class="fw-bold">
-
-                                        {{ number_format($movement->quantity, 2) }}
-
+                                    <span class="badge bg-success">
+                                        Entrée
                                     </span>
 
-                                </td>
+                                @elseif($movement->type === 'out')
 
-                                {{-- TYPE --}}
-                                <td>
+                                    <span class="badge bg-danger">
+                                        Sortie
+                                    </span>
 
-                                    @if($movement->type == 'in')
+                                @else
 
-                                        <span class="badge bg-success">
+                                    <span class="badge bg-secondary">
+                                        {{ strtoupper($movement->type) }}
+                                    </span>
 
-                                            Entrée
+                                @endif
 
-                                        </span>
+                            </td>
 
-                                    @elseif($movement->type == 'out')
+                            {{-- DATE --}}
+                            <td>
+                                {{ optional($movement->created_at)->format('d/m/Y') }}
+                            </td>
 
-                                        <span class="badge bg-danger">
+                            {{-- ACTIONS --}}
+                            <td>
 
-                                            Sortie
+                                <div class="d-flex align-items-center gap-2">
 
-                                        </span>
+                                    {{-- SHOW --}}
+                                    <a
+                                        href="{{ route('stock-movements.show', $movement) }}"
+                                        class="btn btn-info btn-sm text-white"
+                                        title="Voir"
+                                    >
+                                        <i class="bx bx-show"></i>
+                                    </a>
 
-                                    @else
+                                    {{-- ADMIN + CHEF MAGASINIER --}}
+                                    @if(in_array(auth()->user()->role, ['admin', 'chef_magasinier']))
 
-                                        <span class="badge bg-secondary">
+                                        <form
+                                            action="{{ route('stock-movements.destroy', $movement) }}"
+                                            method="POST"
+                                            class="delete-form d-inline"
+                                        >
+                                            @csrf
+                                            @method('DELETE')
 
-                                            {{ strtoupper($movement->type) }}
+                                            <button
+                                                type="submit"
+                                                class="btn btn-danger btn-sm rounded-pill shadow-sm"
+                                                title="Supprimer"
+                                            >
+                                                <i class="bx bx-trash"></i>
+                                            </button>
 
-                                        </span>
+                                        </form>
 
                                     @endif
 
-                                </td>
+                                </div>
 
-                                {{-- DATE --}}
-                                <td>
+                            </td>
 
-                                    {{ $movement->created_at->format('d/m/Y') }}
+                        </tr>
 
-                                </td>
+                    @empty
 
-                                {{-- ACTIONS --}}
-                                <td>
+                        <tr>
+                            <td
+                                colspan="8"
+                                class="text-center py-5 text-muted"
+                            >
+                                Aucun mouvement trouvé.
+                            </td>
+                        </tr>
 
-                                    <div class="d-flex align-items-center gap-2">
+                    @endforelse
 
-                                        {{-- SHOW --}}
-                                        <a href="{{ route('stock-movements.show', $movement) }}"
-                                        class="btn btn-info btn-sm text-white">
+                </tbody>
 
-                                            <i class="bx bx-show"></i>
-
-                                        </a>
-
-                                        {{-- ADMIN + CHEF MAGASINIER --}}
-                                        @if(in_array(auth()->user()->role, ['admin', 'chef_magasinier']))
-
-                                            {{-- DELETE --}}
-                                            <form action="{{ route('stock-movements.destroy', $movement) }}"
-                                                method="POST"
-                                                class="delete-form d-inline">
-
-                                                @csrf
-                                                @method('DELETE')
-
-                                                <button type="submit"
-                                                        class="btn btn-danger btn-sm rounded-pill shadow-sm">
-
-                                                    <i class="bx bx-trash"></i>
-
-                                                </button>
-
-                                            </form>
-
-                                        @endif
-
-                                    </div>
-
-                                </td>
-
-                            </tr>
-
-                        @empty
-
-                            <tr>
-
-                                <td colspan="7"
-                                    class="text-center py-5 text-muted">
-
-                                    Aucun mouvement trouvé.
-
-                                </td>
-
-                            </tr>
-
-                        @endforelse
-
-                    </tbody>
             </table>
-
         </div>
 
     </div>
