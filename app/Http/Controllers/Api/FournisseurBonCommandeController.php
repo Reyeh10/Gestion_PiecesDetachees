@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ExternalBonCommande;
 use App\Models\Product;
+use App\Models\ProductDepotStock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -305,13 +306,20 @@ class FournisseurBonCommandeController extends Controller
 
                         if ($product) {
 
-                            $quantiteDisponible =
-                                (float) ($product->quantity ?? 0);
+                            [$depotId, $quantiteDisponible, $disponible] =
+                                $this->resoudreDepot(
+                                    $product->id,
+                                    $quantiteDemandee,
+                                    $existante->depot_id
+                                );
 
                             $existante->update([
                                 'designation' =>
                                     $designation
                                     ?? $existante->designation,
+
+                                'depot_id' =>
+                                    $depotId,
 
                                 'quantite_demandee' =>
                                     $quantiteDemandee,
@@ -320,8 +328,7 @@ class FournisseurBonCommandeController extends Controller
                                     $quantiteDisponible,
 
                                 'disponible' =>
-                                    $quantiteDisponible
-                                    >= $quantiteDemandee,
+                                    $disponible,
 
                                 'prix_unitaire' =>
                                     $product->sale_price,
@@ -336,6 +343,9 @@ class FournisseurBonCommandeController extends Controller
 
                             $existante->update([
                                 'product_id' =>
+                                    null,
+
+                                'depot_id' =>
                                     null,
 
                                 'designation' =>
@@ -428,23 +438,23 @@ class FournisseurBonCommandeController extends Controller
                         ->first();
 
                     /*
-                     * Quantité disponible.
+                     * Dépôt, quantité disponible et disponibilité, calculés
+                     * sur le stock par dépôt (un seul dépôt -> choisi
+                     * automatiquement ; plusieurs -> le vendeur choisira).
                      */
 
-                    $quantiteDisponible =
-                        $product
-                            ? (float) ($product->quantity ?? 0)
-                            : 0;
-
-                    /*
-                     * Disponibilité.
-                     */
-
-                    $disponible =
-                        $product !== null
-                        &&
-                        $quantiteDisponible
-                        >= $quantiteDemandee;
+                    if ($product) {
+                        [$depotId, $quantiteDisponible, $disponible] =
+                            $this->resoudreDepot(
+                                $product->id,
+                                $quantiteDemandee,
+                                $existante?->depot_id
+                            );
+                    } else {
+                        $depotId = null;
+                        $quantiteDisponible = 0;
+                        $disponible = false;
+                    }
 
                     /*
                     |--------------------------------------------------------------------------
@@ -460,6 +470,9 @@ class FournisseurBonCommandeController extends Controller
                         [
                             'product_id' =>
                                 $product?->id,
+
+                            'depot_id' =>
+                                $depotId,
 
                             'reference' =>
                                 $reference,
@@ -669,5 +682,50 @@ class FournisseurBonCommandeController extends Controller
                     'Une erreur est survenue lors du traitement du bon de commande.',
             ], 500);
         }
+    }
+
+    /**
+     * Détermine le dépôt, la quantité disponible et la disponibilité d'une
+     * pièce identifiée, en tenant compte du stock par dépôt.
+     *
+     * - Aucun dépôt en stock                  -> [null, 0, false]
+     * - Un seul dépôt en stock                -> ce dépôt, sa quantité, dispo si suffisant
+     * - Plusieurs dépôts en stock             -> le dépôt déjà choisi s'il est encore
+     *   valable, sinon [null, quantité max, false] : le vendeur doit choisir.
+     *
+     * @return array{0:?int,1:float,2:bool} [depot_id, quantite_disponible, disponible]
+     */
+    private function resoudreDepot(int $productId, float $quantiteDemandee, ?int $depotPrefere = null): array
+    {
+        $stocks = ProductDepotStock::query()
+            ->where('product_id', $productId)
+            ->where('quantity', '>', 0)
+            ->orderByDesc('quantity')
+            ->get();
+
+        if ($stocks->isEmpty()) {
+            return [null, 0.0, false];
+        }
+
+        if ($stocks->count() === 1) {
+            $stock = $stocks->first();
+            $qte = (float) $stock->quantity;
+
+            return [(int) $stock->depot_id, $qte, $qte >= $quantiteDemandee];
+        }
+
+        // Plusieurs dépôts : on conserve le dépôt déjà retenu s'il tient encore.
+        if ($depotPrefere) {
+            $choisi = $stocks->firstWhere('depot_id', $depotPrefere);
+
+            if ($choisi) {
+                $qte = (float) $choisi->quantity;
+
+                return [(int) $choisi->depot_id, $qte, $qte >= $quantiteDemandee];
+            }
+        }
+
+        // Le vendeur devra choisir le dépôt sur la page du bon de commande.
+        return [null, (float) $stocks->first()->quantity, false];
     }
 }

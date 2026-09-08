@@ -35,10 +35,18 @@ class ExternalBonCommande extends Model
         return $this->belongsTo(Sale::class, 'vente_id');
     }
 
-    /** Toutes les pièces ont-elles été identifiées et sont-elles disponibles en stock ? */
+    /**
+     * Toutes les pièces ont-elles été identifiées, rattachées à un dépôt et
+     * sont-elles disponibles dans ce dépôt ? (conditions requises pour créer
+     * la vente : SaleController::store() exige un depot_id par ligne).
+     */
     public function toutesPiecesDisponibles(): bool
     {
         return $this->lignes->isNotEmpty()
-            && $this->lignes->every(fn (ExternalBonCommandeLigne $ligne) => $ligne->disponible === true && $ligne->product_id !== null);
+            && $this->lignes->every(fn (ExternalBonCommandeLigne $ligne) =>
+                $ligne->disponible === true
+                && $ligne->product_id !== null
+                && $ligne->depot_id !== null
+            );
     }
 }

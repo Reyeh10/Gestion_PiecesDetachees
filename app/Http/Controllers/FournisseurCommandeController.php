@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\ExternalBonCommande;
 use App\Models\ExternalBonCommandeLigne;
 use App\Models\Product;
+use App\Models\ProductDepotStock;
 use App\Models\Sale;
 use App\Models\Vehicle;
 use App\Services\AppAtelierApiService;
@@ -91,9 +92,19 @@ class FournisseurCommandeController extends Controller
             $fournisseurCommande->update(['vu_at' => now()]);
         }
 
-        $fournisseurCommande->load(['lignes' => fn ($q) => $q->orderBy('position'), 'lignes.product']);
+        $fournisseurCommande->load([
+            'lignes' => fn ($q) => $q->orderBy('position'),
+            'lignes.product.depotStocks' => fn ($q) => $q->where('quantity', '>', 0)->orderByDesc('quantity'),
+            'lignes.product.depotStocks.depot',
+            'lignes.depot',
+        ]);
 
-        $products = Product::with(['brand', 'model'])
+        $products = Product::with([
+            'brand',
+            'model',
+            'depotStocks' => fn ($q) => $q->where('quantity', '>', 0)->orderByDesc('quantity'),
+            'depotStocks.depot',
+        ])
             ->orderBy('designation')
             ->get();
 
@@ -106,41 +117,93 @@ class FournisseurCommandeController extends Controller
     /**
      * Le vendeur associe une ligne sans référence à une pièce trouvée dans
      * le stock (ou la marque manuellement indisponible s'il n'a rien trouvé).
+     *
+     * Tant que la vente n'est pas créée, une ligne reste entièrement
+     * modifiable : le vendeur peut re-sélectionner une autre pièce ou un
+     * autre dépôt et re-valider. Dès que la vente existe, toute modification
+     * est refusée (le stock a déjà été déduit).
      */
     public function updateLigne(Request $request, ExternalBonCommande $fournisseurCommande, ExternalBonCommandeLigne $ligne)
     {
+        abort_unless($ligne->external_bon_commande_id === $fournisseurCommande->id, 404);
+
+        if ($fournisseurCommande->vente_id) {
+            return back()->with('error', 'La vente a déjà été créée à partir de ce bon : les lignes ne sont plus modifiables.');
+        }
+
         $data = $request->validate([
             'product_id' => 'nullable|exists:products,id',
+            'depot_id'   => 'nullable|exists:depots,id',
             'note'       => 'nullable|string|max:255',
         ], [
             'note.max' => 'La note ne doit pas dépasser 255 caractères.',
         ]);
 
-        if (! empty($data['product_id'])) {
-            $product = Product::findOrFail($data['product_id']);
+        // Produit effectif : celui choisi dans le menu (ligne sans référence)
+        // ou celui déjà identifié automatiquement (ligne avec référence, on ne
+        // change alors que le dépôt).
+        $productId = $data['product_id'] ?? $ligne->product_id;
 
-            $ligne->update([
-                'product_id'          => $product->id,
-                'reference'           => $product->reference,
-                'quantite_disponible' => $product->quantity,
-                'disponible'          => $product->quantity >= $ligne->quantite_demandee,
-                'prix_unitaire'       => $product->sale_price,
-                'note'                => $data['note'] ?? null,
-            ]);
-        } else {
+        if (! $productId) {
             // Le vendeur a cherché et n'a rien trouvé de correspondant.
             $ligne->update([
                 'product_id'          => null,
+                'depot_id'            => null,
                 'quantite_disponible' => 0,
                 'disponible'          => false,
                 'prix_unitaire'       => null,
                 'note'                => $data['note'] ?? null,
             ]);
+
+            app(AppAtelierApiService::class)->envoyerDisponibilite($ligne);
+
+            return back()->with('success', 'Ligne marquée sans pièce correspondante et transmise au garage.');
         }
 
-        app(AppAtelierApiService::class)->envoyerDisponibilite($ligne);
+        $product = Product::findOrFail($productId);
+        $depotId = $data['depot_id'] ?: null;
 
-        return back()->with('success', 'Disponibilité mise à jour et transmise au garage.');
+        // Dépôts où la pièce a du stock.
+        $depotStocks = ProductDepotStock::where('product_id', $product->id)
+            ->where('quantity', '>', 0)
+            ->get();
+
+        // Un seul dépôt en stock : on le retient sans obliger le vendeur à le choisir.
+        if (! $depotId && $depotStocks->count() === 1) {
+            $depotId = (int) $depotStocks->first()->depot_id;
+        }
+
+        $depotStock = $depotId
+            ? $depotStocks->firstWhere('depot_id', $depotId)
+            : null;
+
+        if ($depotId && ! $depotStock) {
+            return back()->with('error', "Cette pièce n'a pas de stock dans le dépôt choisi.");
+        }
+
+        $qteDepot = $depotStock ? (float) $depotStock->quantity : 0.0;
+        $qteDemandee = (float) $ligne->quantite_demandee;
+
+        $ligne->update([
+            'product_id'          => $product->id,
+            'depot_id'            => $depotId,
+            // On NE réécrit PAS `reference` : elle reste vide pour une ligne
+            // sans référence garage, ce qui garde le menu de recherche pièce
+            // disponible pour corriger une identification manuelle erronée.
+            'quantite_disponible' => $depotId ? $qteDepot : null,
+            // Tant qu'aucun dépôt n'est choisi, la disponibilité reste indéterminée.
+            'disponible'          => $depotId ? ($qteDepot >= $qteDemandee) : null,
+            'prix_unitaire'       => $product->sale_price,
+            'note'                => $request->has('note') ? ($data['note'] ?? null) : $ligne->note,
+        ]);
+
+        if ($ligne->depot_id) {
+            app(AppAtelierApiService::class)->envoyerDisponibilite($ligne);
+
+            return back()->with('success', 'Disponibilité mise à jour et transmise au garage.');
+        }
+
+        return back()->with('success', 'Pièce identifiée. Choisissez le dépôt de prélèvement pour finaliser.');
     }
 
     /**
@@ -155,6 +218,15 @@ class FournisseurCommandeController extends Controller
 
         if ($fournisseurCommande->vente_id) {
             return redirect()->route('sales.show', $fournisseurCommande->vente_id);
+        }
+
+        $sansDepot = $fournisseurCommande->lignes
+            ->filter(fn (ExternalBonCommandeLigne $ligne) => $ligne->product_id && ! $ligne->depot_id);
+
+        if ($sansDepot->isNotEmpty()) {
+            $refs = $sansDepot->map(fn ($l) => $l->reference ?: $l->designation)->implode(', ');
+
+            return back()->with('error', "Impossible : choisissez d'abord le dépôt de prélèvement pour : {$refs}.");
         }
 
         if (! $fournisseurCommande->toutesPiecesDisponibles()) {
@@ -186,6 +258,7 @@ class FournisseurCommandeController extends Controller
 
         $items = $fournisseurCommande->lignes->map(fn (ExternalBonCommandeLigne $ligne) => [
             'product_id' => $ligne->product_id,
+            'depot_id'   => $ligne->depot_id,
             'quantity'   => (float) $ligne->quantite_demandee,
         ])->values()->all();
 
