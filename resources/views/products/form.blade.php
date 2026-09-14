@@ -433,12 +433,18 @@
         </div>
 
 
-        {{-- FAMILLE --}}
-        <div class="col-md-4 mb-3">
+        {{-- ========================================================= --}}
+{{-- FAMILLE --}}
+{{-- ========================================================= --}}
+<div class="col-md-4 mb-3">
 
-            <label for="family_id" class="form-label">
-                Famille
-            </label>
+    <label for="family_id" class="form-label">
+        Famille
+    </label>
+
+    <div class="reference-select-group">
+
+        <div class="reference-select-wrapper">
 
             <select
                 name="family_id"
@@ -448,45 +454,99 @@
                 <option value="">Sélectionner</option>
 
                 @foreach($families as $family)
+
                     <option
                         value="{{ $family->id }}"
-                        {{ (string) old('family_id', $product->family_id ?? '') === (string) $family->id ? 'selected' : '' }}
+                        {{ (string) old(
+                            'family_id',
+                            $product->family_id ?? ''
+                        ) === (string) $family->id ? 'selected' : '' }}
                     >
                         {{ $family->name }}
                     </option>
+
                 @endforeach
             </select>
 
         </div>
 
+        <button
+            type="button"
+            class="btn btn-primary reference-add-btn"
+            data-bs-toggle="modal"
+            data-bs-target="#familyModal"
+            title="Ajouter une famille"
+        >
+            <i class="bx bx-plus"></i>
+        </button>
 
+    </div>
+
+    @error('family_id')
+        <div class="text-danger small mt-1">
+            {{ $message }}
+        </div>
+    @enderror
+
+</div>
+
+
+        {{-- ========================================================= --}}
         {{-- SOUS-FAMILLE --}}
+        {{-- ========================================================= --}}
         <div class="col-md-4 mb-3">
 
             <label for="subfamily_id" class="form-label">
                 Sous-famille
             </label>
 
-            <select
-                name="subfamily_id"
-                id="subfamily_id"
-                class="form-control select2 @error('subfamily_id') is-invalid @enderror"
-            >
-                <option value="">Sélectionner</option>
+            <div class="reference-select-group">
 
-                @foreach($subfamilies as $sub)
-                    <option
-                        value="{{ $sub->id }}"
-                        data-family="{{ $sub->family_id }}"
-                        {{ (string) old('subfamily_id', $product->subfamily_id ?? '') === (string) $sub->id ? 'selected' : '' }}
+                <div class="reference-select-wrapper">
+
+                    <select
+                        name="subfamily_id"
+                        id="subfamily_id"
+                        class="form-control select2 @error('subfamily_id') is-invalid @enderror"
                     >
-                        {{ $sub->name }}
-                    </option>
-                @endforeach
-            </select>
+                        <option value="">Sélectionner</option>
+
+                        @foreach($subfamilies as $sub)
+
+                            <option
+                                value="{{ $sub->id }}"
+                                data-family="{{ $sub->family_id }}"
+                                {{ (string) old(
+                                    'subfamily_id',
+                                    $product->subfamily_id ?? ''
+                                ) === (string) $sub->id ? 'selected' : '' }}
+                            >
+                                {{ $sub->name }}
+                            </option>
+
+                        @endforeach
+                    </select>
+
+                </div>
+
+                <button
+                    type="button"
+                    class="btn btn-primary reference-add-btn"
+                    id="openSubfamilyModalButton"
+                    title="Ajouter une sous-famille"
+                >
+                    <i class="bx bx-plus"></i>
+                </button>
+
+            </div>
+
+            @error('subfamily_id')
+                <div class="text-danger small mt-1">
+                    {{ $message }}
+                </div>
+            @enderror
 
         </div>
-
 
         {{-- RAYON --}}
         <div class="col-md-4 mb-3">
@@ -1308,7 +1368,204 @@
 
     </div>
 </div>
+{{-- ============================================================
+    MODALE : NOUVELLE FAMILLE
+============================================================ --}}
+<div
+    class="modal fade reference-modal"
+    id="familyModal"
+    tabindex="-1"
+    aria-hidden="true"
+>
+    <div class="modal-dialog modal-dialog-centered">
 
+        <div class="modal-content">
+
+            <div class="modal-header">
+
+                <h5 class="modal-title">
+                    Ajouter une famille
+                </h5>
+
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Fermer"
+                ></button>
+
+            </div>
+
+            <div class="modal-body">
+
+                <div class="reference-modal-help">
+                    La nouvelle famille sera immédiatement ajoutée
+                    à la liste et sélectionnée.
+                </div>
+
+                <div
+                    class="alert alert-danger d-none"
+                    id="familyModalError"
+                ></div>
+
+                <label
+                    for="new_family_name"
+                    class="form-label"
+                >
+                    Nom de la famille
+                    <span class="text-danger">*</span>
+                </label>
+
+                <input
+                    type="text"
+                    id="new_family_name"
+                    class="form-control"
+                    maxlength="255"
+                    autocomplete="off"
+                >
+
+            </div>
+
+            <div class="modal-footer">
+
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-bs-dismiss="modal"
+                >
+                    Annuler
+                </button>
+
+                <button
+                    type="button"
+                    class="btn btn-primary"
+                    id="saveFamilyButton"
+                >
+                    <i class="bx bx-save me-1"></i>
+                    Enregistrer
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+
+{{-- ============================================================
+    MODALE : NOUVELLE SOUS-FAMILLE
+============================================================ --}}
+<div
+    class="modal fade reference-modal"
+    id="subfamilyModal"
+    tabindex="-1"
+    aria-hidden="true"
+>
+    <div class="modal-dialog modal-dialog-centered">
+
+        <div class="modal-content">
+
+            <div class="modal-header">
+
+                <h5 class="modal-title">
+                    Ajouter une sous-famille
+                </h5>
+
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Fermer"
+                ></button>
+
+            </div>
+
+            <div class="modal-body">
+
+                <div class="reference-modal-help">
+                    La sous-famille sera rattachée à la famille sélectionnée.
+                </div>
+
+                <div
+                    class="alert alert-danger d-none"
+                    id="subfamilyModalError"
+                ></div>
+
+                <div class="mb-3">
+
+                    <label
+                        for="new_subfamily_family_id"
+                        class="form-label"
+                    >
+                        Famille
+                        <span class="text-danger">*</span>
+                    </label>
+
+                    <select
+                        id="new_subfamily_family_id"
+                        class="form-control"
+                    >
+                        <option value="">
+                            Sélectionner une famille
+                        </option>
+
+                        @foreach($families as $family)
+                            <option value="{{ $family->id }}">
+                                {{ $family->name }}
+                            </option>
+                        @endforeach
+                    </select>
+
+                </div>
+
+                <div>
+
+                    <label
+                        for="new_subfamily_name"
+                        class="form-label"
+                    >
+                        Nom de la sous-famille
+                        <span class="text-danger">*</span>
+                    </label>
+
+                    <input
+                        type="text"
+                        id="new_subfamily_name"
+                        class="form-control"
+                        maxlength="255"
+                        autocomplete="off"
+                    >
+
+                </div>
+
+            </div>
+
+            <div class="modal-footer">
+
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-bs-dismiss="modal"
+                >
+                    Annuler
+                </button>
+
+                <button
+                    type="button"
+                    class="btn btn-primary"
+                    id="saveSubfamilyButton"
+                >
+                    <i class="bx bx-save me-1"></i>
+                    Enregistrer
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+</div>
 
 {{-- ============================================================
     MODALE : NOUVEAU RAYON
@@ -1612,7 +1869,8 @@ document.addEventListener('DOMContentLoaded', function () {
     |--------------------------------------------------------------------------
     */
 
-    const ajaxUrls = {
+   const ajaxUrls = {
+
         brand:
             @json(
                 route('product-options.brands.store')
@@ -1621,6 +1879,16 @@ document.addEventListener('DOMContentLoaded', function () {
         model:
             @json(
                 route('product-options.models.store')
+            ),
+
+        family:
+            @json(
+                route('product-options.families.store')
+            ),
+
+        subfamily:
+            @json(
+                route('product-options.subfamilies.store')
             ),
 
         rayon:
@@ -2763,6 +3031,412 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     setButtonLoading(
                         saveModelButton,
+                        false
+                    );
+                }
+            }
+        );
+    }
+
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | AJOUT FAMILLE
+    |--------------------------------------------------------------------------
+    */
+
+    const saveFamilyButton =
+        document.getElementById(
+            'saveFamilyButton'
+        );
+
+    if (saveFamilyButton) {
+
+        saveFamilyButton.addEventListener(
+            'click',
+            async function () {
+
+                const input =
+                    document.getElementById(
+                        'new_family_name'
+                    );
+
+                const errorBox =
+                    document.getElementById(
+                        'familyModalError'
+                    );
+
+                clearAjaxError(errorBox);
+
+                const name =
+                    String(
+                        input?.value || ''
+                    ).trim();
+
+                if (!name) {
+
+                    showAjaxError(
+                        errorBox,
+                        'Veuillez saisir le nom de la famille.'
+                    );
+
+                    return;
+                }
+
+                try {
+
+                    setButtonLoading(
+                        saveFamilyButton,
+                        true
+                    );
+
+                    const data =
+                        await postJson(
+                            ajaxUrls.family,
+                            {
+                                name: name
+                            }
+                        );
+
+                    addOptionAndSelect(
+                        familySelect,
+                        data.item
+                    );
+
+                    /*
+                    | Ajouter aussi la famille dans la liste
+                    | de la modale "Nouvelle sous-famille".
+                    */
+                    const modalFamilySelect =
+                        document.getElementById(
+                            'new_subfamily_family_id'
+                        );
+
+                    if (modalFamilySelect) {
+
+                        const exists =
+                            Array
+                                .from(
+                                    modalFamilySelect.options
+                                )
+                                .some(
+                                    option =>
+                                        String(option.value)
+                                        ===
+                                        String(data.item.id)
+                                );
+
+                        if (!exists) {
+
+                            modalFamilySelect.add(
+                                new Option(
+                                    data.item.name,
+                                    data.item.id
+                                )
+                            );
+                        }
+
+                        modalFamilySelect.value =
+                            String(data.item.id);
+                    }
+
+                    /*
+                    | Une nouvelle famille vient d'être choisie.
+                    | Réinitialiser la sous-famille.
+                    */
+                    if (subfamilySelect) {
+
+                        subfamilySelect.value = '';
+
+                        filterSubfamiliesByFamily(
+                            false
+                        );
+                    }
+
+                    if (input) {
+                        input.value = '';
+                    }
+
+                    closeBootstrapModal(
+                        'familyModal'
+                    );
+
+                } catch (error) {
+
+                    showAjaxError(
+                        errorBox,
+                        error.message
+                    );
+
+                } finally {
+
+                    setButtonLoading(
+                        saveFamilyButton,
+                        false
+                    );
+                }
+            }
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | OUVRIR SOUS-FAMILLE
+    |--------------------------------------------------------------------------
+    */
+
+    const openSubfamilyModalButton =
+        document.getElementById(
+            'openSubfamilyModalButton'
+        );
+
+    if (openSubfamilyModalButton) {
+
+        openSubfamilyModalButton.addEventListener(
+            'click',
+            function () {
+
+                const currentFamilyId =
+                    familySelect?.value || '';
+
+                if (!currentFamilyId) {
+
+                    alert(
+                        'Veuillez sélectionner une famille avant d’ajouter une sous-famille.'
+                    );
+
+                    return;
+                }
+
+                const modalFamilySelect =
+                    document.getElementById(
+                        'new_subfamily_family_id'
+                    );
+
+                if (modalFamilySelect) {
+
+                    modalFamilySelect.value =
+                        String(currentFamilyId);
+                }
+
+                clearAjaxError(
+                    document.getElementById(
+                        'subfamilyModalError'
+                    )
+                );
+
+                openBootstrapModal(
+                    'subfamilyModal'
+                );
+            }
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | AJOUT SOUS-FAMILLE
+    |--------------------------------------------------------------------------
+    */
+
+    const saveSubfamilyButton =
+        document.getElementById(
+            'saveSubfamilyButton'
+        );
+
+    if (saveSubfamilyButton) {
+
+        saveSubfamilyButton.addEventListener(
+            'click',
+            async function () {
+
+                const familyInput =
+                    document.getElementById(
+                        'new_subfamily_family_id'
+                    );
+
+                const nameInput =
+                    document.getElementById(
+                        'new_subfamily_name'
+                    );
+
+                const errorBox =
+                    document.getElementById(
+                        'subfamilyModalError'
+                    );
+
+                clearAjaxError(errorBox);
+
+                const familyId =
+                    familyInput?.value || '';
+
+                const name =
+                    String(
+                        nameInput?.value || ''
+                    ).trim();
+
+                if (!familyId) {
+
+                    showAjaxError(
+                        errorBox,
+                        'Veuillez sélectionner une famille.'
+                    );
+
+                    return;
+                }
+
+                if (!name) {
+
+                    showAjaxError(
+                        errorBox,
+                        'Veuillez saisir le nom de la sous-famille.'
+                    );
+
+                    return;
+                }
+
+                try {
+
+                    setButtonLoading(
+                        saveSubfamilyButton,
+                        true
+                    );
+
+                    const data =
+                        await postJson(
+                            ajaxUrls.subfamily,
+                            {
+                                family_id:
+                                    familyId,
+
+                                name:
+                                    name
+                            }
+                        );
+
+                    /*
+                    | Synchroniser la famille du formulaire.
+                    */
+                    if (
+                        familySelect
+                        &&
+                        String(familySelect.value)
+                        !==
+                        String(data.item.family_id)
+                    ) {
+
+                        familySelect.value =
+                            String(
+                                data.item.family_id
+                            );
+
+                        refreshSelect2(
+                            familySelect
+                        );
+                    }
+
+                    /*
+                    | Vérifier si la sous-famille existe déjà
+                    | dans le select avant de l'ajouter.
+                    */
+                    let option =
+                        Array
+                            .from(
+                                subfamilySelect.options
+                            )
+                            .find(
+                                item =>
+                                    String(item.value)
+                                    ===
+                                    String(data.item.id)
+                            );
+
+                    if (!option) {
+
+                        option =
+                            new Option(
+                                data.item.name,
+                                data.item.id,
+                                true,
+                                true
+                            );
+
+                        option.dataset.family =
+                            String(
+                                data.item.family_id
+                            );
+
+                        subfamilySelect.add(
+                            option
+                        );
+
+                    } else {
+
+                        option.text =
+                            data.item.name;
+
+                        option.dataset.family =
+                            String(
+                                data.item.family_id
+                            );
+                    }
+
+                    /*
+                    | Filtrer selon la famille puis sélectionner
+                    | la sous-famille créée.
+                    */
+                    filterSubfamiliesByFamily(
+                        true
+                    );
+
+                    subfamilySelect.value =
+                        String(data.item.id);
+
+                    refreshSelect2(
+                        subfamilySelect
+                    );
+
+                    if (
+                        typeof window.jQuery
+                        !==
+                        'undefined'
+                    ) {
+
+                        window
+                            .jQuery(
+                                subfamilySelect
+                            )
+                            .val(
+                                String(
+                                    data.item.id
+                                )
+                            )
+                            .trigger(
+                                'change.select2'
+                            );
+                    }
+
+                    if (nameInput) {
+                        nameInput.value = '';
+                    }
+
+                    closeBootstrapModal(
+                        'subfamilyModal'
+                    );
+
+                } catch (error) {
+
+                    showAjaxError(
+                        errorBox,
+                        error.message
+                    );
+
+                } finally {
+
+                    setButtonLoading(
+                        saveSubfamilyButton,
                         false
                     );
                 }

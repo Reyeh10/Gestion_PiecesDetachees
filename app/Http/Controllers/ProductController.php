@@ -2485,4 +2485,147 @@ public function exportExcel()
                 'Produit supprimé avec succès.'
             );
     }
+
+    /*
+|--------------------------------------------------------------------------
+| AJAX - AJOUT FAMILLE
+|--------------------------------------------------------------------------
+*/
+public function storeFamilyOption(Request $request)
+{
+    $validated = $request->validate([
+        'name' => [
+            'required',
+            'string',
+            'max:255',
+        ],
+    ]);
+
+    $name = trim(
+        (string) $validated['name']
+    );
+
+    /*
+    |--------------------------------------------------------------------------
+    | VÉRIFIER SI LA FAMILLE EXISTE DÉJÀ
+    |--------------------------------------------------------------------------
+    */
+    $family = FamilyModel::query()
+        ->whereRaw(
+            'LOWER(name) = ?',
+            [
+                mb_strtolower($name),
+            ]
+        )
+        ->first();
+
+    /*
+    |--------------------------------------------------------------------------
+    | CRÉATION SI ELLE N'EXISTE PAS
+    |--------------------------------------------------------------------------
+    */
+    if (!$family) {
+
+        $family = FamilyModel::create([
+            'name' => $name,
+        ]);
+    }
+
+    return response()->json([
+        'success' => true,
+
+        'message' =>
+            'Famille enregistrée avec succès.',
+
+        'item' => [
+            'id' =>
+                $family->id,
+
+            'name' =>
+                $family->name,
+        ],
+    ]);
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| AJAX - AJOUT SOUS-FAMILLE
+|--------------------------------------------------------------------------
+*/
+public function storeSubfamilyOption(Request $request)
+{
+    $validated = $request->validate([
+        'family_id' => [
+            'required',
+            'exists:families,id',
+        ],
+
+        'name' => [
+            'required',
+            'string',
+            'max:255',
+        ],
+    ]);
+
+    $familyId =
+        (int) $validated['family_id'];
+
+    $name =
+        trim(
+            (string) $validated['name']
+        );
+
+    /*
+    |--------------------------------------------------------------------------
+    | VÉRIFIER SI LA SOUS-FAMILLE EXISTE DÉJÀ POUR CETTE FAMILLE
+    |--------------------------------------------------------------------------
+    */
+    $subfamily = Subfamily::query()
+        ->where(
+            'family_id',
+            $familyId
+        )
+        ->whereRaw(
+            'LOWER(name) = ?',
+            [
+                mb_strtolower($name),
+            ]
+        )
+        ->first();
+
+    /*
+    |--------------------------------------------------------------------------
+    | CRÉATION
+    |--------------------------------------------------------------------------
+    */
+    if (!$subfamily) {
+
+        $subfamily = Subfamily::create([
+            'family_id' =>
+                $familyId,
+
+            'name' =>
+                $name,
+        ]);
+    }
+
+    return response()->json([
+        'success' => true,
+
+        'message' =>
+            'Sous-famille enregistrée avec succès.',
+
+        'item' => [
+            'id' =>
+                $subfamily->id,
+
+            'name' =>
+                $subfamily->name,
+
+            'family_id' =>
+                $subfamily->family_id,
+        ],
+    ]);
+}
 }

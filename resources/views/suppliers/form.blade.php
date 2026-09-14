@@ -86,40 +86,52 @@
     </div>
 
 
-    {{-- DEVISE --}}
-    <div class="col-md-6 mb-3">
 
-        <label class="form-label">
+    {{-- ========================================================= --}}
+    {{-- DEVISE --}}
+    {{-- ========================================================= --}}
+    <div class="mb-3">
+        <label for="currency" class="form-label">
             Devise
         </label>
 
-        <select name="currency"
-                class="form-control">
-
-            <option value="XAF"
-                {{ old('currency', $supplier->currency ?? '') == 'XAF' ? 'selected' : '' }}>
-                XAF
+        <select
+            name="currency"
+            id="currency"
+            class="form-select @error('currency') is-invalid @enderror"
+        >
+            <option value="FDJ"
+                {{ old('currency', $supplier->currency ?? 'FDJ') === 'FDJ' ? 'selected' : '' }}>
+                FDJ - Franc Djiboutien
             </option>
 
             <option value="USD"
-                {{ old('currency', $supplier->currency ?? '') == 'USD' ? 'selected' : '' }}>
-                USD
-            </option>
-
-            <option value="FDJ"
-                {{ old('currency', $supplier->currency ?? '') == 'FDJ' ? 'selected' : '' }}>
-                FDJ
+                {{ old('currency', $supplier->currency ?? 'FDJ') === 'USD' ? 'selected' : '' }}>
+                USD - Dollar américain ($)
             </option>
 
             <option value="EUR"
-                {{ old('currency', $supplier->currency ?? '') == 'EUR' ? 'selected' : '' }}>
-                EUR
+                {{ old('currency', $supplier->currency ?? 'FDJ') === 'EUR' ? 'selected' : '' }}>
+                EUR - Euro (€)
             </option>
 
+            <option value="AED"
+                {{ old('currency', $supplier->currency ?? 'FDJ') === 'AED' ? 'selected' : '' }}>
+                AED - Dirham des Émirats arabes unis (د.إ)
+            </option>
+
+            <option value="CNY"
+                {{ old('currency', $supplier->currency ?? 'FDJ') === 'CNY' ? 'selected' : '' }}>
+                CNY - Yuan chinois (¥)
+            </option>
         </select>
 
+        @error('currency')
+            <div class="invalid-feedback">
+                {{ $message }}
+            </div>
+        @enderror
     </div>
-
 
     {{-- ADRESSE --}}
     <div class="col-md-12 mb-3">

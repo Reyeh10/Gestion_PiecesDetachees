@@ -317,6 +317,40 @@ Route::middleware([
         [ProductOptionController::class, 'storeModel']
     )->name('product-options.models.store');
 
+    /*
+    |--------------------------------------------------------------------------
+    | AJOUTER UNE FAMILLE
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/product-options/families',
+        [
+            ProductController::class,
+            'storeFamilyOption',
+        ]
+    )->name(
+        'product-options.families.store'
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | AJOUTER UNE SOUS-FAMILLE
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/product-options/subfamilies',
+        [
+            ProductController::class,
+            'storeSubfamilyOption',
+        ]
+    )->name(
+        'product-options.subfamilies.store'
+    );
+
+
 
     /*
     |--------------------------------------------------------------------------
