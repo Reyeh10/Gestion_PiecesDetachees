@@ -161,7 +161,8 @@ class FournisseurCommandeController extends Controller
         }
 
         $product = Product::findOrFail($productId);
-        $depotId = $data['depot_id'] ?: null;
+       // $depotId = $data['depot_id'] ?: null;
+       $depotId = $data['depot_id'] ?? null;
 
         // Dépôts où la pièce a du stock.
         $depotStocks = ProductDepotStock::where('product_id', $product->id)
