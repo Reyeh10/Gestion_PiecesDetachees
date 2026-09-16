@@ -105,6 +105,15 @@
 
     }
 
+    /* Empêche le libellé d'un lien de repousser (ou de faire chevaucher)
+       son badge de notification : le texte se tronque avec "…" au lieu de
+       déborder derrière le badge. */
+    #layout-menu .menu-link > .flex-grow-1 {
+
+        min-width: 0 !important;
+
+    }
+
     @media (min-width: 1200px) {
 
         #layout-menu {
@@ -657,7 +666,7 @@
 
     </a>
 
-    
+
 
 </div>
 
@@ -1773,7 +1782,7 @@
 
                             <i class="menu-icon tf-icons bx bx-receipt"></i>
 
-                            <div>
+                            <div class="flex-grow-1 text-truncate">
 
                                 Commandes garage
 
@@ -1783,7 +1792,7 @@
 
                             @if($nouvellesCommandesGarage > 0)
 
-                                <div class="badge bg-danger rounded-pill ms-auto">
+                                <div class="badge bg-danger rounded-pill flex-shrink-0 ms-2">
 
                                     {{ $nouvellesCommandesGarage }}
 

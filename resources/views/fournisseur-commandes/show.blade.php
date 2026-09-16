@@ -2,6 +2,20 @@
 
 @section('content')
 
+@php
+    // Stock par dépôt de chaque produit, pour permettre au vendeur de choisir
+    // le dépôt de prélèvement (comme dans la vente normale) sans recharger la page.
+    $depotsByProduct = $products->mapWithKeys(function ($product) {
+        return [
+            $product->id => $product->depotStocks->map(fn ($stock) => [
+                'depot_id' => $stock->depot_id,
+                'name'     => $stock->depot->name ?? ('Dépôt #' . $stock->depot_id),
+                'quantity' => (float) $stock->quantity,
+            ])->values(),
+        ];
+    });
+@endphp
+
 <style>
 
     .fc-card {
@@ -227,7 +241,7 @@
                         <th>Quantité demandée</th>
                         <th>Stock chez nous</th>
                         <th>Prix de vente</th>
-                        <th style="min-width:340px;">Identification / Disponibilité</th>
+                        <th style="min-width:420px;">Identification / Disponibilité</th>
                     </tr>
                 </thead>
 
@@ -279,6 +293,22 @@
                                             @endforeach
                                         </select>
 
+                                        {{-- Dépôt de prélèvement : requis pour créer la vente, comme sur
+                                             la vente normale. Repeuplé en JS quand la pièce change ;
+                                             pré-rempli ici si une pièce est déjà identifiée. --}}
+                                        <select name="depot_id" class="form-select form-select-sm ligne-depot-select" style="width:220px;"
+                                                @unless($ligne->product) disabled @endunless>
+                                            <option value="">— Choisir le dépôt —</option>
+                                            @if($ligne->product)
+                                                @foreach($ligne->product->depotStocks as $stock)
+                                                    <option value="{{ $stock->depot_id }}" @selected($ligne->depot_id === $stock->depot_id)>
+                                                        {{ $stock->depot->name ?? ('Dépôt #' . $stock->depot_id) }}
+                                                        — stock: {{ (float) $stock->quantity }}
+                                                    </option>
+                                                @endforeach
+                                            @endif
+                                        </select>
+
                                         <input type="text" name="note" value="{{ $ligne->note }}"
                                                placeholder="Note (optionnel — ex: raison d'indisponibilité)"
                                                class="form-control form-control-sm ligne-note-input" style="width:220px;"
@@ -292,8 +322,10 @@
                                         @if($ligne->product_id)
                                             @if($ligne->disponible)
                                                 <span class="badge-dispo">Disponible (identifiée manuellement)</span>
-                                            @else
+                                            @elseif($ligne->depot_id)
                                                 <span class="badge-indispo">Indisponible</span>
+                                            @else
+                                                <span class="badge-attente">Pièce trouvée — choisissez le dépôt</span>
                                             @endif
                                         @elseif(! is_null($ligne->disponible))
                                             <span class="badge-indispo">Marquée indisponible</span>
@@ -305,8 +337,41 @@
                                         @endif
                                     </div>
 
-                                @elseif($ligne->disponible)
-                                    <span class="badge-dispo">Disponible</span>
+                                @elseif($ligne->product_id)
+
+                                    {{-- Référence reconnue automatiquement : le dépôt peut rester à
+                                         choisir si la pièce existe dans plusieurs dépôts. --}}
+                                    <form method="POST"
+                                          action="{{ route('fournisseur-commandes.lignes.update', [$commande, $ligne]) }}"
+                                          class="d-flex flex-wrap align-items-center gap-2">
+
+                                        @csrf
+                                        @method('PUT')
+
+                                        <select name="depot_id" class="form-select form-select-sm" style="width:220px;">
+                                            <option value="">— Choisir le dépôt —</option>
+                                            @foreach($ligne->product->depotStocks as $stock)
+                                                <option value="{{ $stock->depot_id }}" @selected($ligne->depot_id === $stock->depot_id)>
+                                                    {{ $stock->depot->name ?? ('Dépôt #' . $stock->depot_id) }}
+                                                    — stock: {{ (float) $stock->quantity }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+
+                                        <button type="submit" class="btn btn-sm btn-primary flex-shrink-0">Valider</button>
+
+                                    </form>
+
+                                    <div class="mt-2">
+                                        @if($ligne->disponible)
+                                            <span class="badge-dispo">Disponible</span>
+                                        @elseif($ligne->depot_id)
+                                            <span class="badge-indispo">Indisponible</span>
+                                        @else
+                                            <span class="badge-attente">Pièce trouvée — choisissez le dépôt</span>
+                                        @endif
+                                    </div>
+
                                 @else
                                     <span class="badge-indispo">Indisponible</span>
                                 @endif
@@ -325,6 +390,12 @@
     </div>
 
 </div>
+
+<script>
+    // Stock par dépôt de chaque produit (id produit -> [{depot_id, name, quantity}]),
+    // utilisé pour repeupler le menu "Dépôt" quand le vendeur choisit une pièce.
+    window.STCD_PRODUCT_DEPOTS = @json($depotsByProduct);
+</script>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -364,18 +435,52 @@
 
         // La note ne sert qu'à expliquer une indisponibilité : elle ne s'affiche
         // que quand aucune pièce n'est sélectionnée dans le menu déroulant.
+        // Le dépôt est repeuplé avec le stock de la pièce choisie, comme sur
+        // la vente normale, pour que "Créer la vente" ne soit plus refusée
+        // faute de dépôt de prélèvement.
+        function escapeHtml(str) {
+            return $('<div>').text(str == null ? '' : str).html();
+        }
+
+        function populateDepotSelect($depot, depots, selectedDepotId) {
+            var html = '<option value="">— Choisir le dépôt —</option>';
+
+            (depots || []).forEach(function (d) {
+                var selected = (selectedDepotId !== undefined && selectedDepotId !== null
+                    && String(selectedDepotId) === String(d.depot_id)) ? 'selected' : '';
+
+                html += '<option value="' + d.depot_id + '" ' + selected + '>'
+                    + escapeHtml(d.name) + ' — stock: ' + d.quantity
+                    + '</option>';
+            });
+
+            $depot.html(html);
+            $depot.prop('disabled', !depots || depots.length === 0);
+        }
+
         $('.ligne-identification-form').each(function () {
             var $form = $(this);
             var $select = $form.find('.ligne-product-select');
             var $note = $form.find('.ligne-note-input');
+            var $depot = $form.find('.ligne-depot-select');
 
             function toggleNote() {
                 $note.prop('hidden', !!$select.val());
             }
 
-            $select.on('change', toggleNote);
+            $select.on('change', function () {
+                toggleNote();
+                var productId = $select.val();
+                var depots = productId ? (window.STCD_PRODUCT_DEPOTS[productId] || []) : [];
+                populateDepotSelect($depot, depots, null);
+            });
+
             toggleNote();
         });
     });
 </script>
+
+@push('scripts')
+    <script src="{{ asset('assets/vendor/libs/select2/select2.js') }}"></script>
+@endpush
 @endsection
