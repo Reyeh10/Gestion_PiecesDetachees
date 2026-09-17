@@ -859,6 +859,58 @@
             </div>
         </div>
 
+        <div class="product-section-card">
+            <div class="product-section-header">
+                <i class="bx bx-store-alt"></i>
+                Stock par dépôt
+            </div>
+
+            <div class="product-section-body">
+                @if($product->depotStocks->count() > 0)
+                    <div class="supplier-table-wrapper">
+                        <table class="table table-bordered table-hover supplier-table">
+                            <thead>
+                                <tr>
+                                    <th>Dépôt</th>
+                                    <th>Quantité</th>
+                                    <th>Rayon</th>
+                                    <th>Emplacement</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                @foreach($product->depotStocks as $depotStock)
+                                    <tr>
+                                        <td>
+                                            <strong>{{ $depotStock->depot?->name ?? 'Non défini' }}</strong>
+                                        </td>
+
+                                        <td>
+                                            {{ number_format((float) $depotStock->quantity, 2, ',', ' ') }}
+                                            {{ $unitLabel }}
+                                        </td>
+
+                                        <td>
+                                            {{ $depotStock->rayon?->name ?? 'Non défini' }}
+                                        </td>
+
+                                        <td>
+                                            {{ $depotStock->location?->name ?? 'Non défini' }}
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @else
+                    <div class="empty-supplier">
+                        <i class="bx bx-info-circle me-1"></i>
+                        Cette pièce n’a de stock enregistré dans aucun dépôt.
+                    </div>
+                @endif
+            </div>
+        </div>
+
     </div>
 </div>
 

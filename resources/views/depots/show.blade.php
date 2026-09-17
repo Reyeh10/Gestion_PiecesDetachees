@@ -348,6 +348,14 @@
                                     Modèle
                                 </th>
 
+                                <th>
+                                    Rayon
+                                </th>
+
+                                <th>
+                                    Emplacement
+                                </th>
+
                                 <th class="text-center">
                                     Stock
                                 </th>
@@ -414,6 +422,22 @@
                                     <td>
 
                                         {{ $stock->product->model->name ?? '-' }}
+
+                                    </td>
+
+
+                                    {{-- RAYON --}}
+                                    <td>
+
+                                        {{ $stock->rayon->name ?? 'Non défini' }}
+
+                                    </td>
+
+
+                                    {{-- EMPLACEMENT --}}
+                                    <td>
+
+                                        {{ $stock->location->name ?? 'Non défini' }}
 
                                     </td>
 
@@ -491,7 +515,7 @@
                                 <tr id="initialEmptyRow">
 
                                     <td
-                                        colspan="6"
+                                        colspan="8"
                                         class="text-center text-muted py-4"
                                     >
 

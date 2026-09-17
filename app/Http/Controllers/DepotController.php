@@ -137,6 +137,8 @@ class DepotController extends Controller
                 ->with([
                     'product.brand',
                     'product.model',
+                    'rayon',
+                    'location',
                 ])
                 ->where(
                     'depot_id',

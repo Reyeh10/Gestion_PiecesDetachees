@@ -908,6 +908,20 @@ class ProductController extends Controller
             $depotStock->quantity +=
                 (float) ($product['quantity'] ?? 0);
 
+            /*
+            |--------------------------------------------------------------------------
+            | RAYON / EMPLACEMENT PROPRES À CE DÉPÔT
+            |--------------------------------------------------------------------------
+            |
+            | Une même pièce peut se trouver dans plusieurs dépôts, chacun avec un
+            | rayon/emplacement différent. On les enregistre donc sur la ligne de
+            | stock de CE dépôt, et pas seulement sur la fiche produit globale.
+            |
+            */
+
+            $depotStock->rayon_id = $rayon->id;
+            $depotStock->location_id = $location->id;
+
             $depotStock->save();
 
             /*
@@ -1645,6 +1659,10 @@ public function show(Product $product)
 
         'saleItems.sale',
 
+        'depotStocks.depot',
+        'depotStocks.rayon',
+        'depotStocks.location',
+
     ]);
 
     /*
@@ -2154,6 +2172,8 @@ public function store(Request $request)
         ],
         [
             'quantity' => $availableQuantity,
+            'rayon_id' => $request->rayon_id,
+            'location_id' => $request->location_id,
         ]
     );
 
