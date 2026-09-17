@@ -10,6 +10,8 @@ class ProductDepotStock extends Model
 
         'product_id',
         'depot_id',
+        'rayon_id',
+        'location_id',
         'quantity',
 
     ];
@@ -34,5 +36,27 @@ class ProductDepotStock extends Model
     public function depot()
     {
         return $this->belongsTo(Depot::class);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | RAYON
+    |--------------------------------------------------------------------------
+    */
+
+    public function rayon()
+    {
+        return $this->belongsTo(Rayon::class);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | EMPLACEMENT
+    |--------------------------------------------------------------------------
+    */
+
+    public function location()
+    {
+        return $this->belongsTo(Location::class);
     }
 }
