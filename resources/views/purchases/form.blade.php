@@ -1,17 +1,22 @@
 <div class="row">
 
     {{-- FOURNISSEUR --}}
-    <div class="col-12 mb-4">
+    <div class="col-md-6 mb-4">
 
-        <label class="form-label fw-bold">
+        <label
+            for="supplier_id"
+            class="form-label fw-bold"
+        >
             Fournisseur
+            <span class="text-danger">*</span>
         </label>
 
         <select
             name="supplier_id"
             id="supplier_id"
-            class="form-control"
-            required>
+            class="form-select @error('supplier_id') is-invalid @enderror"
+            required
+        >
 
             <option value="">
                 -- Sélectionner fournisseur --
@@ -19,19 +24,81 @@
 
             @foreach($suppliers as $supplier)
 
-                <option value="{{ $supplier->id }}">
-
+                <option
+                    value="{{ $supplier->id }}"
+                    @selected(
+                        old('supplier_id') == $supplier->id
+                    )
+                >
                     {{ $supplier->name }}
-
                 </option>
 
             @endforeach
 
         </select>
 
+        @error('supplier_id')
+            <div class="invalid-feedback">
+                {{ $message }}
+            </div>
+        @enderror
+
+    </div>
+
+
+    {{-- DÉPÔT DE RÉCEPTION --}}
+    <div class="col-md-6 mb-4">
+
+        <label
+            for="depot_id"
+            class="form-label fw-bold"
+        >
+            Dépôt de réception
+            <span class="text-danger">*</span>
+        </label>
+
+        <select
+            name="depot_id"
+            id="depot_id"
+            class="form-select @error('depot_id') is-invalid @enderror"
+            required
+        >
+
+            <option value="">
+                -- Sélectionner le dépôt --
+            </option>
+
+            @foreach($depots as $depot)
+
+                <option
+                    value="{{ $depot->id }}"
+                    @selected(
+                        old('depot_id') == $depot->id
+                    )
+                >
+                    {{ $depot->code ? $depot->code . ' - ' : '' }}
+                    {{ $depot->name }}
+                </option>
+
+            @endforeach
+
+        </select>
+
+        @error('depot_id')
+            <div class="invalid-feedback">
+                {{ $message }}
+            </div>
+        @enderror
+
+        <div class="form-text">
+            Toutes les pièces de cet achat seront réceptionnées
+            dans ce dépôt.
+        </div>
+
     </div>
 
 </div>
+
 
 {{-- TABLE PRODUITS --}}
 <div class="table-responsive">
@@ -47,7 +114,7 @@
                 </th>
 
                 <th width="10%">
-                    Stock
+                    Stock total
                 </th>
 
                 <th width="15%">
@@ -71,265 +138,324 @@
         </thead>
 
         <tbody id="purchase-items-body">
-
         </tbody>
 
     </table>
 
 </div>
 
+
 <div class="mb-3">
 
     <button
         type="button"
         id="add-product-btn"
-        class="btn btn-success">
-
+        class="btn btn-success"
+    >
         + Ajouter produit
-
     </button>
 
 </div>
 
+
 <div class="text-end mb-4">
 
     <h3>
-
         Total :
         <span id="grand-total">
             0.00
         </span>
         $
-
     </h3>
 
 </div>
+
 
 <div class="text-end">
 
     <button
         type="submit"
-        class="btn btn-primary">
-
+        class="btn btn-primary"
+    >
         Enregistrer achat
-
     </button>
 
 </div>
 
+
 <script>
 
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener(
+    'DOMContentLoaded',
+    function () {
 
-    /*
-    |--------------------------------------------------------------------------
-    | ELEMENTS
-    |--------------------------------------------------------------------------
-    */
+        /*
+        |--------------------------------------------------------------------------
+        | ELEMENTS
+        |--------------------------------------------------------------------------
+        */
 
-    const supplierSelect =
-        document.getElementById('supplier_id');
-
-    const addButton =
-        document.getElementById('add-product-btn');
-
-    const tbody =
-        document.getElementById('purchase-items-body');
-
-    const totalElement =
-        document.getElementById('grand-total');
-
-    let supplierProducts = [];
-
-    let rowIndex = 0;
-
-    /*
-    |--------------------------------------------------------------------------
-    | LOAD PRODUITS FOURNISSEUR
-    |--------------------------------------------------------------------------
-    */
-
-    supplierSelect.addEventListener('change', function () {
-
-        const supplierId = this.value;
-
-        tbody.innerHTML = '';
-
-        totalElement.innerHTML = '0.00';
-
-        if (!supplierId) {
-
-            supplierProducts = [];
-
-            return;
-        }
-
-        fetch(
-            `/purchases/supplier-products/${supplierId}`
-        )
-        .then(response => response.json())
-        .then(data => {
-
-            supplierProducts = data;
-
-            console.log(data);
-
-        })
-        .catch(error => {
-
-            console.error(error);
-
-            alert(
-                'Erreur chargement produits fournisseur'
+        const supplierSelect =
+            document.getElementById(
+                'supplier_id'
             );
 
-        });
-
-    });
-
-    /*
-    |--------------------------------------------------------------------------
-    | AJOUTER LIGNE
-    |--------------------------------------------------------------------------
-    */
-
-    addButton.addEventListener('click', function () {
-
-        const supplierId =
-            supplierSelect.value;
-
-        if (!supplierId) {
-
-            alert(
-                'Veuillez sélectionner un fournisseur.'
+        const depotSelect =
+            document.getElementById(
+                'depot_id'
             );
 
-            return;
-        }
-
-        if (supplierProducts.length === 0) {
-
-            alert(
-                'Aucun produit pour ce fournisseur.'
+        const addButton =
+            document.getElementById(
+                'add-product-btn'
             );
 
-            return;
-        }
+        const tbody =
+            document.getElementById(
+                'purchase-items-body'
+            );
 
-        let options = '';
+        const totalElement =
+            document.getElementById(
+                'grand-total'
+            );
 
-        supplierProducts.forEach(product => {
+        let supplierProducts = [];
 
-            options += `
+        let rowIndex = 0;
 
-                <option
-                    value="${product.id}"
-                    data-price="${product.purchase_price}"
-                    data-stock="${product.stock}">
 
-                    ${product.reference}
-                    -
-                    ${product.designation}
+        /*
+        |--------------------------------------------------------------------------
+        | CHARGER PRODUITS FOURNISSEUR
+        |--------------------------------------------------------------------------
+        */
 
-                </option>
+        supplierSelect.addEventListener(
+            'change',
+            function () {
 
-            `;
-        });
+                const supplierId =
+                    this.value;
 
-        const row = `
+                tbody.innerHTML = '';
 
-            <tr>
+                totalElement.innerHTML =
+                    '0.00';
 
-                <td>
+                supplierProducts = [];
 
-                    <select
-                        name="items[${rowIndex}][product_id]"
-                        class="form-control product-select"
-                        required>
+                if (!supplierId) {
+                    return;
+                }
 
-                        <option value="">
-                            -- Produit --
-                        </option>
+                fetch(
+                    `/purchases/supplier-products/${supplierId}`
+                )
+                .then(response => {
 
-                        ${options}
+                    if (!response.ok) {
 
-                    </select>
+                        throw new Error(
+                            'Erreur HTTP '
+                            +
+                            response.status
+                        );
+                    }
 
-                </td>
+                    return response.json();
+                })
+                .then(data => {
 
-                <td>
+                    supplierProducts =
+                        data;
+                })
+                .catch(error => {
 
-                    <input
-                        type="text"
-                        class="form-control stock-input"
-                        readonly>
+                    console.error(
+                        error
+                    );
 
-                </td>
-
-                <td>
-
-                    <input
-                        type="number"
-                        step="0.01"
-                        name="items[${rowIndex}][price]"
-                        class="form-control price-input"
-                        required>
-
-                </td>
-
-                <td>
-
-                    <input
-                        type="number"
-                        min="1"
-                        name="items[${rowIndex}][quantity]"
-                        class="form-control quantity-input"
-                        value="1"
-                        required>
-
-                </td>
-
-                <td>
-
-                    <input
-                        type="text"
-                        class="form-control total-input"
-                        readonly>
-
-                </td>
-
-                <td>
-
-                    <button
-                        type="button"
-                        class="btn btn-danger remove-row">
-
-                        X
-
-                    </button>
-
-                </td>
-
-            </tr>
-
-        `;
-
-        tbody.insertAdjacentHTML(
-            'beforeend',
-            row
+                    alert(
+                        'Erreur lors du chargement '
+                        +
+                        'des produits du fournisseur.'
+                    );
+                });
+            }
         );
 
-        rowIndex++;
 
-    });
+        /*
+        |--------------------------------------------------------------------------
+        | AJOUTER LIGNE
+        |--------------------------------------------------------------------------
+        */
 
-    /*
-    |--------------------------------------------------------------------------
-    | EVENTS TABLE
-    |--------------------------------------------------------------------------
-    */
+        addButton.addEventListener(
+            'click',
+            function () {
 
-    tbody.addEventListener('change', function (e) {
+                const supplierId =
+                    supplierSelect.value;
+
+                const depotId =
+                    depotSelect.value;
+
+                if (!supplierId) {
+
+                    alert(
+                        'Veuillez sélectionner '
+                        +
+                        'un fournisseur.'
+                    );
+
+                    return;
+                }
+
+                if (!depotId) {
+
+                    alert(
+                        'Veuillez sélectionner '
+                        +
+                        'le dépôt de réception.'
+                    );
+
+                    return;
+                }
+
+                if (
+                    supplierProducts.length === 0
+                ) {
+
+                    alert(
+                        'Aucun produit disponible '
+                        +
+                        'pour ce fournisseur.'
+                    );
+
+                    return;
+                }
+
+                let options = '';
+
+                supplierProducts.forEach(
+                    product => {
+
+                        options += `
+
+                            <option
+                                value="${product.id}"
+                                data-price="${product.purchase_price}"
+                                data-stock="${product.stock}"
+                            >
+                                ${product.reference ?? ''}
+                                -
+                                ${product.designation ?? ''}
+                            </option>
+                        `;
+                    }
+                );
+
+                const row = `
+
+                    <tr>
+
+                        <td>
+
+                            <select
+                                name="items[${rowIndex}][product_id]"
+                                class="form-select product-select"
+                                required
+                            >
+
+                                <option value="">
+                                    -- Produit --
+                                </option>
+
+                                ${options}
+
+                            </select>
+
+                        </td>
+
+
+                        <td>
+
+                            <input
+                                type="text"
+                                class="form-control stock-input"
+                                value="0"
+                                readonly
+                            >
+
+                        </td>
+
+
+                        <td>
+
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                name="items[${rowIndex}][price]"
+                                class="form-control price-input"
+                                required
+                            >
+
+                        </td>
+
+
+                        <td>
+
+                            <input
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                name="items[${rowIndex}][quantity]"
+                                class="form-control quantity-input"
+                                value="1"
+                                required
+                            >
+
+                        </td>
+
+
+                        <td>
+
+                            <input
+                                type="text"
+                                class="form-control total-input"
+                                value="0.00"
+                                readonly
+                            >
+
+                        </td>
+
+
+                        <td>
+
+                            <button
+                                type="button"
+                                class="btn btn-danger remove-row"
+                            >
+                                X
+                            </button>
+
+                        </td>
+
+                    </tr>
+                `;
+
+                tbody.insertAdjacentHTML(
+                    'beforeend',
+                    row
+                );
+
+                rowIndex++;
+            }
+        );
+
 
         /*
         |--------------------------------------------------------------------------
@@ -337,138 +463,171 @@ document.addEventListener('DOMContentLoaded', function () {
         |--------------------------------------------------------------------------
         */
 
-        if (
-            e.target.classList.contains(
-                'product-select'
-            )
-        ) {
+        tbody.addEventListener(
+            'change',
+            function (e) {
 
-            const row =
-                e.target.closest('tr');
+                if (
+                    !e.target.classList.contains(
+                        'product-select'
+                    )
+                ) {
+                    return;
+                }
 
-            const option =
-                e.target.selectedOptions[0];
+                const row =
+                    e.target.closest('tr');
 
-            const stock =
-                option.dataset.stock || 0;
+                const option =
+                    e.target.selectedOptions[0];
 
+                const stock =
+                    option?.dataset?.stock
+                    ??
+                    0;
+
+                const price =
+                    option?.dataset?.price
+                    ??
+                    0;
+
+                row.querySelector(
+                    '.stock-input'
+                ).value =
+                    stock;
+
+                row.querySelector(
+                    '.price-input'
+                ).value =
+                    price;
+
+                calculateRow(
+                    row
+                );
+            }
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRIX / QUANTITÉ
+        |--------------------------------------------------------------------------
+        */
+
+        tbody.addEventListener(
+            'input',
+            function (e) {
+
+                if (
+                    e.target.classList.contains(
+                        'price-input'
+                    )
+                    ||
+                    e.target.classList.contains(
+                        'quantity-input'
+                    )
+                ) {
+
+                    calculateRow(
+                        e.target.closest('tr')
+                    );
+                }
+            }
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | SUPPRIMER LIGNE
+        |--------------------------------------------------------------------------
+        */
+
+        tbody.addEventListener(
+            'click',
+            function (e) {
+
+                if (
+                    !e.target.classList.contains(
+                        'remove-row'
+                    )
+                ) {
+                    return;
+                }
+
+                e.target
+                    .closest('tr')
+                    .remove();
+
+                calculateGrandTotal();
+            }
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | CALCUL LIGNE
+        |--------------------------------------------------------------------------
+        */
+
+        function calculateRow(row)
+        {
             const price =
-                option.dataset.price || 0;
+                parseFloat(
+                    row.querySelector(
+                        '.price-input'
+                    ).value
+                )
+                ||
+                0;
+
+            const quantity =
+                parseFloat(
+                    row.querySelector(
+                        '.quantity-input'
+                    ).value
+                )
+                ||
+                0;
+
+            const total =
+                price * quantity;
 
             row.querySelector(
-                '.stock-input'
-            ).value = stock;
-
-            row.querySelector(
-                '.price-input'
-            ).value = price;
-
-            calculateRow(row);
-        }
-
-    });
-
-    /*
-    |--------------------------------------------------------------------------
-    | INPUT EVENTS
-    |--------------------------------------------------------------------------
-    */
-
-    tbody.addEventListener('input', function (e) {
-
-        if (
-
-            e.target.classList.contains(
-                'price-input'
-            )
-
-            ||
-
-            e.target.classList.contains(
-                'quantity-input'
-            )
-
-        ) {
-
-            const row =
-                e.target.closest('tr');
-
-            calculateRow(row);
-        }
-
-    });
-
-    /*
-    |--------------------------------------------------------------------------
-    | REMOVE ROW
-    |--------------------------------------------------------------------------
-    */
-
-    tbody.addEventListener('click', function (e) {
-
-        if (
-            e.target.classList.contains(
-                'remove-row'
-            )
-        ) {
-
-            e.target
-                .closest('tr')
-                .remove();
+                '.total-input'
+            ).value =
+                total.toFixed(2);
 
             calculateGrandTotal();
         }
 
-    });
 
-    /*
-    |--------------------------------------------------------------------------
-    | CALCUL LIGNE
-    |--------------------------------------------------------------------------
-    */
+        /*
+        |--------------------------------------------------------------------------
+        | TOTAL GÉNÉRAL
+        |--------------------------------------------------------------------------
+        */
 
-    function calculateRow(row)
-    {
-        const price = parseFloat(
-            row.querySelector('.price-input').value
-        ) || 0;
+        function calculateGrandTotal()
+        {
+            let grandTotal = 0;
 
-        const quantity = parseFloat(
-            row.querySelector('.quantity-input').value
-        ) || 0;
+            document.querySelectorAll(
+                '.total-input'
+            )
+            .forEach(input => {
 
-        const total =
-            price * quantity;
+                grandTotal +=
+                    parseFloat(
+                        input.value
+                    )
+                    ||
+                    0;
+            });
 
-        row.querySelector(
-            '.total-input'
-        ).value = total.toFixed(2);
-
-        calculateGrandTotal();
+            totalElement.innerHTML =
+                grandTotal.toFixed(2);
+        }
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | CALCUL TOTAL
-    |--------------------------------------------------------------------------
-    */
-
-    function calculateGrandTotal()
-    {
-        let grandTotal = 0;
-
-        document.querySelectorAll(
-            '.total-input'
-        ).forEach(input => {
-
-            grandTotal +=
-                parseFloat(input.value) || 0;
-        });
-
-        totalElement.innerHTML =
-            grandTotal.toFixed(2);
-    }
-
-});
+);
 
 </script>

@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Depot;
 use App\Models\Product;
+use App\Models\ProductDepotStock;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
 use App\Models\StockMovement;
@@ -23,8 +25,9 @@ class PurchaseController extends Controller
     {
         $purchases = Purchase::with([
                 'supplier',
+                'depot',
                 'items.product',
-                'user'
+                'user',
             ])
             ->latest()
             ->paginate(20);
@@ -37,39 +40,40 @@ class PurchaseController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | FORMULAIRE GENERER ACHAT
+    | FORMULAIRE CRÉER ACHAT
     |--------------------------------------------------------------------------
     */
 
     public function create()
     {
-        /*
-        |--------------------------------------------------------------------------
-        | RECUPERER FOURNISSEURS
-        |--------------------------------------------------------------------------
-        */
-
-        $suppliers = Supplier::orderBy('name')->get();
-
-        /*
-        |--------------------------------------------------------------------------
-        | RECUPERER PRODUITS
-        |--------------------------------------------------------------------------
-        */
+        $suppliers = Supplier::orderBy('name')
+            ->get();
 
         $products = Product::with([
                 'brand',
                 'model',
-                'suppliers'
+                'suppliers',
             ])
             ->orderBy('designation')
+            ->get();
+
+        /*
+        |--------------------------------------------------------------------------
+        | DÉPÔTS ACTIFS
+        |--------------------------------------------------------------------------
+        */
+
+        $depots = Depot::query()
+            ->where('is_active', true)
+            ->orderBy('name')
             ->get();
 
         return view(
             'purchases.create',
             compact(
                 'suppliers',
-                'products'
+                'products',
+                'depots'
             )
         );
     }
@@ -80,39 +84,76 @@ class PurchaseController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    public function getSupplierProducts(Supplier $supplier)
-    {
+    public function getSupplierProducts(
+        Supplier $supplier
+    ) {
         $supplier->load([
             'products.brand',
-            'products.model'
+            'products.model',
         ]);
 
-        $products = $supplier->products->map(function ($product) {
+        $products = $supplier
+            ->products
+            ->map(function ($product) {
 
-            return [
+                /*
+                |--------------------------------------------------------------------------
+                | STOCK TOTAL RÉEL
+                |--------------------------------------------------------------------------
+                |
+                | Le stock affiché provient de la somme des dépôts.
+                |
+                */
 
-                'id' => $product->id,
+                $stock = (float) ProductDepotStock::query()
+                    ->where(
+                        'product_id',
+                        $product->id
+                    )
+                    ->sum('quantity');
 
-                'reference' => $product->reference,
+                return [
+                    'id' =>
+                        $product->id,
 
-                'designation' => $product->designation,
+                    'reference' =>
+                        $product->reference,
 
-                'brand' => $product->brand->name ?? '',
+                    'designation' =>
+                        $product->designation,
 
-                'model' => $product->model->name ?? '',
+                    'brand' =>
+                        $product->brand->name ?? '',
 
-                'stock' => $product->quantity ?? 0,
+                    'model' =>
+                        $product->model->name ?? '',
 
-                'purchase_price' =>
-                    $product->pivot->purchase_price
-                    ??
-                    $product->purchase_price
-                    ??
-                    0,
-            ];
-        });
+                    'stock' =>
+                        round($stock, 2),
 
-        return response()->json($products);
+                    /*
+                    |--------------------------------------------------------------------------
+                    | PRIX DU FOURNISSEUR
+                    |--------------------------------------------------------------------------
+                    |
+                    | Le prix du pivot représente le dernier prix réel connu
+                    | pour ce fournisseur.
+                    |
+                    */
+
+                    'purchase_price' =>
+                        $product->pivot->purchase_price
+                        ??
+                        $product->purchase_price
+                        ??
+                        0,
+                ];
+            })
+            ->values();
+
+        return response()->json(
+            $products
+        );
     }
 
     /*
@@ -129,10 +170,12 @@ class PurchaseController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        $request->validate([
-
+        $validated = $request->validate([
             'supplier_id' =>
                 'required|exists:suppliers,id',
+
+            'depot_id' =>
+                'required|exists:depots,id',
 
             'items' =>
                 'required|array|min:1',
@@ -141,11 +184,27 @@ class PurchaseController extends Controller
                 'required|exists:products,id',
 
             'items.*.quantity' =>
-                'required|numeric|min:1',
+                'required|numeric|min:0.01',
 
             'items.*.price' =>
                 'required|numeric|min:0',
         ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | DÉPÔT ACTIF
+        |--------------------------------------------------------------------------
+        */
+
+        $depot = Depot::query()
+            ->whereKey(
+                $validated['depot_id']
+            )
+            ->where(
+                'is_active',
+                true
+            )
+            ->firstOrFail();
 
         DB::beginTransaction();
 
@@ -153,52 +212,76 @@ class PurchaseController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | SOUS TOTAL
+            | CALCUL SOUS-TOTAL
             |--------------------------------------------------------------------------
             */
 
             $subtotal = 0;
 
-            foreach ($request->items as $item) {
+            foreach ($validated['items'] as $item) {
 
-                $lineTotal =
-                    $item['quantity']
-                    *
-                    $item['price'];
+                $quantity =
+                    round(
+                        (float) $item['quantity'],
+                        2
+                    );
 
-                $subtotal += $lineTotal;
+                $price =
+                    round(
+                        (float) $item['price'],
+                        2
+                    );
+
+                $subtotal +=
+                    $quantity * $price;
             }
+
+            $subtotal =
+                round(
+                    $subtotal,
+                    2
+                );
 
             /*
             |--------------------------------------------------------------------------
-            | TVA
+            | TVA AUTOMATIQUE 10 %
             |--------------------------------------------------------------------------
             */
 
-            $vat = $subtotal * 0.10;
+            $vat =
+                round(
+                    $subtotal * 0.10,
+                    2
+                );
 
             /*
             |--------------------------------------------------------------------------
-            | TOTAL
+            | TOTAL TTC
             |--------------------------------------------------------------------------
             */
 
             $grandTotal =
-                $subtotal + $vat;
+                round(
+                    $subtotal + $vat,
+                    2
+                );
 
             /*
             |--------------------------------------------------------------------------
-            | REFERENCE ACHAT
+            | RÉFÉRENCE ACHAT
             |--------------------------------------------------------------------------
             */
 
             $nextId =
-                Purchase::max('id') + 1;
+                ((int) Purchase::max('id')) + 1;
 
             $purchaseReference =
-                'PUR-' .
-                date('Y') .
-                '-' .
+                'PUR-'
+                .
+                date('Y')
+                .
+                '-'
+                .
                 str_pad(
                     $nextId,
                     4,
@@ -208,17 +291,19 @@ class PurchaseController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | CREATE PURCHASE
+            | CRÉER ACHAT
             |--------------------------------------------------------------------------
             */
 
             $purchase = Purchase::create([
-
                 'reference' =>
                     $purchaseReference,
 
                 'supplier_id' =>
-                    $request->supplier_id,
+                    $validated['supplier_id'],
+
+                'depot_id' =>
+                    $depot->id,
 
                 'user_id' =>
                     auth()->id(),
@@ -238,41 +323,249 @@ class PurchaseController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | ITEMS
+            | ARTICLES
             |--------------------------------------------------------------------------
             */
 
-            foreach ($request->items as $item) {
+            foreach ($validated['items'] as $item) {
 
                 /*
                 |--------------------------------------------------------------------------
-                | PRODUIT
+                | VERROUILLER LE PRODUIT
                 |--------------------------------------------------------------------------
                 */
 
-                $product = Product::findOrFail(
-                    $item['product_id']
-                );
+                $product = Product::query()
+                    ->lockForUpdate()
+                    ->findOrFail(
+                        $item['product_id']
+                    );
 
-                /*
-                |--------------------------------------------------------------------------
-                | TOTAL LIGNE
-                |--------------------------------------------------------------------------
-                */
+                $quantity =
+                    round(
+                        (float) $item['quantity'],
+                        2
+                    );
+
+                $newPurchasePrice =
+                    round(
+                        (float) $item['price'],
+                        2
+                    );
 
                 $lineTotal =
-                    $item['quantity']
-                    *
-                    $item['price'];
+                    round(
+                        $quantity * $newPurchasePrice,
+                        2
+                    );
 
                 /*
                 |--------------------------------------------------------------------------
-                | CREATE PURCHASE ITEM
+                | STOCK GLOBAL AVANT ACHAT
                 |--------------------------------------------------------------------------
+                |
+                | IMPORTANT :
+                |
+                | Pour le CUMP, nous utilisons le stock physique réellement
+                | affecté aux dépôts.
+                |
+                */
+
+                $oldQuantity =
+                    round(
+                        (float) ProductDepotStock::query()
+                            ->where(
+                                'product_id',
+                                $product->id
+                            )
+                            ->sum('quantity'),
+                        2
+                    );
+                /*
+                |--------------------------------------------------------------------------
+                | PROTECTION DES ÉCARTS HISTORIQUES
+                |--------------------------------------------------------------------------
+                |
+                | products.quantity doit être identique à la somme des dépôts avant
+                | d'autoriser un nouvel achat.
+                |
+                | Cela empêche qu'un ancien stock non encore affecté à un dépôt soit
+                | supprimé silencieusement lors du recalcul du stock global.
+                |
+                */
+
+                $globalQuantity =
+                    round(
+                        (float) $product->quantity,
+                        2
+                    );
+
+                if (
+                    abs(
+                        $globalQuantity - $oldQuantity
+                    ) > 0.01
+                ) {
+                    throw new \RuntimeException(
+                        'Impossible d’enregistrer cet achat pour le produit '
+                        .
+                        $product->reference
+                        .
+                        ' : le stock global ('
+                        .
+                        number_format(
+                            $globalQuantity,
+                            2,
+                            '.',
+                            ''
+                        )
+                        .
+                        ') est différent du stock affecté aux dépôts ('
+                        .
+                        number_format(
+                            $oldQuantity,
+                            2,
+                            '.',
+                            ''
+                        )
+                        .
+                        '). Ce produit doit d’abord être régularisé par dépôt.'
+                    );
+                }
+                /*
+                |--------------------------------------------------------------------------
+                | ANCIENNES VALEURS
+                |--------------------------------------------------------------------------
+                */
+
+                $oldAveragePurchasePrice =
+                    round(
+                        (float) $product->purchase_price,
+                        4
+                    );
+
+                $oldCostPrice =
+                    round(
+                        (float) $product->cost_price,
+                        4
+                    );
+
+                $oldSalePrice =
+                    round(
+                        (float) $product->sale_price,
+                        2
+                    );
+
+                $coefPurchase =
+                    (float) $product->coef_purchase;
+
+                if ($coefPurchase <= 0) {
+                    $coefPurchase = 1;
+                }
+
+                $coefSale =
+                    (float) $product->coef_sale;
+
+                if ($coefSale <= 0) {
+                    $coefSale = 1;
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | STOCK APRÈS ACHAT
+                |--------------------------------------------------------------------------
+                */
+
+                $futureQuantity =
+                    round(
+                        $oldQuantity + $quantity,
+                        2
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | CALCUL DU CUMP
+                |--------------------------------------------------------------------------
+                |
+                | FORMULE :
+                |
+                | (ancien stock × ancien CUMP)
+                | +
+                | (nouvelle quantité × nouveau prix)
+                |
+                | ------------------------------------------------
+                | ancien stock + nouvelle quantité
+                |
+                */
+
+                if ($oldQuantity > 0) {
+
+                    $weightedPurchasePrice = (
+                        ($oldQuantity * $oldAveragePurchasePrice)
+                        +
+                        ($quantity * $newPurchasePrice)
+                    ) / $futureQuantity;
+
+                } else {
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | STOCK PRÉCÉDENT = 0
+                    |--------------------------------------------------------------------------
+                    |
+                    | L'ancien prix ne participe pas au nouveau CUMP.
+                    |
+                    */
+
+                    $weightedPurchasePrice =
+                        $newPurchasePrice;
+                }
+
+                $weightedPurchasePrice =
+                    round(
+                        $weightedPurchasePrice,
+                        4
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | PRIX DE REVIENT
+                |--------------------------------------------------------------------------
+                */
+
+                $weightedCostPrice =
+                    round(
+                        $weightedPurchasePrice
+                        *
+                        $coefPurchase,
+                        4
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | PRIX DE VENTE
+                |--------------------------------------------------------------------------
+                */
+
+                $newSalePrice =
+                    round(
+                        $weightedCostPrice
+                        *
+                        $coefSale,
+                        2
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | CRÉER LA LIGNE D'ACHAT
+                |--------------------------------------------------------------------------
+                |
+                | price = vrai prix du nouvel arrivage.
+                |
+                | previous_* = photographie de la situation avant achat.
+                |
                 */
 
                 PurchaseItem::create([
-
                     'purchase_id' =>
                         $purchase->id,
 
@@ -280,80 +573,246 @@ class PurchaseController extends Controller
                         $product->id,
 
                     'quantity' =>
-                        $item['quantity'],
+                        $quantity,
 
                     'price' =>
-                        $item['price'],
+                        $newPurchasePrice,
 
                     'total' =>
                         $lineTotal,
+
+                    'previous_quantity' =>
+                        $oldQuantity,
+
+                    'previous_purchase_price' =>
+                        $oldAveragePurchasePrice,
+
+                    'previous_cost_price' =>
+                        $oldCostPrice,
+
+                    'previous_sale_price' =>
+                        $oldSalePrice,
+
+                    'previous_coef_purchase' =>
+                        $coefPurchase,
+
+                    'previous_coef_sale' =>
+                        $coefSale,
+
+                    'new_weighted_purchase_price' =>
+                        $weightedPurchasePrice,
                 ]);
 
                 /*
                 |--------------------------------------------------------------------------
-                | UPDATE STOCK
+                | STOCK DU DÉPÔT
                 |--------------------------------------------------------------------------
                 */
 
-                $product->quantity +=
-                    $item['quantity'];
+                $depotStock = ProductDepotStock::query()
+                    ->where(
+                        'product_id',
+                        $product->id
+                    )
+                    ->where(
+                        'depot_id',
+                        $depot->id
+                    )
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$depotStock) {
+
+                    $depotStock =
+                        new ProductDepotStock();
+
+                    $depotStock->product_id =
+                        $product->id;
+
+                    $depotStock->depot_id =
+                        $depot->id;
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | RAYON / EMPLACEMENT
+                    |--------------------------------------------------------------------------
+                    |
+                    | Pour une nouvelle ligne produit/dépôt, nous reprenons
+                    | les valeurs actuellement enregistrées sur le produit.
+                    |
+                    */
+
+                    $depotStock->rayon_id =
+                        $product->rayon_id;
+
+                    $depotStock->location_id =
+                        $product->location_id;
+
+                    $depotStock->quantity =
+                        0;
+                }
+
+                $depotStock->quantity =
+                    round(
+                        (float) $depotStock->quantity
+                        +
+                        $quantity,
+                        2
+                    );
+
+                $depotStock->save();
+
+                /*
+                |--------------------------------------------------------------------------
+                | RECALCUL DU STOCK GLOBAL
+                |--------------------------------------------------------------------------
+                */
+
+                $totalQuantity =
+                    round(
+                        (float) ProductDepotStock::query()
+                            ->where(
+                                'product_id',
+                                $product->id
+                            )
+                            ->sum('quantity'),
+                        2
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | METTRE À JOUR LE PRODUIT
+                |--------------------------------------------------------------------------
+                */
+
+                $product->quantity =
+                    $totalQuantity;
+
+
+               /*
+                |--------------------------------------------------------------------------
+                | QUANTITÉ REÇUE
+                |--------------------------------------------------------------------------
+                |
+                | initial_quantity représente la quantité initiale historique.
+                | Elle ne doit JAMAIS être modifiée lors d'un achat.
+                |
+                | received_quantity représente la quantité cumulée reçue.
+                |
+                */
+
+                $product->received_quantity =
+                    round(
+                        (float) ($product->received_quantity ?? 0)
+                        +
+                        $quantity,
+                        2
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | CUMP
+                |--------------------------------------------------------------------------
+                */
+
+                $product->purchase_price =
+                    $weightedPurchasePrice;
+
+                /*
+                |--------------------------------------------------------------------------
+                | PRIX DE REVIENT
+                |--------------------------------------------------------------------------
+                */
+
+                $product->cost_price =
+                    $weightedCostPrice;
+
+                /*
+                |--------------------------------------------------------------------------
+                | PRIX DE VENTE
+                |--------------------------------------------------------------------------
+                */
+
+                $product->sale_price =
+                    $newSalePrice;
 
                 /*
                 |--------------------------------------------------------------------------
                 | STATUS
                 |--------------------------------------------------------------------------
+                |
+                | products.status accepte :
+                |
+                | disponible
+                | vendu
+                | retourne
+                |
+                | Un nouvel arrivage rend le produit disponible.
+                |
                 */
 
-                if (
-                    $product->quantity <= 0
-                ) {
-
-                    $product->status =
-                        'rupture';
-
-                } elseif (
-
-                    $product->quantity <=
-                    $product->min_stock
-
-                ) {
-
-                    $product->status =
-                        'stock_faible';
-
-                } else {
-
-                    $product->status =
-                        'disponible';
-                }
+                $product->status =
+                    'disponible';
 
                 $product->save();
 
                 /*
                 |--------------------------------------------------------------------------
-                | STOCK MOVEMENT
+                | PRIX FOURNISSEUR
+                |--------------------------------------------------------------------------
+                |
+                | Le pivot conserve le VRAI prix du dernier achat auprès
+                | de ce fournisseur et non le CUMP.
+                |
+                */
+
+                $product
+                    ->suppliers()
+                    ->syncWithoutDetaching([
+                        $validated['supplier_id'] => [
+                            'supplier_reference' =>
+                                $product->reference,
+
+                            'purchase_price' =>
+                                $newPurchasePrice,
+
+                            'delivery_delay' =>
+                                3,
+
+                            'is_primary' =>
+                                true,
+
+                            'active' =>
+                                true,
+                        ],
+                    ]);
+
+                /*
+                |--------------------------------------------------------------------------
+                | MOUVEMENT DE STOCK
                 |--------------------------------------------------------------------------
                 */
 
                 StockMovement::create([
-
                     'product_id' =>
                         $product->id,
+
+                    'user_id' =>
+                        auth()->id(),
 
                     'type' =>
                         'in',
 
                     'quantity' =>
-                        $item['quantity'],
+                        $quantity,
 
                     'source' =>
-                        'Achat fournisseur',
+                        'Achat fournisseur - '
+                        .
+                        $depot->name,
 
                     'reference' =>
                         $purchaseReference,
-
-                    'user_id' =>
-                        auth()->id(),
                 ]);
             }
 
@@ -366,10 +825,14 @@ class PurchaseController extends Controller
                 )
                 ->with(
                     'success',
-                    'Achat enregistré avec succès.'
+                    'Achat enregistré avec succès dans le dépôt '
+                    .
+                    $depot->name
+                    .
+                    '. Le stock et le prix moyen pondéré ont été recalculés.'
                 );
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
 
             DB::rollBack();
 
@@ -385,18 +848,19 @@ class PurchaseController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | DETAILS ACHAT
+    | DÉTAILS ACHAT
     |--------------------------------------------------------------------------
     */
 
-    public function show(Purchase $purchase)
-    {
+    public function show(
+        Purchase $purchase
+    ) {
         $purchase->load([
-
             'supplier',
+            'depot',
             'items.product.brand',
             'items.product.model',
-            'user'
+            'user',
         ]);
 
         return view(
@@ -407,61 +871,404 @@ class PurchaseController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | SUPPRIMER ACHAT
+    | SUPPRIMER / ANNULER ACHAT
     |--------------------------------------------------------------------------
     */
 
-    public function destroy(Purchase $purchase)
-    {
+    public function destroy(
+        Purchase $purchase
+    ) {
+        /*
+        |--------------------------------------------------------------------------
+        | PROTECTION DES ANCIENS ACHATS
+        |--------------------------------------------------------------------------
+        */
+
+        if (!$purchase->depot_id) {
+
+            return redirect()
+                ->back()
+                ->with(
+                    'error',
+                    'Impossible d’annuler automatiquement cet ancien achat : '
+                    .
+                    'aucun dépôt de réception n’est enregistré.'
+                );
+        }
+
         DB::beginTransaction();
 
         try {
 
-            foreach ($purchase->items as $item) {
+            /*
+            |--------------------------------------------------------------------------
+            | VERROUILLER L'ACHAT
+            |--------------------------------------------------------------------------
+            */
 
-                $product =
-                    $item->product;
+            $purchase = Purchase::query()
+                ->lockForUpdate()
+                ->findOrFail(
+                    $purchase->id
+                );
+
+            $depot = Depot::query()
+                ->findOrFail(
+                    $purchase->depot_id
+                );
+
+            $purchase->load([
+                'items.product',
+            ]);
+
+            foreach ($purchase->items as $item) {
 
                 /*
                 |--------------------------------------------------------------------------
-                | RETIRER STOCK
+                | PRODUIT
                 |--------------------------------------------------------------------------
                 */
 
-                $product->quantity -=
-                    $item->quantity;
+                $product = Product::query()
+                    ->lockForUpdate()
+                    ->findOrFail(
+                        $item->product_id
+                    );
+
+                $quantity =
+                    round(
+                        (float) $item->quantity,
+                        2
+                    );
+
+                $purchaseUnitPrice =
+                    round(
+                        (float) $item->price,
+                        2
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | STOCK DU DÉPÔT
+                |--------------------------------------------------------------------------
+                */
+
+                $depotStock = ProductDepotStock::query()
+                    ->where(
+                        'product_id',
+                        $product->id
+                    )
+                    ->where(
+                        'depot_id',
+                        $purchase->depot_id
+                    )
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$depotStock) {
+
+                    throw new \RuntimeException(
+                        'Impossible d’annuler l’achat '
+                        .
+                        $purchase->reference
+                        .
+                        ' : aucun stock correspondant n’existe dans le dépôt '
+                        .
+                        $depot->name
+                        .
+                        ' pour le produit '
+                        .
+                        $product->reference
+                        .
+                        '.'
+                    );
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | PROTECTION CONTRE STOCK NÉGATIF
+                |--------------------------------------------------------------------------
+                */
 
                 if (
-                    $product->quantity < 0
+                    (float) $depotStock->quantity
+                    <
+                    $quantity
                 ) {
 
-                    $product->quantity = 0;
+                    throw new \RuntimeException(
+                        'Impossible d’annuler l’achat '
+                        .
+                        $purchase->reference
+                        .
+                        ' : le dépôt '
+                        .
+                        $depot->name
+                        .
+                        ' ne possède plus suffisamment de stock pour '
+                        .
+                        $product->reference
+                        .
+                        '. Stock actuel : '
+                        .
+                        $depotStock->quantity
+                        .
+                        ', quantité à retirer : '
+                        .
+                        $quantity
+                        .
+                        '.'
+                    );
                 }
+
+                /*
+                |--------------------------------------------------------------------------
+                | STOCK GLOBAL AVANT ANNULATION
+                |--------------------------------------------------------------------------
+                */
+
+                $currentTotalQuantity =
+                    round(
+                        (float) ProductDepotStock::query()
+                            ->where(
+                                'product_id',
+                                $product->id
+                            )
+                            ->sum('quantity'),
+                        2
+                    );
+
+                $remainingQuantity =
+                    round(
+                        $currentTotalQuantity
+                        -
+                        $quantity,
+                        2
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | RECALCUL DU CUMP APRÈS RETRAIT
+                |--------------------------------------------------------------------------
+                |
+                | Valeur actuelle du stock :
+                |
+                | stock actuel × CUMP actuel
+                |
+                | Valeur de l'achat retiré :
+                |
+                | quantité achat × prix réel achat
+                |
+                */
+
+                $currentAveragePurchasePrice =
+                    round(
+                        (float) $product->purchase_price,
+                        4
+                    );
+
+                $currentInventoryValue =
+                    $currentTotalQuantity
+                    *
+                    $currentAveragePurchasePrice;
+
+                $purchaseValueToRemove =
+                    $quantity
+                    *
+                    $purchaseUnitPrice;
+
+                $remainingInventoryValue =
+                    $currentInventoryValue
+                    -
+                    $purchaseValueToRemove;
+
+                /*
+                |--------------------------------------------------------------------------
+                | PROTECTION DE LA VALORISATION
+                |--------------------------------------------------------------------------
+                */
+
+                if (
+                    $remainingQuantity > 0
+                    &&
+                    $remainingInventoryValue < -0.01
+                ) {
+
+                    throw new \RuntimeException(
+                        'Impossible d’annuler automatiquement l’achat '
+                        .
+                        $purchase->reference
+                        .
+                        ' pour le produit '
+                        .
+                        $product->reference
+                        .
+                        ' : la valorisation du stock ne permet pas un retrait '
+                        .
+                        'cohérent de cet achat.'
+                    );
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | RETIRER DU DÉPÔT
+                |--------------------------------------------------------------------------
+                */
+
+                $depotStock->quantity =
+                    round(
+                        (float) $depotStock->quantity
+                        -
+                        $quantity,
+                        2
+                    );
+
+                $depotStock->save();
+
+                /*
+                |--------------------------------------------------------------------------
+                | RECALCULER LE STOCK GLOBAL
+                |--------------------------------------------------------------------------
+                */
+
+                $totalQuantity =
+                    round(
+                        (float) ProductDepotStock::query()
+                            ->where(
+                                'product_id',
+                                $product->id
+                            )
+                            ->sum('quantity'),
+                        2
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | NOUVEAU CUMP
+                |--------------------------------------------------------------------------
+                */
+
+                if ($totalQuantity > 0) {
+
+                    $newWeightedPurchasePrice =
+                        round(
+                            max(
+                                0,
+                                $remainingInventoryValue
+                                /
+                                $totalQuantity
+                            ),
+                            4
+                        );
+
+                } else {
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | STOCK = 0
+                    |--------------------------------------------------------------------------
+                    |
+                    | Si l'achat annulé correspond exactement à la dernière
+                    | entrée enregistrée, nous pouvons restaurer l'ancien prix.
+                    |
+                    */
+
+                    $newWeightedPurchasePrice =
+                        $item->previous_purchase_price !== null
+                            ? round(
+                                (float) $item->previous_purchase_price,
+                                4
+                            )
+                            : 0;
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | COEFFICIENTS ACTUELS
+                |--------------------------------------------------------------------------
+                */
+
+                $coefPurchase =
+                    (float) $product->coef_purchase;
+
+                if ($coefPurchase <= 0) {
+                    $coefPurchase = 1;
+                }
+
+                $coefSale =
+                    (float) $product->coef_sale;
+
+                if ($coefSale <= 0) {
+                    $coefSale = 1;
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | METTRE À JOUR PRODUIT
+                |--------------------------------------------------------------------------
+                */
+
+                $product->quantity =
+                    $totalQuantity;
+
+                $product->purchase_price =
+                    $newWeightedPurchasePrice;
+
+                $product->cost_price =
+                    round(
+                        $newWeightedPurchasePrice
+                        *
+                        $coefPurchase,
+                        4
+                    );
+
+                $product->sale_price =
+                    round(
+                        (float) $product->cost_price
+                        *
+                        $coefSale,
+                        2
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | QUANTITÉS CUMULÉES
+                |--------------------------------------------------------------------------
+                |
+                | On annule également la réception comptabilisée par cet achat.
+                |
+                */
+
+               /*
+            |--------------------------------------------------------------------------
+            | ANNULER LA QUANTITÉ REÇUE
+            |--------------------------------------------------------------------------
+            |
+            | initial_quantity reste intacte.
+            |
+            */
+
+            $product->received_quantity =
+                round(
+                    max(
+                        0,
+                        (float) ($product->received_quantity ?? 0)
+                        -
+                        $quantity
+                    ),
+                    2
+                );
 
                 /*
                 |--------------------------------------------------------------------------
                 | STATUS
                 |--------------------------------------------------------------------------
+                |
+                | Ne jamais utiliser rupture / stock_faible ici.
+                |
                 */
 
-                if (
-                    $product->quantity <= 0
-                ) {
-
-                    $product->status =
-                        'rupture';
-
-                } elseif (
-
-                    $product->quantity <=
-                    $product->min_stock
-
-                ) {
-
-                    $product->status =
-                        'stock_faible';
-
-                } else {
+                if ($totalQuantity > 0) {
 
                     $product->status =
                         'disponible';
@@ -471,43 +1278,45 @@ class PurchaseController extends Controller
 
                 /*
                 |--------------------------------------------------------------------------
-                | STOCK MOVEMENT
+                | MOUVEMENT SORTANT
                 |--------------------------------------------------------------------------
                 */
 
                 StockMovement::create([
-
                     'product_id' =>
                         $product->id,
+
+                    'user_id' =>
+                        auth()->id(),
 
                     'type' =>
                         'out',
 
                     'quantity' =>
-                        $item->quantity,
+                        $quantity,
 
                     'source' =>
-                        'Annulation achat',
+                        'Annulation achat - '
+                        .
+                        $depot->name,
 
                     'reference' =>
                         $purchase->reference,
-
-                    'user_id' =>
-                        auth()->id(),
                 ]);
             }
 
             /*
             |--------------------------------------------------------------------------
-            | DELETE ITEMS
+            | SUPPRIMER LES LIGNES
             |--------------------------------------------------------------------------
             */
 
-            $purchase->items()->delete();
+            $purchase->items()
+                ->delete();
 
             /*
             |--------------------------------------------------------------------------
-            | DELETE PURCHASE
+            | SUPPRIMER L'ACHAT
             |--------------------------------------------------------------------------
             */
 
@@ -516,13 +1325,17 @@ class PurchaseController extends Controller
             DB::commit();
 
             return redirect()
-                ->route('purchases.index')
+                ->route(
+                    'purchases.index'
+                )
                 ->with(
                     'success',
-                    'Achat supprimé avec succès.'
+                    'Achat annulé avec succès. '
+                    .
+                    'Le stock et la valorisation ont été recalculés.'
                 );
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
 
             DB::rollBack();
 

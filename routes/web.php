@@ -26,6 +26,8 @@ use App\Http\Controllers\VehicleHistoryController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\FournisseurCommandeController;
 
+use App\Http\Controllers\PurchaseController;
+
 
 //use Illuminate\Http\Request;
 //use Illuminate\Support\Facades\Auth;
@@ -553,6 +555,102 @@ Route::middleware([
 
 });
 
+/*
+|--------------------------------------------------------------------------
+| ACHATS FOURNISSEURS
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware([
+    'auth',
+    'role:admin,chef_magasinier'
+])->group(function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | LISTE
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/purchases',
+        [PurchaseController::class, 'index']
+    )->name('purchases.index');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | PRODUITS DU FOURNISSEUR - AJAX
+    |--------------------------------------------------------------------------
+    |
+    | IMPORTANT :
+    | Cette route doit rester avant /purchases/{purchase}.
+    |
+    */
+
+    Route::get(
+        '/purchases/supplier-products/{supplier}',
+        [
+            PurchaseController::class,
+            'getSupplierProducts',
+        ]
+    )->name(
+        'purchases.supplier-products'
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CRÉER
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/purchases/create',
+        [PurchaseController::class, 'create']
+    )->name('purchases.create');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ENREGISTRER
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/purchases',
+        [PurchaseController::class, 'store']
+    )->name('purchases.store');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | AFFICHER
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/purchases/{purchase}',
+        [PurchaseController::class, 'show']
+    )
+    ->whereNumber('purchase')
+    ->name('purchases.show');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ANNULER / SUPPRIMER
+    |--------------------------------------------------------------------------
+    */
+
+    Route::delete(
+        '/purchases/{purchase}',
+        [PurchaseController::class, 'destroy']
+    )
+    ->whereNumber('purchase')
+    ->name('purchases.destroy');
+
+});
 /*
 |--------------------------------------------------------------------------
 | CLIENTS
@@ -1217,6 +1315,45 @@ Route::middleware(['auth'])->group(function () {
     );
 
 
+        /*
+    |--------------------------------------------------------------------------
+    | IMPORT EXCEL DES DEMANDES DE PIÈCES
+    |--------------------------------------------------------------------------
+    |
+    | Importe une liste de pièces depuis un fichier Excel.
+    | Cette route doit rester AVANT Route::resource().
+    |
+    */
+
+    Route::post(
+        '/vehicle-part-requests/import-excel',
+        [
+            VehiclePartRequestController::class,
+            'importExcel'
+        ]
+    )->name(
+        'vehicle-part-requests.import-excel'
+    );
+
+        /*
+    |--------------------------------------------------------------------------
+    | TÉLÉCHARGER LE MODÈLE EXCEL
+    |--------------------------------------------------------------------------
+    |
+    | Permet de télécharger le fichier modèle utilisé pour l'import
+    | des demandes de pièces.
+    |
+    */
+
+    Route::get(
+        '/vehicle-part-requests/import-template',
+        [
+            VehiclePartRequestController::class,
+            'downloadImportTemplate'
+        ]
+    )->name(
+        'vehicle-part-requests.import-template'
+    );
     /*
     |--------------------------------------------------------------------------
     | Autres routes CRUD

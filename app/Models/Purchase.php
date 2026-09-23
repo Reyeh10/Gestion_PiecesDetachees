@@ -15,6 +15,8 @@ class Purchase extends Model
 
         'supplier_id',
 
+        'depot_id',
+
         'user_id',
 
         'subtotal',
@@ -36,6 +38,19 @@ class Purchase extends Model
     {
         return $this->belongsTo(
             Supplier::class
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | DÉPÔT DE RÉCEPTION
+    |--------------------------------------------------------------------------
+    */
+
+    public function depot()
+    {
+        return $this->belongsTo(
+            Depot::class
         );
     }
 

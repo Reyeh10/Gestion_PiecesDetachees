@@ -2,37 +2,66 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class ProformaItem extends Model
+class PurchaseItem extends Model
 {
-    use HasFactory;
-
-    protected $table = 'proforma_items';
-
     protected $fillable = [
-        'proforma_id',
+        'purchase_id',
         'product_id',
         'quantity',
         'price',
         'total',
+
+        'previous_quantity',
+        'previous_purchase_price',
+        'previous_cost_price',
+        'previous_sale_price',
+        'previous_coef_purchase',
+        'previous_coef_sale',
+
+        'new_weighted_purchase_price',
     ];
 
     protected $casts = [
         'quantity' => 'decimal:2',
         'price' => 'decimal:2',
         'total' => 'decimal:2',
+
+        'previous_quantity' => 'decimal:2',
+        'previous_purchase_price' => 'decimal:4',
+        'previous_cost_price' => 'decimal:4',
+        'previous_sale_price' => 'decimal:2',
+
+        'previous_coef_purchase' => 'decimal:2',
+        'previous_coef_sale' => 'decimal:2',
+
+        'new_weighted_purchase_price' => 'decimal:4',
     ];
 
-    public function proforma(): BelongsTo
+    /*
+    |--------------------------------------------------------------------------
+    | ACHAT
+    |--------------------------------------------------------------------------
+    */
+
+    public function purchase()
     {
-        return $this->belongsTo(Proforma::class, 'proforma_id');
+        return $this->belongsTo(
+            Purchase::class
+        );
     }
 
-    public function product(): BelongsTo
+    /*
+    |--------------------------------------------------------------------------
+    | PRODUIT
+    |--------------------------------------------------------------------------
+    */
+
+    public function product()
     {
-        return $this->belongsTo(Product::class, 'product_id');
+        return $this->belongsTo(
+            Product::class
+        );
     }
 }
