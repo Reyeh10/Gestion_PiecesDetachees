@@ -429,76 +429,163 @@
         padding: 18px 18px 24px;
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | RECHERCHE
-    |--------------------------------------------------------------------------
-    */
+   /*
+|--------------------------------------------------------------------------
+| RECHERCHE
+|--------------------------------------------------------------------------
+*/
 
-    .product-search-grid {
-        display: grid !important;
-        grid-template-columns:
-            minmax(0, 1fr)
-            minmax(170px, 220px)
-            minmax(170px, 220px);
+.product-search-grid {
+    display: grid !important;
 
-        align-items: stretch;
+    grid-template-columns:
+        minmax(0, 1fr)
+        minmax(170px, 220px)
+        minmax(170px, 220px);
 
-        gap: 12px;
+    align-items: stretch;
 
-        width: 100%;
+    gap: 12px;
 
-        margin-bottom: 22px;
-    }
+    width: 100%;
 
-    .product-search-input {
-        min-width: 0;
-        width: 100%;
-    }
+    margin-bottom: 22px;
+}
 
-    .product-search-grid > .btn {
-        width: 100% !important;
-        min-width: 0 !important;
-        max-width: none !important;
-        margin: 0 !important;
-    }
 
-    .product-search-grid .form-control,
-    .product-search-grid .btn {
-        width: 100% !important;
-        min-height: 48px;
-        height: 48px;
+/*
+|--------------------------------------------------------------------------
+| RECHERCHE - PAGE PRODUITS VENDUS
+|--------------------------------------------------------------------------
+|
+| Recherche + Date début + Date fin + Rechercher + Réinitialiser
+|
+*/
 
-        border-radius: 9px;
-    }
+.product-search-grid.product-search-grid-sold {
+    grid-template-columns:
+        minmax(280px, 1fr)
+        minmax(145px, 175px)
+        minmax(145px, 175px)
+        minmax(150px, 190px)
+        minmax(150px, 190px);
 
-    .product-search-grid .form-control {
-        min-width: 0;
+    align-items: end;
+}
 
-        border: 1px solid #d8dee8;
 
-        box-shadow: none;
-    }
+/*
+|--------------------------------------------------------------------------
+| CHAMP RECHERCHE
+|--------------------------------------------------------------------------
+*/
 
-    .product-search-grid .form-control:focus {
-        border-color: #696cff;
+.product-search-input {
+    min-width: 0;
+    width: 100%;
+}
 
-        box-shadow:
-            0 0 0 3px rgba(105, 108, 255, .12);
-    }
 
-    .product-search-grid .btn {
-        display: inline-flex !important;
-        align-items: center;
-        justify-content: center;
+/*
+|--------------------------------------------------------------------------
+| CHAMPS DATE
+|--------------------------------------------------------------------------
+*/
 
-        gap: 7px;
+.product-date-field {
+    display: flex;
+    flex-direction: column;
 
-        white-space: nowrap;
+    min-width: 0;
+    width: 100%;
+}
 
-        font-weight: 700;
-    }
 
+.product-date-label {
+    display: block;
+
+    margin: 0 0 6px 2px;
+
+    font-size: 12px;
+    font-weight: 700;
+
+    color: #697a8d;
+
+    white-space: nowrap;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| ALIGNEMENT DU CHAMP RECHERCHE SUR LA PAGE PRODUITS VENDUS
+|--------------------------------------------------------------------------
+|
+| Les dates possèdent un label au-dessus.
+| On ajoute donc l'espace correspondant au champ recherche.
+|
+*/
+
+.product-search-grid-sold .product-search-input {
+    padding-top: 24px;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| BOUTONS
+|--------------------------------------------------------------------------
+*/
+
+.product-search-grid > .btn {
+    width: 100% !important;
+
+    min-width: 0 !important;
+    max-width: none !important;
+
+    margin: 0 !important;
+}
+
+
+.product-search-grid .form-control,
+.product-search-grid .btn {
+    width: 100% !important;
+
+    min-height: 48px;
+    height: 48px;
+
+    border-radius: 9px;
+}
+
+
+.product-search-grid .form-control {
+    min-width: 0;
+
+    border: 1px solid #d8dee8;
+
+    box-shadow: none;
+}
+
+
+.product-search-grid .form-control:focus {
+    border-color: #696cff;
+
+    box-shadow:
+        0 0 0 3px rgba(105, 108, 255, .12);
+}
+
+
+.product-search-grid .btn {
+    display: inline-flex !important;
+
+    align-items: center;
+    justify-content: center;
+
+    gap: 7px;
+
+    white-space: nowrap;
+
+    font-weight: 700;
+}
     /*
     |--------------------------------------------------------------------------
     | TABLEAU
@@ -850,22 +937,50 @@
 
     @media (max-width: 480px) {
 
-        .product-search-grid {
-            grid-template-columns: 1fr;
-        }
+       .product-search-grid {
+    grid-template-columns: 1fr 1fr;
+}
 
-        .product-search-input {
-            grid-column: auto;
-        }
+.product-search-input {
+    grid-column: 1 / -1;
+}
+    .product-search-grid.product-search-grid-sold {
+        grid-template-columns: 1fr;
+    }
 
-        .products-title-row {
-            align-items: stretch;
-            flex-direction: column;
-        }
+    .product-search-grid-sold .product-search-input {
+        grid-column: auto;
 
-        .products-title-row .btn {
-            width: 100%;
-        }
+        padding-top: 0;
+    }
+
+    .product-search-grid-sold .product-date-field {
+        width: 100%;
+    }
+
+/*
+|--------------------------------------------------------------------------
+| PRODUITS VENDUS - TABLETTE
+|--------------------------------------------------------------------------
+*/
+
+.product-search-grid.product-search-grid-sold {
+    grid-template-columns: 1fr 1fr;
+}
+
+.product-search-grid-sold .product-search-input {
+    grid-column: 1 / -1;
+
+    padding-top: 0;
+}
+
+.product-search-grid-sold .product-date-field {
+    width: 100%;
+}
+
+.product-search-grid > .btn {
+    width: 100% !important;
+}
 
         .product-action-buttons {
             grid-template-columns: 1fr;
@@ -936,27 +1051,47 @@
 
             <div class="products-card-header">
 
-                <div class="products-title-row">
+              <div class="products-title-row">
 
                     <h4>
                         {{ $pageTitle ?? 'Liste des produits' }}
                     </h4>
 
+                    <div class="d-flex align-items-center gap-2">
 
-                    @if($isAvailableProducts)
+                        {{-- EXPORTER LES PRODUITS VENDUS --}}
+                        @if($isSoldProducts)
 
-                        <a
-                            href="{{ route('sales.create') }}"
-                            class="btn btn-primary"
-                        >
+                            <a
+                                href="{{ route(
+                                    'products.sold.export',
+                                    request()->query()
+                                ) }}"
+                                class="btn btn-success"
+                            >
+                                <i class="bx bx-download me-1"></i>
 
-                            <i class="bx bx-cart me-1"></i>
+                                Exporter Excel
+                            </a>
 
-                            Nouvelle vente
+                        @endif
 
-                        </a>
 
-                    @endif
+                        {{-- NOUVELLE VENTE --}}
+                        @if($isAvailableProducts)
+
+                            <a
+                                href="{{ route('sales.create') }}"
+                                class="btn btn-primary"
+                            >
+                                <i class="bx bx-cart me-1"></i>
+
+                                Nouvelle vente
+                            </a>
+
+                        @endif
+
+                    </div>
 
                 </div>
 
@@ -1220,49 +1355,112 @@
                     RECHERCHE
                 ==================================================== --}}
 
-                <form
-                    method="GET"
-                    action="{{ url()->current() }}"
-                    class="product-search-grid"
+               <form
+            method="GET"
+            action="{{ url()->current() }}"
+            class="
+                product-search-grid
+                {{ $isSoldProducts ? 'product-search-grid-sold' : '' }}
+            "
+        >
+
+            {{-- ====================================================
+                RECHERCHE
+            ==================================================== --}}
+
+            <div class="product-search-input">
+
+                <input
+                    type="text"
+                    name="search"
+                    class="form-control"
+                    placeholder="Rechercher par référence ou désignation..."
+                    value="{{ request('search') }}"
                 >
 
-                    <div class="product-search-input">
-
-                        <input
-                            type="text"
-                            name="search"
-                            class="form-control"
-                            placeholder="Rechercher par référence ou désignation..."
-                            value="{{ request('search') }}"
-                        >
-
-                    </div>
+            </div>
 
 
-                    <button
-                        type="submit"
-                        class="btn btn-primary"
+            {{-- ====================================================
+                PÉRIODE - UNIQUEMENT PRODUITS VENDUS
+            ==================================================== --}}
+
+            @if($isSoldProducts)
+
+                <div class="product-date-field">
+
+                    <label
+                        for="date_from"
+                        class="product-date-label"
+                    >
+                        Date début
+                    </label>
+
+                    <input
+                        type="date"
+                        id="date_from"
+                        name="date_from"
+                        class="form-control"
+                        value="{{ request('date_from') }}"
                     >
 
-                        <i class="bx bx-search"></i>
-
-                        Rechercher
-
-                    </button>
+                </div>
 
 
-                    <a
-                        href="{{ url()->current() }}"
-                        class="btn btn-secondary"
+                <div class="product-date-field">
+
+                    <label
+                        for="date_to"
+                        class="product-date-label"
+                    >
+                        Date fin
+                    </label>
+
+                    <input
+                        type="date"
+                        id="date_to"
+                        name="date_to"
+                        class="form-control"
+                        value="{{ request('date_to') }}"
                     >
 
-                        <i class="bx bx-reset"></i>
+                </div>
 
-                        Réinitialiser
+            @endif
 
-                    </a>
 
-                </form>
+            {{-- ====================================================
+                BOUTON RECHERCHER
+            ==================================================== --}}
+
+            <button
+                type="submit"
+                class="btn btn-primary product-search-button"
+            >
+
+                <i class="bx bx-search"></i>
+
+                Rechercher
+
+            </button>
+
+
+            {{-- ====================================================
+                BOUTON RÉINITIALISER
+            ==================================================== --}}
+
+            <a
+                href="{{ url()->current() }}"
+                class="btn btn-secondary product-reset-button"
+            >
+
+                <i class="bx bx-reset"></i>
+
+                Réinitialiser
+
+            </a>
+
+        </form>
 
 
                 {{-- ====================================================
@@ -1341,21 +1539,17 @@
                                 <th>Modèle</th>
 
 
-                                {{-- ======================================
+                               {{-- ======================================
                                     TOUS LES PRODUITS
                                 ====================================== --}}
 
                                 @if($isAllProducts)
 
-                                    <th>Qté initiale</th>
+                                    <th class="text-end">Qté initiale</th>
 
-                                    <!--th>Qté reçue</th-->
+                                    <th class="text-end">Qté disponible</th>
 
-                                    <th>Qté disponible</th>
-
-                                    <!--th>Qté non dispo.</th-->
-
-                                    <th>Qté vendue</th>
+                                    <th class="text-end">Qté vendue</th>
 
                                 @endif
 
@@ -1366,7 +1560,7 @@
 
                                 @if($isAvailableProducts)
 
-                                    <th>Qté disponible</th>
+                                    <th class="text-end">Qté disponible</th>
 
                                 @endif
 
@@ -1377,13 +1571,13 @@
 
                                 @if($isUnavailablePage)
 
-                                    <th>Qté initiale</th>
+                                    <th class="text-end">Qté initiale</th>
 
-                                    <th>Qté reçue</th>
+                                    <th class="text-end">Qté reçue</th>
 
-                                    <th>Qté disponible</th>
+                                    <th class="text-end">Qté disponible</th>
 
-                                    <th>Qté non dispo.</th>
+                                    <th class="text-end">Qté non dispo.</th>
 
                                 @endif
 
@@ -1394,28 +1588,43 @@
 
                                 @if($isSoldProducts)
 
-                                    <th>Qté vendue</th>
+                                    <th class="text-end">Qté vendue</th>
 
                                 @endif
 
 
-                                <th>Prix achat</th>
+                                {{-- ======================================
+                                    PRIX
+                                ====================================== --}}
 
-                                <th>Prix vente</th>
-
-                                <th>Statut</th>
-
-
-                                <th class="text-center">
-
-                                    Actions
-
+                                <th class="text-end">
+                                    Prix achat pondéré
                                 </th>
 
+                                <th class="text-end">
+                                    Prix vente
+                                </th>
+
+
+                                {{-- ======================================
+                                    STATUT
+                                ====================================== --}}
+
+                                <th class="text-center">
+                                    Statut
+                                </th>
+
+
+                                {{-- ======================================
+                                    ACTIONS
+                                ====================================== --}}
+
+                                <th class="text-center">
+                                    Actions
+                                </th>
                             </tr>
 
                         </thead>
-
 
                         <tbody>
 
@@ -1993,13 +2202,26 @@
                                     @endif
                                     {{-- PRIX ACHAT --}}
 
-                                    <td class="numeric-cell price-cell">
+                                    <!--td class="numeric-cell price-cell">
 
-                                        {{
+                                        { {
                                             number_format(
                                                 (float)
                                                 $product->purchase_price,
                                                 2,
+                                                ',',
+                                                ' '
+                                            )
+                                        }}
+
+                                    </td-->
+
+                                    <td class="numeric-cell price-cell">
+
+                                        {{
+                                            number_format(
+                                                (float) $product->purchase_price,
+                                                4,
                                                 ',',
                                                 ' '
                                             )

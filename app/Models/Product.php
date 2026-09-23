@@ -113,11 +113,11 @@ class Product extends Model
         |--------------------------------------------------------------------------
         */
 
-        'purchase_price' => 'decimal:2',
+       'purchase_price' => 'decimal:4',
 
         'coef_purchase' => 'decimal:2',
 
-        'cost_price' => 'decimal:2',
+       'cost_price' => 'decimal:4',
 
         'coef_sale' => 'decimal:2',
 

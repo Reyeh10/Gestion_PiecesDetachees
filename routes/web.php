@@ -1625,6 +1625,13 @@ Route::middleware([
     ->whereNumber('ligne')
     ->name('fournisseur-commandes.lignes.update');
 
+    Route::put(
+        '/fournisseur-commandes/{fournisseurCommande}/lignes',
+        [FournisseurCommandeController::class, 'updateLignes']
+    )
+    ->whereNumber('fournisseurCommande')
+    ->name('fournisseur-commandes.lignes.update-all');
+
 
     /*
     |--------------------------------------------------------------------------

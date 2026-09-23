@@ -100,6 +100,51 @@
         border-spacing: 0 12px;
     }
 
+    /* Colonnes à largeur fixe : évite que le tableau se redimensionne
+       (et que tout l'écran "bouge") à chaque sélection de pièce/dépôt. */
+    .fc-table {
+        table-layout: fixed;
+        min-width: 1150px;
+    }
+
+    .fc-table .col-ref    { width: 11%; }
+    .fc-table .col-desig  { width: 17%; }
+    .fc-table .col-qte    { width: 8%; }
+    .fc-table .col-stock  { width: 8%; }
+    .fc-table .col-prix   { width: 9%; }
+    .fc-table .col-ident  { width: 47%; }
+
+    .fc-table tbody td { word-break: break-word; }
+
+    .ligne-identification-form,
+    .ligne-depot-form {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .ligne-identification-form .select2-container {
+        flex: 0 0 100%;
+        width: 100% !important;
+        min-width: 0;
+    }
+
+    .ligne-identification-form .select2-selection__rendered {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .ligne-identification-form .ligne-product-select,
+    .ligne-identification-form .ligne-depot-select,
+    .ligne-identification-form .ligne-note-input,
+    .ligne-depot-form select {
+        flex: 1 1 150px;
+        min-width: 0;
+        width: auto !important;
+    }
+
     .fc-table thead th {
         border: none !important;
         background: transparent;
@@ -230,18 +275,22 @@
         </div>
 
         {{-- LIGNES DE PIÈCES --}}
+        <form method="POST" action="{{ route('fournisseur-commandes.lignes.update-all', $commande) }}">
+            @csrf
+            @method('PUT')
+
         <div class="table-responsive">
 
             <table class="table fc-table align-middle">
 
                 <thead>
                     <tr>
-                        <th>Référence</th>
-                        <th>Désignation (garage)</th>
-                        <th>Quantité demandée</th>
-                        <th>Stock chez nous</th>
-                        <th>Prix de vente</th>
-                        <th style="min-width:420px;">Identification / Disponibilité</th>
+                        <th class="col-ref">Référence</th>
+                        <th class="col-desig">Désignation (garage)</th>
+                        <th class="col-qte">Quantité demandée</th>
+                        <th class="col-stock">Stock chez nous</th>
+                        <th class="col-prix">Prix de vente</th>
+                        <th class="col-ident">Identification / Disponibilité</th>
                     </tr>
                 </thead>
 
@@ -270,14 +319,9 @@
                                          avec la pièce choisie — pas de saisie manuelle de prix ici. La note
                                          n'est utile que si aucune pièce n'est sélectionnée (pour expliquer
                                          l'indisponibilité) : elle se masque dès qu'une pièce est choisie. --}}
-                                    <form method="POST"
-                                          action="{{ route('fournisseur-commandes.lignes.update', [$commande, $ligne]) }}"
-                                          class="d-flex flex-wrap align-items-center gap-2 ligne-identification-form">
+                                    <div class="ligne-identification-form">
 
-                                        @csrf
-                                        @method('PUT')
-
-                                        <select name="product_id" class="form-select ligne-product-select" style="width:260px;">
+                                        <select name="lignes[{{ $ligne->id }}][product_id]" class="form-select ligne-product-select">
                                             <option value="">— Rechercher une pièce —</option>
                                             @foreach($products as $product)
                                                 <option value="{{ $product->id }}"
@@ -296,7 +340,7 @@
                                         {{-- Dépôt de prélèvement : requis pour créer la vente, comme sur
                                              la vente normale. Repeuplé en JS quand la pièce change ;
                                              pré-rempli ici si une pièce est déjà identifiée. --}}
-                                        <select name="depot_id" class="form-select form-select-sm ligne-depot-select" style="width:220px;"
+                                        <select name="lignes[{{ $ligne->id }}][depot_id]" class="form-select form-select-sm ligne-depot-select"
                                                 @unless($ligne->product) disabled @endunless>
                                             <option value="">— Choisir le dépôt —</option>
                                             @if($ligne->product)
@@ -309,14 +353,12 @@
                                             @endif
                                         </select>
 
-                                        <input type="text" name="note" value="{{ $ligne->note }}"
+                                        <input type="text" name="lignes[{{ $ligne->id }}][note]" value="{{ $ligne->note }}"
                                                placeholder="Note (optionnel — ex: raison d'indisponibilité)"
-                                               class="form-control form-control-sm ligne-note-input" style="width:220px;"
+                                               class="form-control form-control-sm ligne-note-input"
                                                @if($ligne->product_id) hidden @endif>
 
-                                        <button type="submit" class="btn btn-sm btn-primary flex-shrink-0">Valider</button>
-
-                                    </form>
+                                    </div>
 
                                     <div class="mt-2">
                                         @if($ligne->product_id)
@@ -341,14 +383,9 @@
 
                                     {{-- Référence reconnue automatiquement : le dépôt peut rester à
                                          choisir si la pièce existe dans plusieurs dépôts. --}}
-                                    <form method="POST"
-                                          action="{{ route('fournisseur-commandes.lignes.update', [$commande, $ligne]) }}"
-                                          class="d-flex flex-wrap align-items-center gap-2">
+                                    <div class="ligne-depot-form">
 
-                                        @csrf
-                                        @method('PUT')
-
-                                        <select name="depot_id" class="form-select form-select-sm" style="width:220px;">
+                                        <select name="lignes[{{ $ligne->id }}][depot_id]" class="form-select form-select-sm">
                                             <option value="">— Choisir le dépôt —</option>
                                             @foreach($ligne->product->depotStocks as $stock)
                                                 <option value="{{ $stock->depot_id }}" @selected($ligne->depot_id === $stock->depot_id)>
@@ -358,9 +395,7 @@
                                             @endforeach
                                         </select>
 
-                                        <button type="submit" class="btn btn-sm btn-primary flex-shrink-0">Valider</button>
-
-                                    </form>
+                                    </div>
 
                                     <div class="mt-2">
                                         @if($ligne->disponible)
@@ -386,6 +421,16 @@
             </table>
 
         </div>
+
+            @unless($commande->vente_id)
+                <div class="d-flex justify-content-end mt-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bx bx-check-double"></i> Tout valider
+                    </button>
+                </div>
+            @endunless
+
+        </form>
 
     </div>
 
@@ -427,7 +472,7 @@
         }
 
         $('.ligne-product-select').select2({
-            width: '260px',
+            width: '100%',
             placeholder: '— Rechercher une pièce —',
             matcher: matchReferenceDesignation,
             templateResult: styleOption,

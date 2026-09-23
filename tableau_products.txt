@@ -1,0 +1,701 @@
+
+
+                                {{-- ======================================
+                                    TOUS LES PRODUITS
+                                ====================================== --}}
+
+                                @if($isAllProducts)
+
+                                    <th>Qté initiale</th>
+
+                                    <!--th>Qté reçue</th-->
+
+                                    <th>Qté disponible</th>
+
+                                    <!--th>Qté non dispo.</th-->
+
+                                    <th>Qté vendue</th>
+
+                                @endif
+
+
+                                {{-- ======================================
+                                    PRODUITS DISPONIBLES
+                                ====================================== --}}
+
+                                @if($isAvailableProducts)
+
+                                    <th>Qté disponible</th>
+
+                                @endif
+
+
+                                {{-- ======================================
+                                    PIÈCES NON DISPONIBLES
+                                ====================================== --}}
+
+                                @if($isUnavailablePage)
+
+                                    <th>Qté initiale</th>
+
+                                    <th>Qté reçue</th>
+
+                                    <th>Qté disponible</th>
+
+                                    <th>Qté non dispo.</th>
+
+                                @endif
+
+
+                                {{-- ======================================
+                                    PRODUITS VENDUS
+                                ====================================== --}}
+
+                                @if($isSoldProducts)
+
+                                    <th>Qté vendue</th>
+
+                                @endif
+
+
+                                <!--th>Prix achat</th-->
+                                <th>Prix achat pondéré</th>
+
+                                <th>Prix vente</th>
+
+                                <th>Statut</th>
+
+
+                                <th class="text-center">
+
+                                    Actions
+
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+                        <tbody>
+
+                            @forelse($products as $product)
+
+
+                                @php
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | QUANTITÉ INITIALE
+                                    |--------------------------------------------------------------------------
+                                    */
+
+                                    $initialQty =
+                                        (float) (
+                                            $product->initial_quantity
+                                            ?? 0
+                                        );
+
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | QUANTITÉ REÇUE
+                                    |--------------------------------------------------------------------------
+                                    */
+
+                                    $receivedQty =
+                                        (float) (
+                                            $product->received_quantity
+                                            ?? 0
+                                        );
+
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | QUANTITÉ DISPONIBLE
+                                    |--------------------------------------------------------------------------
+                                    */
+
+                                    $availableQty =
+                                        (float) (
+                                            $product->quantity
+                                            ?? 0
+                                        );
+
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | QUANTITÉ NON DISPONIBLE
+                                    |--------------------------------------------------------------------------
+                                    |
+                                    | IMPORTANT :
+                                    |
+                                    | Qté non disponible =
+                                    | Qté initiale - Qté reçue
+                                    |
+                                    | On ne fait PAS :
+                                    | initiale - disponible
+                                    |
+                                    | car une vente ferait alors augmenter à tort
+                                    | la quantité non disponible.
+                                    |
+                                    */
+
+                                    $unavailableQty =
+                                        max(
+                                            0,
+                                            $initialQty - $receivedQty
+                                        );
+
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | QUANTITÉ VENDUE
+                                    |--------------------------------------------------------------------------
+                                    |
+                                    | Ne pas compter les ventes annulées.
+                                    |
+                                    | Le contrôleur "sold()" peut déjà fournir
+                                    | sold_quantity via withSum().
+                                    |
+                                    */
+
+                                    if (
+                                        isset($product->sold_quantity)
+                                        &&
+                                        $product->sold_quantity !== null
+                                    ) {
+
+                                        $soldQty =
+                                            (float) $product->sold_quantity;
+
+                                    } else {
+
+                                        $soldQty = (float) $product
+                                            ->saleItems()
+                                            ->whereHas(
+                                                'sale',
+                                                function ($query) {
+
+                                                    $query->whereNotIn(
+                                                        'status',
+                                                        [
+                                                            'cancelled',
+                                                            'annulé',
+                                                            'annule'
+                                                        ]
+                                                    );
+
+                                                }
+                                            )
+                                            ->sum('quantity');
+                                    }
+
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | UNITÉ
+                                    |--------------------------------------------------------------------------
+                                    */
+
+                                   $unitType = strtolower(
+                                        trim((string) ($product->unit_type ?? 'piece'))
+                                    );
+
+                                    $unitLabel =
+                                        $unitType === 'litre'
+                                            ? 'L'
+                                            : 'Pièce';
+
+
+                                 /*
+                                    |--------------------------------------------------------------------------
+                                    | STATUT AFFICHÉ
+                                    |--------------------------------------------------------------------------
+                                    |
+                                    | Dans "Tous les produits", le statut doit représenter
+                                    | uniquement l'état ACTUEL du stock :
+                                    |
+                                    | - Disponible
+                                    | - Stock faible
+                                    | - Rupture
+                                    |
+                                    | Le statut "Vendu" est réservé à la page "Produits vendus".
+                                    |
+                                    */
+
+                                    if ($isSoldProducts) {
+
+                                        /*
+                                        |--------------------------------------------------------------------------
+                                        | PRODUITS VENDUS
+                                        |--------------------------------------------------------------------------
+                                        */
+
+                                        $displayStatus = 'Vendu';
+
+                                        $statusClass = 'product-status-sold';
+
+                                    } elseif ($availableQty <= 0) {
+
+                                        /*
+                                        |--------------------------------------------------------------------------
+                                        | RUPTURE
+                                        |--------------------------------------------------------------------------
+                                        */
+
+                                        $displayStatus = 'Rupture';
+
+                                        $statusClass = 'product-status-unavailable';
+
+                                    } elseif (
+                                        (float) ($product->min_stock ?? 0) > 0
+                                        &&
+                                        $availableQty <= (float) $product->min_stock
+                                    ) {
+
+                                        /*
+                                        |--------------------------------------------------------------------------
+                                        | STOCK FAIBLE
+                                        |--------------------------------------------------------------------------
+                                        */
+
+                                        $displayStatus = 'Stock faible';
+
+                                        $statusClass = 'product-status-low';
+
+                                    } else {
+
+                                        /*
+                                        |--------------------------------------------------------------------------
+                                        | DISPONIBLE
+                                        |--------------------------------------------------------------------------
+                                        */
+
+                                        $displayStatus = 'Disponible';
+
+                                        $statusClass = 'product-status-available';
+                                    }
+                                @endphp
+
+
+                                <tr>
+
+
+                                    {{-- REFERENCE --}}
+
+                                    <td class="reference-cell">
+
+                                        <strong>
+
+                                            {{ $product->reference }}
+
+                                        </strong>
+
+                                    </td>
+
+
+                                    {{-- DESIGNATION --}}
+
+                                    <td class="designation-cell">
+
+                                        {{ $product->designation }}
+
+                                    </td>
+
+
+                                    {{-- MARQUE --}}
+
+                                    <td>
+
+                                        {{
+                                            $product->brand?->name
+                                            ?? 'Non défini'
+                                        }}
+
+                                    </td>
+
+
+                                    {{-- MODELE --}}
+
+                                    <td>
+
+                                        {{
+                                            $product->model?->name
+                                            ?? 'Non défini'
+                                        }}
+
+                                    </td>
+                                    {{-- ==================================
+                                        PAGE TOUS LES PRODUITS
+                                    ================================== --}}
+
+                                    @if($isAllProducts)
+
+
+                                        {{-- QUANTITÉ INITIALE --}}
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-initial
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $initialQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+
+                                        {{-- QUANTITÉ REÇUE --}}
+
+                                        <!--td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-received
+                                                "
+                                            >
+
+                                                { {
+                                                    number_format(
+                                                        $receivedQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                { { $unitLabel }}
+
+                                            </span>
+
+                                        </td-->
+
+
+                                        {{-- QUANTITÉ DISPONIBLE --}}
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-available
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $availableQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+
+                                        {{-- QUANTITÉ NON DISPONIBLE --}}
+
+                                        <!--td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-unavailable
+                                                "
+                                            >
+
+                                                {
+                                                    number_format(
+                                                        $unavailableQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                { { $unitLabel }}
+
+                                            </span>
+
+                                        </td-->
+
+
+                                        {{-- QUANTITÉ VENDUE --}}
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-sold
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $soldQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+                                    @endif
+
+
+                                    {{-- ==================================
+                                        PRODUITS DISPONIBLES
+                                    ================================== --}}
+
+                                    @if($isAvailableProducts)
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-available
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $availableQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+                                    @endif
+
+
+                                    {{-- ==================================
+                                        PIÈCES NON DISPONIBLES
+                                    ================================== --}}
+
+                                    @if($isUnavailablePage)
+
+
+                                        {{-- QUANTITÉ INITIALE --}}
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-initial
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $initialQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+
+                                        {{-- QUANTITÉ REÇUE --}}
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-received
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $receivedQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+
+                                        {{-- QUANTITÉ DISPONIBLE --}}
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-available
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $availableQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+
+                                        {{-- QUANTITÉ NON DISPONIBLE --}}
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-unavailable
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $unavailableQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+                                    @endif
+
+
+                                    {{-- ==================================
+                                        PRODUITS VENDUS
+                                    ================================== --}}
+
+                                    @if($isSoldProducts)
+
+                                        <td class="numeric-cell">
+
+                                            <span
+                                                class="
+                                                    quantity-badge
+                                                    quantity-sold
+                                                "
+                                            >
+
+                                                {{
+                                                    number_format(
+                                                        $soldQty,
+                                                        2,
+                                                        ',',
+                                                        ' '
+                                                    )
+                                                }}
+
+                                                {{ $unitLabel }}
+
+                                            </span>
+
+                                        </td>
+
+                                    @endif
+                                    {{-- PRIX ACHAT --}}
+
+                                    <!--td class="numeric-cell price-cell">
+
+                                        { {
+                                            number_format(
+                                                (float)
+                                                $product->purchase_price,
+                                                2,
+                                                ',',
+                                                ' '
+                                            )
+                                        }}
+
+                                    </td-->
+
+                                    <td class="numeric-cell price-cell">
+
+                                        {{
+                                            number_format(
+                                                (float) $product->purchase_price,
+                                                4,
+                                                ',',
+                                                ' '
+                                            )
+                                        }}
+
+                                    </td>
+
+
+                                    {{-- PRIX VENTE --}}
+
+                                    <td class="numeric-cell price-cell">
+
+                                        <strong>
+
+                                            {{
+                                                number_format(
+                                                    (float)
+                                                    $product->sale_price,
+                                                    2,
+                                                    ',',
+                                                    ' '
+                                                )
+                                            }}
+
+                                        </strong>
+
+                                    </td>

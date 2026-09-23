@@ -139,6 +139,92 @@ class FournisseurCommandeController extends Controller
             'note.max' => 'La note ne doit pas dépasser 255 caractères.',
         ]);
 
+        [$ok, $message] = $this->appliquerLigne($ligne, $data, $request->has('note'));
+
+        return back()->with($ok ? 'success' : 'error', $message);
+    }
+
+    /**
+     * Valide en une seule fois toutes les lignes du bon de commande
+     * (pièce + dépôt + note de chaque ligne), au lieu d'une ligne à la fois.
+     * Les lignes intactes (rien de choisi, rien de changé) sont ignorées.
+     */
+    public function updateLignes(Request $request, ExternalBonCommande $fournisseurCommande)
+    {
+        if ($fournisseurCommande->vente_id) {
+            return back()->with('error', 'La vente a déjà été créée à partir de ce bon : les lignes ne sont plus modifiables.');
+        }
+
+        $request->validate([
+            'lignes'              => 'nullable|array',
+            'lignes.*.product_id' => 'nullable|exists:products,id',
+            'lignes.*.depot_id'   => 'nullable|exists:depots,id',
+            'lignes.*.note'       => 'nullable|string|max:255',
+        ], [
+            'lignes.*.note.max' => 'Une note ne doit pas dépasser 255 caractères.',
+        ]);
+
+        $saisies = (array) $request->input('lignes', []);
+        $misesAJour = 0;
+        $erreurs = [];
+
+        foreach ($fournisseurCommande->lignes()->orderBy('position')->get() as $ligne) {
+            if (! isset($saisies[$ligne->id])) {
+                continue;
+            }
+
+            $saisie = $saisies[$ligne->id];
+            $productId = ! empty($saisie['product_id']) ? (int) $saisie['product_id'] : null;
+            $depotId = ! empty($saisie['depot_id']) ? (int) $saisie['depot_id'] : null;
+            $note = isset($saisie['note']) && trim((string) $saisie['note']) !== '' ? trim((string) $saisie['note']) : null;
+
+            $productActuel = $ligne->product_id ? (int) $ligne->product_id : null;
+            $depotActuel = $ligne->depot_id ? (int) $ligne->depot_id : null;
+
+            // Ligne restée en attente : rien choisi, rien saisi -> on n'y touche pas.
+            if (! $productId && ! $productActuel && $note === null && is_null($ligne->disponible)) {
+                continue;
+            }
+
+            // Ligne inchangée -> inutile de renvoyer quoi que ce soit au garage.
+            $produitInchange = ($productId ?? $productActuel) === $productActuel;
+            if ($produitInchange && $depotId === $depotActuel && $note === ($ligne->note ?: null)) {
+                continue;
+            }
+
+            [$ok, $message] = $this->appliquerLigne(
+                $ligne,
+                ['product_id' => $productId, 'depot_id' => $depotId, 'note' => $note],
+                true
+            );
+
+            if ($ok) {
+                $misesAJour++;
+            } else {
+                $erreurs[] = ($ligne->designation ?: $ligne->reference ?: "ligne #{$ligne->position}").' : '.$message;
+            }
+        }
+
+        if ($erreurs) {
+            $retour = back()->with('error', implode(' | ', $erreurs));
+
+            return $misesAJour
+                ? $retour->with('success', "{$misesAJour} ligne(s) validée(s).")
+                : $retour;
+        }
+
+        return back()->with('success', $misesAJour
+            ? "{$misesAJour} ligne(s) validée(s) et transmise(s) au garage."
+            : 'Aucune modification à enregistrer.');
+    }
+
+    /**
+     * Applique le choix (pièce/dépôt/note) sur une ligne.
+     *
+     * @return array{0:bool,1:string} [succès, message]
+     */
+    private function appliquerLigne(ExternalBonCommandeLigne $ligne, array $data, bool $noteFournie): array
+    {
         // Produit effectif : celui choisi dans le menu (ligne sans référence)
         // ou celui déjà identifié automatiquement (ligne avec référence, on ne
         // change alors que le dépôt).
@@ -157,12 +243,11 @@ class FournisseurCommandeController extends Controller
 
             app(AppAtelierApiService::class)->envoyerDisponibilite($ligne);
 
-            return back()->with('success', 'Ligne marquée sans pièce correspondante et transmise au garage.');
+            return [true, 'Ligne marquée sans pièce correspondante et transmise au garage.'];
         }
 
         $product = Product::findOrFail($productId);
-       // $depotId = $data['depot_id'] ?: null;
-       $depotId = $data['depot_id'] ?? null;
+        $depotId = $data['depot_id'] ?? null;
 
         // Dépôts où la pièce a du stock.
         $depotStocks = ProductDepotStock::where('product_id', $product->id)
@@ -179,7 +264,7 @@ class FournisseurCommandeController extends Controller
             : null;
 
         if ($depotId && ! $depotStock) {
-            return back()->with('error', "Cette pièce n'a pas de stock dans le dépôt choisi.");
+            return [false, "Cette pièce n'a pas de stock dans le dépôt choisi."];
         }
 
         $qteDepot = $depotStock ? (float) $depotStock->quantity : 0.0;
@@ -195,16 +280,16 @@ class FournisseurCommandeController extends Controller
             // Tant qu'aucun dépôt n'est choisi, la disponibilité reste indéterminée.
             'disponible'          => $depotId ? ($qteDepot >= $qteDemandee) : null,
             'prix_unitaire'       => $product->sale_price,
-            'note'                => $request->has('note') ? ($data['note'] ?? null) : $ligne->note,
+            'note'                => $noteFournie ? ($data['note'] ?? null) : $ligne->note,
         ]);
 
         if ($ligne->depot_id) {
             app(AppAtelierApiService::class)->envoyerDisponibilite($ligne);
 
-            return back()->with('success', 'Disponibilité mise à jour et transmise au garage.');
+            return [true, 'Disponibilité mise à jour et transmise au garage.'];
         }
 
-        return back()->with('success', 'Pièce identifiée. Choisissez le dépôt de prélèvement pour finaliser.');
+        return [true, 'Pièce identifiée. Choisissez le dépôt de prélèvement pour finaliser.'];
     }
 
     /**
@@ -252,6 +337,7 @@ class FournisseurCommandeController extends Controller
         $vehicle->customer_id = $customer->id;
         $vehicle->brand = $vehicle->brand ?: $fournisseurCommande->vehicule_marque;
         $vehicle->model = $vehicle->model ?: $fournisseurCommande->vehicule_modele;
+        $vehicle->vin = $vehicle->vin ?: $fournisseurCommande->vehicule_vin;
         if ($plaque === '') {
             $vehicle->plate_number = 'INCONNU-' . $fournisseurCommande->numero;
         }

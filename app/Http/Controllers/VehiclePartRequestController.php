@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreVehiclePartRequestRequest;
+use App\Imports\VehiclePartRequestsImport;
 
+use App\Models\Depot;
 use App\Models\Product;
 use App\Models\ProductDepotStock;
 use App\Models\StockMovement;
@@ -20,6 +22,10 @@ use Illuminate\Support\Facades\DB;
 
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Maatwebsite\Excel\Facades\Excel;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class VehiclePartRequestController extends Controller
 {
@@ -766,50 +772,93 @@ class VehiclePartRequestController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    public function show(
-        VehiclePartRequest $vehiclePartRequest
-    ): View {
+   public function show(
+    VehiclePartRequest $vehiclePartRequest
+): View {
 
-        $vehiclePartRequest->load([
-            'vehicle.customer',
-            'product',
-            'supplier',
-            'creator',
-            'histories.user',
-        ]);
+    /*
+    |--------------------------------------------------------------------------
+    | CHARGER LES RELATIONS
+    |--------------------------------------------------------------------------
+    */
 
-
-        $availableStatuses =
-            collect(
-                $vehiclePartRequest
-                    ->availableNextStatuses()
-            )
-            ->mapWithKeys(
-                function ($status) {
-
-                    return [
-                        $status =>
-                            VehiclePartRequest::statuses()[$status],
-                    ];
-                }
-            );
+    $vehiclePartRequest->load([
+        'vehicle.customer',
+        'product',
+        'supplier',
+        'creator',
+        'histories.user',
+    ]);
 
 
-        $suppliers =
-            Supplier::query()
-                ->orderBy('name')
-                ->get();
+    /*
+    |--------------------------------------------------------------------------
+    | STATUTS DISPONIBLES
+    |--------------------------------------------------------------------------
+    */
 
+    $availableStatuses =
+        collect(
+            $vehiclePartRequest
+                ->availableNextStatuses()
+        )
+        ->mapWithKeys(
+            function ($status) {
 
-        return view(
-            'vehicle-part-requests.show',
-            compact(
-                'vehiclePartRequest',
-                'availableStatuses',
-                'suppliers'
-            )
+                return [
+                    $status =>
+                        VehiclePartRequest::statuses()[$status],
+                ];
+            }
         );
-    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | FOURNISSEURS
+    |--------------------------------------------------------------------------
+    */
+
+    $suppliers =
+        Supplier::query()
+            ->orderBy('name')
+            ->get();
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | DÉPÔTS
+    |--------------------------------------------------------------------------
+    |
+    | Les dépôts sont nécessaires dans le formulaire de réception.
+    |
+    | Lorsqu'une pièce commandée est reçue, l'utilisateur doit sélectionner
+    | le dépôt dans lequel la quantité entre physiquement en stock.
+    |
+    */
+
+    $depots =
+        Depot::query()
+            ->orderBy('name')
+            ->get();
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | AFFICHAGE
+    |--------------------------------------------------------------------------
+    */
+
+    return view(
+        'vehicle-part-requests.show',
+        compact(
+            'vehiclePartRequest',
+            'availableStatuses',
+            'suppliers',
+            'depots'
+        )
+    );
+}
 
 
     /*
@@ -1221,8 +1270,9 @@ class VehiclePartRequestController extends Controller
                 |
                 */
 
-                'depot_id' => [
-                    'nullable',
+               'depot_id' => [
+                    'required',
+                    'integer',
                     'exists:depots,id',
                 ],
 
@@ -1243,6 +1293,12 @@ class VehiclePartRequestController extends Controller
                     'La quantité reçue maintenant doit être supérieure à zéro.',
 
                 'depot_id.exists' =>
+                    'Le dépôt sélectionné est invalide.',
+
+                'depot_id.required' =>
+                    'Le dépôt de réception est obligatoire.',
+
+                'depot_id.integer' =>
                     'Le dépôt sélectionné est invalide.',
             ]
         );
@@ -1408,28 +1464,25 @@ class VehiclePartRequestController extends Controller
                 $newStatus
             ) {
 
-                /*
+               /*
                 |--------------------------------------------------------------------------
-                | RETROUVER ET VERROUILLER LE PRODUIT
+                | RETROUVER LE PRODUIT
                 |--------------------------------------------------------------------------
                 |
                 | Priorité :
                 |
-                | 1. product_id
-                | 2. référence
+                | 1. product_id déjà lié à la demande
+                | 2. référence de la pièce
+                | 3. création automatique si le produit n'existe pas
                 |
                 */
 
                 $product = null;
 
                 if ($vehiclePartRequest->product_id) {
-
-                    $product =
-                        Product::query()
-                            ->lockForUpdate()
-                            ->find(
-                                $vehiclePartRequest->product_id
-                            );
+                    $product = Product::query()
+                        ->lockForUpdate()
+                        ->find($vehiclePartRequest->product_id);
                 }
 
                 if (
@@ -1437,245 +1490,420 @@ class VehiclePartRequestController extends Controller
                     &&
                     !empty($vehiclePartRequest->reference)
                 ) {
-                    $product =
-                        Product::query()
-                            ->where(
-                                'reference',
-                                $vehiclePartRequest->reference
-                            )
-                            ->lockForUpdate()
-                            ->first();
+                    $product = Product::query()
+                        ->where(
+                            'reference',
+                            $vehiclePartRequest->reference
+                        )
+                        ->lockForUpdate()
+                        ->first();
                 }
 
 
                 /*
                 |--------------------------------------------------------------------------
-                | SYNCHRONISATION DU STOCK PRODUIT
+                | CRÉATION AUTOMATIQUE DU PRODUIT
                 |--------------------------------------------------------------------------
                 |
-                | RÈGLE MÉTIER :
+                | Si la pièce commandée n'existe pas encore dans le catalogue,
+                | elle est créée lors de sa première réception.
                 |
-                | Cette réception correspond à une quantité déjà comptée dans
-                | initial_quantity.
+                | IMPORTANT :
                 |
-                | Donc :
-                |
-                | initial_quantity  = NE CHANGE PAS
-                | received_quantity = augmente de received_now
-                | quantity          = augmente de received_now
+                | La quantité est initialisée à zéro ici.
+                | L'entrée physique reçue sera ajoutée plus bas UNE SEULE FOIS.
                 |
                 */
 
-                if ($product) {
+                if (!$product) {
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | LIER LE PRODUIT À LA DEMANDE SI RETROUVÉ PAR RÉFÉRENCE
-                    |--------------------------------------------------------------------------
-                    */
-
-                    if (!$vehiclePartRequest->product_id) {
-                        $vehiclePartRequest->product_id =
-                            $product->id;
+                    if (empty($vehiclePartRequest->reference)) {
+                        throw new \RuntimeException(
+                            'Impossible de créer automatiquement la pièce : '
+                            . 'la référence est obligatoire.'
+                        );
                     }
 
+                    $product = new Product();
+
+                    $product->reference =
+                        trim($vehiclePartRequest->reference);
+
+                    $product->designation =
+                        $vehiclePartRequest->part_name
+                        ?: $vehiclePartRequest->reference;
 
                     /*
                     |--------------------------------------------------------------------------
-                    | VALEURS ACTUELLES
+                    | QUANTITÉS INITIALES
                     |--------------------------------------------------------------------------
+                    |
+                    | On démarre à zéro pour éviter de compter deux fois
+                    | la réception courante.
+                    |
                     */
 
-                   /*
-                    |--------------------------------------------------------------------------
-                    | VALEURS ACTUELLES DU PRODUIT
-                    |--------------------------------------------------------------------------
-                    */
+                    $product->quantity = 0;
 
-                    $currentAvailableQuantity =
-                        (float) ($product->quantity ?? 0);
+                    $product->initial_quantity = 0;
 
-                    $currentProductReceivedQuantity =
-                        (float) ($product->received_quantity ?? 0);
-
-                    $currentProductInitialQuantity =
-                        (float) ($product->initial_quantity ?? 0);
-
+                    $product->received_quantity = 0;
 
                     /*
                     |--------------------------------------------------------------------------
-                    | NOUVELLES VALEURS
+                    | UNITÉ
                     |--------------------------------------------------------------------------
                     |
-                    | Une réception provenant d'une commande garage est une nouvelle
-                    | entrée physique dans le stock.
+                    | On reprend l'unité de la demande lorsqu'elle existe.
                     |
-                    | Exemple :
-                    |
-                    | Produit avant :
-                    | initial_quantity  = 20
-                    | received_quantity = 20
-                    | quantity          = 5
-                    |
-                    | Nouvelle commande reçue : 10
-                    |
-                    | Produit après :
-                    | initial_quantity  = 30
-                    | received_quantity = 30
-                    | quantity          = 15
+                    | Si votre colonne unit_type utilise des valeurs spécifiques,
+                    | le modèle / la base conserve ici la valeur par défaut.
                     |
                     */
 
-                    $newProductInitialQuantity =
-                        $currentProductInitialQuantity
-                        +
-                        $quantityDifference;
-
-                    $newProductReceivedQuantity =
-                        $currentProductReceivedQuantity
-                        +
-                        $quantityDifference;
-
-                    $newProductAvailableQuantity =
-                        $currentAvailableQuantity
-                        +
-                        $quantityDifference;
-
+                    if (!empty($vehiclePartRequest->unit)) {
+                        $product->unit_label =
+                            $vehiclePartRequest->unit;
+                    }
 
                     /*
                     |--------------------------------------------------------------------------
-                    | MISE À JOUR DU PRODUIT
+                    | PRIX D'ACHAT INITIAL
                     |--------------------------------------------------------------------------
+                    |
+                    | Pour un nouveau produit :
+                    |
+                    | stock avant = 0
+                    |
+                    | donc le CUMP initial est simplement le prix
+                    | de cette première réception.
+                    |
                     */
 
-                    $product->initial_quantity =
-                        $newProductInitialQuantity;
+                    $incomingPrice =
+                        (float) ($vehiclePartRequest->purchase_price ?? 0);
 
-                    $product->received_quantity =
-                        $newProductReceivedQuantity;
+                    $product->purchase_price =
+                        round($incomingPrice, 4);
 
-                    $product->quantity =
-                        $newProductAvailableQuantity;
+                    /*
+                    |--------------------------------------------------------------------------
+                    | COEFFICIENTS
+                    |--------------------------------------------------------------------------
+                    |
+                    | Si le modèle / la base possède des valeurs par défaut,
+                    | elles seront utilisées.
+                    |
+                    */
+
+                    $coefPurchase =
+                        (float) ($product->coef_purchase ?? 0);
+
+                    $coefSale =
+                        (float) ($product->coef_sale ?? 0);
+
+                    $product->cost_price =
+                        round(
+                            $product->purchase_price * $coefPurchase,
+                            4
+                        );
+
+                    $product->sale_price =
+                        round(
+                            $product->cost_price * $coefSale,
+                            2
+                        );
 
                     $product->status =
                         'disponible';
 
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | PRIX D'ACHAT
-                    |--------------------------------------------------------------------------
-                    |
-                    | On garde le prix le plus élevé.
-                    |
-                    */
-
-                    if (
-                        $vehiclePartRequest->purchase_price !== null
-                    ) {
-
-                        $incomingPrice =
-                            (float) $vehiclePartRequest->purchase_price;
-
-                        $currentPrice =
-                            (float) ($product->purchase_price ?? 0);
-
-                        if ($incomingPrice > $currentPrice) {
-
-                            $product->purchase_price =
-                                $incomingPrice;
-
-                            $coefPurchase =
-                                (float) ($product->coef_purchase ?? 0);
-
-                            $coefSale =
-                                (float) ($product->coef_sale ?? 0);
-
-                            $product->cost_price =
-                                $incomingPrice * $coefPurchase;
-
-                            $product->sale_price =
-                                $product->cost_price * $coefSale;
-                        }
-                    }
-
                     $product->save();
-
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | STOCK DU DÉPÔT
-                    |--------------------------------------------------------------------------
-                    */
-
-                    if ($request->filled('depot_id')) {
-
-                        $depotStock =
-                            ProductDepotStock::query()
-                                ->where(
-                                    'product_id',
-                                    $product->id
-                                )
-                                ->where(
-                                    'depot_id',
-                                    $request->depot_id
-                                )
-                                ->lockForUpdate()
-                                ->first();
-
-                        if (!$depotStock) {
-
-                            $depotStock =
-                                ProductDepotStock::create([
-                                    'product_id' =>
-                                        $product->id,
-
-                                    'depot_id' =>
-                                        $request->depot_id,
-
-                                    'quantity' =>
-                                        0,
-                                ]);
-                        }
-
-                        $depotStock->quantity =
-                            (float) $depotStock->quantity
-                            +
-                            $quantityDifference;
-
-                        $depotStock->save();
-                    }
-
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | MOUVEMENT DE STOCK
-                    |--------------------------------------------------------------------------
-                    */
-
-                    StockMovement::create([
-                        'product_id' =>
-                            $product->id,
-
-                        'type' =>
-                            'in',
-
-                        'quantity' =>
-                            $quantityDifference,
-
-                        'source' =>
-                            'Réception commande véhicule',
-
-                        'reference' =>
-                            $vehiclePartRequest->order_reference
-                            ??
-                            $vehiclePartRequest->reference,
-
-                        'user_id' =>
-                            Auth::id(),
-                    ]);
                 }
 
+
+                /*
+                |--------------------------------------------------------------------------
+                | LIER LE PRODUIT À LA DEMANDE
+                |--------------------------------------------------------------------------
+                */
+
+                if (
+                    !$vehiclePartRequest->product_id
+                    ||
+                    (int) $vehiclePartRequest->product_id
+                        !== (int) $product->id
+                ) {
+                    $vehiclePartRequest->product_id =
+                        $product->id;
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | STOCK AVANT RÉCEPTION
+                |--------------------------------------------------------------------------
+                |
+                | IMPORTANT :
+                |
+                | quantity représente le stock actuellement disponible.
+                |
+                | C'est cette quantité qui doit être utilisée pour le CUMP.
+                |
+                | Le CUMP doit impérativement être calculé AVANT
+                | d'ajouter received_now au stock.
+                |
+                */
+
+                $oldQuantity =
+                    (float) ($product->quantity ?? 0);
+
+                $oldAveragePurchasePrice =
+                    (float) ($product->purchase_price ?? 0);
+
+                $currentProductReceivedQuantity =
+                    (float) ($product->received_quantity ?? 0);
+
+                $currentProductInitialQuantity =
+                    (float) ($product->initial_quantity ?? 0);
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | PRIX DE LA NOUVELLE RÉCEPTION
+                |--------------------------------------------------------------------------
+                */
+
+                $newPurchasePrice =
+                    (float) ($vehiclePartRequest->purchase_price ?? 0);
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | QUANTITÉ APRÈS RÉCEPTION
+                |--------------------------------------------------------------------------
+                */
+
+                $newProductAvailableQuantity =
+                    $oldQuantity + $quantityDifference;
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | CUMP - PRIX D'ACHAT MOYEN PONDÉRÉ
+                |--------------------------------------------------------------------------
+                |
+                | Même règle que ProductController :
+                |
+                | (stock actuel × ancien CUMP)
+                | +
+                | (quantité reçue × nouveau prix)
+                | ------------------------------------------------
+                | stock actuel + quantité reçue
+                |
+                */
+
+                if ($quantityDifference > 0) {
+
+                    if ($oldQuantity > 0) {
+
+                        $weightedPurchasePrice = (
+                            ($oldQuantity * $oldAveragePurchasePrice)
+                            +
+                            ($quantityDifference * $newPurchasePrice)
+                        ) / $newProductAvailableQuantity;
+
+                    } else {
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | STOCK AVANT = 0
+                        |--------------------------------------------------------------------------
+                        |
+                        | L'ancien prix ne participe pas au calcul.
+                        |
+                        */
+
+                        $weightedPurchasePrice =
+                            $newPurchasePrice;
+                    }
+
+                } else {
+
+                    $weightedPurchasePrice =
+                        $oldAveragePurchasePrice;
+                }
+
+                $weightedPurchasePrice =
+                    round(
+                        $weightedPurchasePrice,
+                        4
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | QUANTITÉS HISTORIQUES DU PRODUIT
+                |--------------------------------------------------------------------------
+                |
+                | Cette réception représente une nouvelle entrée physique.
+                |
+                */
+
+                $newProductInitialQuantity =
+                    $currentProductInitialQuantity
+                    +
+                    $quantityDifference;
+
+                $newProductReceivedQuantity =
+                    $currentProductReceivedQuantity
+                    +
+                    $quantityDifference;
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | PRIX DE REVIENT PONDÉRÉ
+                |--------------------------------------------------------------------------
+                |
+                | Même règle que ProductController :
+                |
+                | prix de revient
+                | =
+                | CUMP × dernier coefficient d'achat
+                |
+                */
+
+                $coefPurchase =
+                    (float) ($product->coef_purchase ?? 0);
+
+                $weightedCostPrice =
+                    round(
+                        $weightedPurchasePrice * $coefPurchase,
+                        4
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | PRIX DE VENTE
+                |--------------------------------------------------------------------------
+                */
+
+                $coefSale =
+                    (float) ($product->coef_sale ?? 0);
+
+                $salePrice =
+                    round(
+                        $weightedCostPrice * $coefSale,
+                        2
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | MISE À JOUR DU PRODUIT
+                |--------------------------------------------------------------------------
+                */
+
+                $product->initial_quantity =
+                    $newProductInitialQuantity;
+
+                $product->received_quantity =
+                    $newProductReceivedQuantity;
+
+                $product->quantity =
+                    $newProductAvailableQuantity;
+
+                $product->purchase_price =
+                    $weightedPurchasePrice;
+
+                $product->cost_price =
+                    $weightedCostPrice;
+
+                $product->sale_price =
+                    $salePrice;
+
+                $product->status =
+                    'disponible';
+
+                $product->save();
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | STOCK DU DÉPÔT
+                |--------------------------------------------------------------------------
+                |
+                | depot_id est obligatoire dans le formulaire.
+                |
+                */
+
+                $depotStock =
+                    ProductDepotStock::query()
+                        ->where(
+                            'product_id',
+                            $product->id
+                        )
+                        ->where(
+                            'depot_id',
+                            $request->depot_id
+                        )
+                        ->lockForUpdate()
+                        ->first();
+
+                if (!$depotStock) {
+
+                    $depotStock =
+                        new ProductDepotStock();
+
+                    $depotStock->product_id =
+                        $product->id;
+
+                    $depotStock->depot_id =
+                        $request->depot_id;
+
+                    $depotStock->quantity =
+                        0;
+                }
+
+                $depotStock->quantity =
+                    (float) ($depotStock->quantity ?? 0)
+                    +
+                    $quantityDifference;
+
+                $depotStock->save();
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | MOUVEMENT DE STOCK
+                |--------------------------------------------------------------------------
+                */
+
+                $stockMovement =
+                    new StockMovement();
+
+                $stockMovement->product_id =
+                    $product->id;
+
+                $stockMovement->type =
+                    'in';
+
+                $stockMovement->quantity =
+                    $quantityDifference;
+
+                $stockMovement->source =
+                    'Réception commande véhicule';
+
+                $stockMovement->reference =
+                    $vehiclePartRequest->order_reference
+                    ??
+                    $vehiclePartRequest->reference;
+
+                $stockMovement->user_id =
+                    Auth::id();
+
+                $stockMovement->save();
 
                 /*
                 |--------------------------------------------------------------------------
@@ -1818,6 +2046,500 @@ class VehiclePartRequestController extends Controller
             );
     }
 
+        /*
+    |--------------------------------------------------------------------------
+    | IMPORT EXCEL
+    |--------------------------------------------------------------------------
+    */
+
+   public function importExcel(
+    Request $request
+): RedirectResponse {
+
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATION DU FORMULAIRE
+    |--------------------------------------------------------------------------
+    */
+
+    $validated = $request->validate(
+        [
+            'vehicle_id' => [
+                'required',
+                'integer',
+                'exists:vehicles,id',
+            ],
+
+            'excel_file' => [
+                'required',
+                'file',
+                'mimes:xlsx,xls,csv',
+                'max:10240',
+            ],
+        ],
+        [
+            'vehicle_id.required' =>
+                'Veuillez sélectionner un véhicule.',
+
+            'vehicle_id.integer' =>
+                'Le véhicule sélectionné est invalide.',
+
+            'vehicle_id.exists' =>
+                'Le véhicule sélectionné est invalide.',
+
+            'excel_file.required' =>
+                'Veuillez sélectionner un fichier Excel.',
+
+            'excel_file.file' =>
+                'Le fichier sélectionné est invalide.',
+
+            'excel_file.mimes' =>
+                'Le fichier doit être au format XLSX, XLS ou CSV.',
+
+            'excel_file.max' =>
+                'Le fichier ne doit pas dépasser 10 Mo.',
+        ]
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | PRÉPARER L'IMPORT
+    |--------------------------------------------------------------------------
+    */
+
+    $import =
+        new VehiclePartRequestsImport(
+            (int) $validated['vehicle_id']
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | IMPORT EXCEL
+    |--------------------------------------------------------------------------
+    */
+
+    try {
+
+        Excel::import(
+            $import,
+            $request->file('excel_file')
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | RÉSULTAT
+        |--------------------------------------------------------------------------
+        */
+
+        $imported =
+            $import->getImportedCount();
+
+        $matched =
+            $import->getMatchedProductsCount();
+
+        $unmatched =
+            $import->getUnmatchedProductsCount();
+
+        $errors =
+            $import->getErrors();
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | SÉCURITÉ SUPPLÉMENTAIRE
+        |--------------------------------------------------------------------------
+        |
+        | Normalement la classe d'import lance déjà une exception si elle trouve
+        | une erreur. Cette vérification empêche malgré tout de considérer
+        | l'import comme réussi si des erreurs sont présentes.
+        |
+        */
+
+        if (!empty($errors)) {
+
+            return redirect()
+                ->route(
+                    'vehicle-part-requests.create'
+                )
+                ->withInput()
+                ->with(
+                    'error',
+                    'Import annulé. '
+                    . count($errors)
+                    . ' erreur(s) détectée(s). '
+                    . 'Aucune pièce n’a été importée.'
+                )
+                ->with(
+                    'import_errors',
+                    $errors
+                );
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | AUCUNE LIGNE IMPORTÉE
+        |--------------------------------------------------------------------------
+        */
+
+        if ($imported === 0) {
+
+            return redirect()
+                ->route(
+                    'vehicle-part-requests.create'
+                )
+                ->withInput()
+                ->with(
+                    'error',
+                    'Aucune pièce n’a été importée. '
+                    . 'Vérifiez le contenu et les en-têtes du fichier Excel.'
+                );
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | IMPORT RÉUSSI
+        |--------------------------------------------------------------------------
+        */
+
+        $message =
+            $imported
+            . ' pièce(s) importée(s) avec succès. '
+            . $matched
+            . ' référence(s) trouvée(s) dans le catalogue et '
+            . $unmatched
+            . ' référence(s) non trouvée(s).';
+
+
+        return redirect()
+            ->route(
+                'vehicle-part-requests.index'
+            )
+            ->with(
+                'success',
+                $message
+            );
+
+    } catch (\Throwable $e) {
+
+        /*
+        |--------------------------------------------------------------------------
+        | RÉCUPÉRER LES ERREURS MÉTIER DE L'IMPORT
+        |--------------------------------------------------------------------------
+        */
+
+        $errors =
+            $import->getErrors();
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | ERREUR DE VALIDATION DU CONTENU EXCEL
+        |--------------------------------------------------------------------------
+        */
+
+        if (!empty($errors)) {
+
+            return redirect()
+                ->route(
+                    'vehicle-part-requests.create'
+                )
+                ->withInput()
+                ->with(
+                    'error',
+                    'Import annulé. '
+                    . count($errors)
+                    . ' erreur(s) détectée(s) dans le fichier Excel. '
+                    . 'Aucune pièce n’a été importée.'
+                )
+                ->with(
+                    'import_errors',
+                    $errors
+                );
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | AUTRE ERREUR TECHNIQUE
+        |--------------------------------------------------------------------------
+        */
+
+        report($e);
+
+
+        return redirect()
+            ->route(
+                'vehicle-part-requests.create'
+            )
+            ->withInput()
+            ->with(
+                'error',
+                'L’import Excel a échoué : '
+                . $e->getMessage()
+            );
+    }
+}
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | TÉLÉCHARGER LE MODÈLE EXCEL
+    |--------------------------------------------------------------------------
+    */
+
+    public function downloadImportTemplate(): BinaryFileResponse
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | CRÉER LE CLASSEUR
+        |--------------------------------------------------------------------------
+        */
+
+        $spreadsheet =
+            new Spreadsheet();
+
+        $sheet =
+            $spreadsheet->getActiveSheet();
+
+        $sheet->setTitle(
+            'Pieces'
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | EN-TÊTES
+        |--------------------------------------------------------------------------
+        */
+
+        $headers = [
+            'REFERENCE',
+            'DESIGNATION',
+            'QUANTITE',
+            'UNITE',
+            'FOURNISSEUR',
+            'REFERENCE_FOURNISSEUR',
+            'PRIX_ESTIME',
+            'DESCRIPTION',
+            'NOTES',
+        ];
+
+        foreach (
+            $headers as $columnIndex => $header
+        ) {
+
+            $sheet->setCellValue(
+                [
+                    $columnIndex + 1,
+                    1,
+                ],
+                $header
+            );
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | EXEMPLES
+        |--------------------------------------------------------------------------
+        */
+
+        $examples = [
+            [
+                '17801-30040',
+                'Filtre à air',
+                2,
+                'Pièce',
+                '',
+                '',
+                '',
+                'Filtre moteur',
+                'Urgent',
+            ],
+
+            [
+                '23390-0L100',
+                'Filtre gasoil',
+                1,
+                'Pièce',
+                '',
+                '',
+                '',
+                '',
+                '',
+            ],
+
+            [
+                'ABC-001',
+                'Plaquette de frein avant',
+                4,
+                'Pièce',
+                '',
+                '',
+                '',
+                'Pièce absente du catalogue',
+                '',
+            ],
+        ];
+
+        $rowNumber = 2;
+
+        foreach ($examples as $example) {
+
+            foreach (
+                $example as $columnIndex => $value
+            ) {
+
+                $sheet->setCellValue(
+                    [
+                        $columnIndex + 1,
+                        $rowNumber,
+                    ],
+                    $value
+                );
+            }
+
+            $rowNumber++;
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | STYLE DES EN-TÊTES
+        |--------------------------------------------------------------------------
+        */
+
+        $sheet
+            ->getStyle('A1:I1')
+            ->getFont()
+            ->setBold(true);
+
+        $sheet
+            ->getStyle('A1:I1')
+            ->getAlignment()
+            ->setHorizontal(
+                \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER
+            );
+
+        $sheet
+            ->getStyle('A1:I1')
+            ->getAlignment()
+            ->setVertical(
+                \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER
+            );
+
+        $sheet
+            ->getStyle('A1:I1')
+            ->getFill()
+            ->setFillType(
+                \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID
+            )
+            ->getStartColor()
+            ->setARGB('FFD9EAF7');
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | LARGEUR DES COLONNES
+        |--------------------------------------------------------------------------
+        */
+
+        $widths = [
+            'A' => 24,
+            'B' => 35,
+            'C' => 14,
+            'D' => 16,
+            'E' => 28,
+            'F' => 25,
+            'G' => 18,
+            'H' => 40,
+            'I' => 35,
+        ];
+
+        foreach ($widths as $column => $width) {
+
+            $sheet
+                ->getColumnDimension($column)
+                ->setWidth($width);
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | FILTRE + FIGER LES EN-TÊTES
+        |--------------------------------------------------------------------------
+        */
+
+        $sheet->setAutoFilter(
+            'A1:I1'
+        );
+
+        $sheet->freezePane(
+            'A2'
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | SAUVEGARDE TEMPORAIRE
+        |--------------------------------------------------------------------------
+        */
+
+        $directory =
+            storage_path(
+                'app/maintenance'
+            );
+
+        if (!is_dir($directory)) {
+
+            mkdir(
+                $directory,
+                0755,
+                true
+            );
+        }
+
+        $fileName =
+            'modele_import_commandes_pieces.xlsx';
+
+        $filePath =
+            $directory
+            . DIRECTORY_SEPARATOR
+            . $fileName;
+
+        $writer =
+            new Xlsx(
+                $spreadsheet
+            );
+
+        $writer->save(
+            $filePath
+        );
+
+        $spreadsheet
+            ->disconnectWorksheets();
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | TÉLÉCHARGEMENT
+        |--------------------------------------------------------------------------
+        */
+
+        return response()
+            ->download(
+                $filePath,
+                $fileName
+            )
+            ->deleteFileAfterSend(
+                true
+            );
+    }
 
     /*
     |--------------------------------------------------------------------------

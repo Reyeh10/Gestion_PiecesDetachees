@@ -206,34 +206,20 @@ class FournisseurBonCommandeController extends Controller
                 ]);
 
                 /*
-                 * On utilise la position comme identifiant logique
-                 * des lignes reçues depuis App Atelier.
+                 * Les lignes reçues sont rapprochées des lignes existantes
+                 * par IDENTITÉ (référence, ou désignation pour les lignes
+                 * sans référence) et NON par position : si le garage
+                 * supprime une ligne, les positions se décalent et un
+                 * rapprochement par position mélangerait références, prix
+                 * et identifications manuelles entre les lignes.
                  */
 
-                $lignesParPosition = $bc->lignes
-                    ->keyBy('position');
-
-                /*
-                 * Les positions conservées permettront ensuite
-                 * de supprimer les lignes retirées du devis.
-                 */
-
-                $positionsGardees = [];
-
-                /*
-                |--------------------------------------------------------------------------
-                | TRAITEMENT DES PIÈCES
-                |--------------------------------------------------------------------------
-                */
+                $lignesConservees = [];
 
                 foreach (
                     array_values($data['pieces'])
                     as $position => $piece
                 ) {
-
-                    /*
-                     * Nettoyage de la référence.
-                     */
 
                     $reference = isset($piece['reference'])
                         ? trim((string) $piece['reference'])
@@ -243,10 +229,6 @@ class FournisseurBonCommandeController extends Controller
                         ? $reference
                         : null;
 
-                    /*
-                     * Nettoyage de la désignation.
-                     */
-
                     $designation = isset($piece['designation'])
                         ? trim((string) $piece['designation'])
                         : null;
@@ -255,193 +237,97 @@ class FournisseurBonCommandeController extends Controller
                         $designation = null;
                     }
 
-                    /*
-                     * Quantité demandée.
-                     */
-
                     $quantiteDemandee =
                         (float) $piece['quantite'];
 
-                    /*
-                     * Recherche d'une ligne existante
-                     * à la même position.
-                     */
-
-                    $existante =
-                        $lignesParPosition->get($position);
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | CAS 1 :
-                    | LA LIGNE EXISTE DÉJÀ ET POSSÈDE UN PRODUIT
-                    |--------------------------------------------------------------------------
-                    |
-                    | Cela signifie que la pièce a déjà été identifiée :
-                    |
-                    | - automatiquement par référence ;
-                    | - ou manuellement par un vendeur.
-                    |
-                    | On ne doit donc surtout pas supprimer product_id.
-                    |
-                    */
-
-                    if (
-                        $existante &&
-                        $existante->product_id
-                    ) {
-
-                        /*
-                         * On récupère le produit actuel.
-                         *
-                         * La relation peut éventuellement être null
-                         * si le produit a été supprimé.
-                         */
-
-                        $product = $existante->product;
-
-                        /*
-                         * Si le produit existe encore,
-                         * on recalcule le stock.
-                         */
-
-                        if ($product) {
-
-                            [$depotId, $quantiteDisponible, $disponible] =
-                                $this->resoudreDepot(
-                                    $product->id,
-                                    $quantiteDemandee,
-                                    $existante->depot_id
-                                );
-
-                            $existante->update([
-                                'designation' =>
-                                    $designation
-                                    ?? $existante->designation,
-
-                                'depot_id' =>
-                                    $depotId,
-
-                                'quantite_demandee' =>
-                                    $quantiteDemandee,
-
-                                'quantite_disponible' =>
-                                    $quantiteDisponible,
-
-                                'disponible' =>
-                                    $disponible,
-
-                                'prix_unitaire' =>
-                                    $product->sale_price,
-                            ]);
-
-                        } else {
-
-                            /*
-                             * Le product_id existe mais le produit
-                             * correspondant n'existe plus.
-                             */
-
-                            $existante->update([
-                                'product_id' =>
-                                    null,
-
-                                'depot_id' =>
-                                    null,
-
-                                'designation' =>
-                                    $designation
-                                    ?? $existante->designation,
-
-                                'quantite_demandee' =>
-                                    $quantiteDemandee,
-
-                                'quantite_disponible' =>
-                                    0,
-
-                                'disponible' =>
-                                    false,
-
-                                'prix_unitaire' =>
-                                    null,
-                            ]);
-                        }
-
-                        $positionsGardees[] =
-                            $position;
-
-                        continue;
-                    }
+                    $existante = $this->trouverLigneExistante(
+                        $bc->lignes,
+                        $lignesConservees,
+                        $reference,
+                        $designation,
+                        $position
+                    );
 
                     /*
                     |--------------------------------------------------------------------------
-                    | CAS 2 :
-                    | AUCUNE RÉFÉRENCE FOURNIE
+                    | LIGNE SANS RÉFÉRENCE
                     |--------------------------------------------------------------------------
-                    |
-                    | Exemple :
-                    |
-                    | - main d'œuvre ;
-                    | - peinture ;
-                    | - pièce non référencée ;
-                    | - article inconnu du garage.
-                    |
-                    | Le vendeur devra identifier la pièce manuellement.
-                    |
+                    | Le vendeur l'identifie manuellement : on ne touche pas à
+                    | cette identification si la ligne est retrouvée.
                     */
 
                     if ($reference === null) {
 
-                        $bc->lignes()->updateOrCreate(
-                            [
-                                'position' =>
-                                    $position,
-                            ],
-                            [
-                                'product_id' =>
-                                    null,
+                        if ($existante && $existante->product_id) {
 
-                                'reference' =>
-                                    null,
+                            $product = $existante->product;
 
-                                'designation' =>
-                                    $designation,
+                            if ($product) {
+                                [$depotId, $quantiteDisponible, $disponible] =
+                                    $this->resoudreDepot(
+                                        $product->id,
+                                        $quantiteDemandee,
+                                        $existante->depot_id
+                                    );
 
-                                'quantite_demandee' =>
-                                    $quantiteDemandee,
+                                $existante->update([
+                                    'position' => $position,
+                                    'designation' => $designation ?? $existante->designation,
+                                    'depot_id' => $depotId,
+                                    'quantite_demandee' => $quantiteDemandee,
+                                    'quantite_disponible' => $quantiteDisponible,
+                                    'disponible' => $disponible,
+                                    'prix_unitaire' => $product->sale_price,
+                                ]);
+                            } else {
+                                $existante->update([
+                                    'position' => $position,
+                                    'product_id' => null,
+                                    'depot_id' => null,
+                                    'designation' => $designation ?? $existante->designation,
+                                    'quantite_demandee' => $quantiteDemandee,
+                                    'quantite_disponible' => 0,
+                                    'disponible' => false,
+                                    'prix_unitaire' => null,
+                                ]);
+                            }
 
-                                'quantite_disponible' =>
-                                    null,
+                        } elseif ($existante) {
 
-                                'disponible' =>
-                                    null,
+                            $existante->update([
+                                'position' => $position,
+                                'designation' => $designation ?? $existante->designation,
+                                'quantite_demandee' => $quantiteDemandee,
+                            ]);
 
-                                'prix_unitaire' =>
-                                    null,
-                            ]
-                        );
+                        } else {
 
-                        $positionsGardees[] =
-                            $position;
+                            $existante = $bc->lignes()->create([
+                                'position' => $position,
+                                'product_id' => null,
+                                'reference' => null,
+                                'designation' => $designation,
+                                'quantite_demandee' => $quantiteDemandee,
+                                'quantite_disponible' => null,
+                                'disponible' => null,
+                                'prix_unitaire' => null,
+                            ]);
+                        }
+
+                        $lignesConservees[] = $existante->id;
 
                         continue;
                     }
 
                     /*
                     |--------------------------------------------------------------------------
-                    | CAS 3 :
-                    | RECHERCHE AUTOMATIQUE PAR RÉFÉRENCE
+                    | LIGNE AVEC RÉFÉRENCE : recherche automatique du produit
                     |--------------------------------------------------------------------------
                     */
 
                     $product = Product::query()
                         ->where('reference', $reference)
                         ->first();
-
-                    /*
-                     * Dépôt, quantité disponible et disponibilité, calculés
-                     * sur le stock par dépôt (un seul dépôt -> choisi
-                     * automatiquement ; plusieurs -> le vendeur choisira).
-                     */
 
                     if ($product) {
                         [$depotId, $quantiteDisponible, $disponible] =
@@ -456,46 +342,25 @@ class FournisseurBonCommandeController extends Controller
                         $disponible = false;
                     }
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | CRÉATION / MISE À JOUR DE LA LIGNE
-                    |--------------------------------------------------------------------------
-                    */
+                    $attributs = [
+                        'position' => $position,
+                        'product_id' => $product?->id,
+                        'depot_id' => $depotId,
+                        'reference' => $reference,
+                        'designation' => $designation,
+                        'quantite_demandee' => $quantiteDemandee,
+                        'quantite_disponible' => $quantiteDisponible,
+                        'disponible' => $disponible,
+                        'prix_unitaire' => $product?->sale_price,
+                    ];
 
-                    $bc->lignes()->updateOrCreate(
-                        [
-                            'position' =>
-                                $position,
-                        ],
-                        [
-                            'product_id' =>
-                                $product?->id,
+                    if ($existante) {
+                        $existante->update($attributs);
+                    } else {
+                        $existante = $bc->lignes()->create($attributs);
+                    }
 
-                            'depot_id' =>
-                                $depotId,
-
-                            'reference' =>
-                                $reference,
-
-                            'designation' =>
-                                $designation,
-
-                            'quantite_demandee' =>
-                                $quantiteDemandee,
-
-                            'quantite_disponible' =>
-                                $quantiteDisponible,
-
-                            'disponible' =>
-                                $disponible,
-
-                            'prix_unitaire' =>
-                                $product?->sale_price,
-                        ]
-                    );
-
-                    $positionsGardees[] =
-                        $position;
+                    $lignesConservees[] = $existante->id;
                 }
 
                 /*
@@ -504,24 +369,9 @@ class FournisseurBonCommandeController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
-                if (count($positionsGardees) > 0) {
-
-                    $bc->lignes()
-                        ->whereNotIn(
-                            'position',
-                            $positionsGardees
-                        )
-                        ->delete();
-
-                } else {
-
-                    /*
-                     * Normalement impossible grâce à min:1,
-                     * mais sécurité supplémentaire.
-                     */
-
-                    $bc->lignes()->delete();
-                }
+                $bc->lignes()
+                    ->whereNotIn('id', $lignesConservees)
+                    ->delete();
 
                 /*
                  * Retour du bon de commande
@@ -682,6 +532,25 @@ class FournisseurBonCommandeController extends Controller
                     'Une erreur est survenue lors du traitement du bon de commande.',
             ], 500);
         }
+    }
+
+    /**
+     * Retrouve la ligne existante correspondant à une pièce reçue :
+     * même référence, ou (sans référence) même désignation. Les lignes déjà
+     * rapprochées sont exclues ; en cas de doublons, la plus proche en
+     * position est préférée.
+     */
+    private function trouverLigneExistante($lignes, array $dejaRapprochees, ?string $reference, ?string $designation, int $position)
+    {
+        $norm = fn ($v) => mb_strtolower(trim((string) $v));
+
+        $candidates = $lignes
+            ->reject(fn ($l) => in_array($l->id, $dejaRapprochees, true))
+            ->filter(fn ($l) => $reference !== null
+                ? $norm($l->reference) === $norm($reference)
+                : ($l->reference === null && $norm($l->designation) === $norm($designation)));
+
+        return $candidates->firstWhere('position', $position) ?? $candidates->first();
     }
 
     /**

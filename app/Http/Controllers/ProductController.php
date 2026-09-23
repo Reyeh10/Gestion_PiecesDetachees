@@ -16,7 +16,9 @@ use App\Models\Depot;
 use App\Models\ProductDepotStock;
 
 use App\Exports\ProductsExport;
+use App\Exports\SoldProductsExport;
 // use Barryvdh\DomPDF\Facade\Pdf;
+
 
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -181,163 +183,571 @@ class ProductController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    public function preview(Request $request)
-    {
+   public function preview(Request $request)
+{
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATION
+    |--------------------------------------------------------------------------
+    */
+
+    $request->validate([
+        'file' => 'required|mimes:xlsx,xls,csv',
+        'supplier_id' => 'required|exists:suppliers,id',
+        'depot_id' => 'required|exists:depots,id',
+    ]);
+
+    /*
+    |--------------------------------------------------------------------------
+    | FOURNISSEUR / DEPOT
+    |--------------------------------------------------------------------------
+    */
+
+    $supplier = Supplier::findOrFail(
+        $request->supplier_id
+    );
+
+    $depot = Depot::findOrFail(
+        $request->depot_id
+    );
+
+    /*
+    |--------------------------------------------------------------------------
+    | LECTURE EXCEL
+    |--------------------------------------------------------------------------
+    */
+
+    $rows = Excel::toCollection(
+        collect([]),
+        $request->file('file')
+    )->first();
+
+    /*
+    |--------------------------------------------------------------------------
+    | IGNORER HEADER
+    |--------------------------------------------------------------------------
+    */
+
+    $rows = $rows->skip(1);
+
+    $data = [];
+
+    /*
+    |--------------------------------------------------------------------------
+    | LOOP
+    |--------------------------------------------------------------------------
+    */
+
+    foreach ($rows as $index => $row) {
+
         /*
         |--------------------------------------------------------------------------
-        | VALIDATION
+        | NUMERO REEL DE LA LIGNE EXCEL
         |--------------------------------------------------------------------------
         */
 
-        $request->validate([
-            'file' => 'required|mimes:xlsx,xls,csv',
-            'supplier_id' => 'required|exists:suppliers,id',
-            'depot_id' => 'required|exists:depots,id',
-
-        ]);
+        $excelLine = $index + 1;
 
         /*
         |--------------------------------------------------------------------------
-        | FOURNISSEUR / DEPOT
+        | IGNORER LES LIGNES COMPLETEMENT VIDES
         |--------------------------------------------------------------------------
         */
 
-        $supplier = Supplier::findOrFail($request->supplier_id);
-        $depot = Depot::findOrFail($request->depot_id);
+        $allEmpty = true;
+
+        for ($i = 0; $i <= 14; $i++) {
+
+            if (
+                trim((string) ($row[$i] ?? '')) !== ''
+            ) {
+                $allEmpty = false;
+                break;
+            }
+        }
+
+        if ($allEmpty) {
+            continue;
+        }
 
         /*
         |--------------------------------------------------------------------------
-        | LECTURE EXCEL
+        | CHAMPS OBLIGATOIRES
         |--------------------------------------------------------------------------
         */
 
-        $rows = Excel::toCollection(
-            collect([]),
-            $request->file('file')
-        )->first();
+        $errors = [];
+
+        if (
+            trim((string) ($row[0] ?? '')) === ''
+        ) {
+            $errors[] = 'REFERENCE';
+        }
+
+        if (
+            trim((string) ($row[1] ?? '')) === ''
+        ) {
+            $errors[] = 'DESIGNATION';
+        }
+
+        if (
+            trim((string) ($row[2] ?? '')) === ''
+        ) {
+            $errors[] = 'MARQUE';
+        }
+
+        if (
+            trim((string) ($row[3] ?? '')) === ''
+        ) {
+            $errors[] = 'MODELE';
+        }
 
         /*
         |--------------------------------------------------------------------------
-        | IGNORER HEADER
+        | QUANTITE
         |--------------------------------------------------------------------------
         */
 
-        $rows = $rows->skip(1);
-
-        $data = [];
+        if (
+            !isset($row[8]) ||
+            trim((string) $row[8]) === '' ||
+            !is_numeric($row[8]) ||
+            (float) $row[8] < 0
+        ) {
+            $errors[] = 'QUANTITE';
+        }
 
         /*
         |--------------------------------------------------------------------------
-        | LOOP
+        | PRIX ACHAT
         |--------------------------------------------------------------------------
         */
 
-        foreach ($rows as $index => $row) {
+        if (
+            !isset($row[11]) ||
+            trim((string) $row[11]) === '' ||
+            !is_numeric($row[11]) ||
+            (float) $row[11] < 0
+        ) {
+            $errors[] = 'PRIX_ACHAT';
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | COEFFICIENT ACHAT
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            !isset($row[12]) ||
+            trim((string) $row[12]) === '' ||
+            !is_numeric($row[12]) ||
+            (float) $row[12] < 0
+        ) {
+            $errors[] = 'COEF_ACHAT';
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | COEFFICIENT VENTE
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            !isset($row[13]) ||
+            trim((string) $row[13]) === '' ||
+            !is_numeric($row[13]) ||
+            (float) $row[13] < 0
+        ) {
+            $errors[] = 'COEF_VENTE';
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | DONNEES DE BASE
+        |--------------------------------------------------------------------------
+        */
+
+        $reference =
+            trim((string) ($row[0] ?? ''));
+
+        $newQuantity =
+            isset($row[8]) &&
+            is_numeric($row[8])
+                ? (float) $row[8]
+                : 0;
+
+        $newPurchasePrice =
+            isset($row[11]) &&
+            is_numeric($row[11])
+                ? (float) $row[11]
+                : 0;
+
+        $latestCoefPurchase =
+            isset($row[12]) &&
+            is_numeric($row[12])
+                ? (float) $row[12]
+                : 0;
+
+        $coefSale =
+            isset($row[13]) &&
+            is_numeric($row[13])
+                ? (float) $row[13]
+                : 0;
+
+        /*
+        |--------------------------------------------------------------------------
+        | RECHERCHER LE PRODUIT EXISTANT
+        |--------------------------------------------------------------------------
+        |
+        | La référence est utilisée pour déterminer s'il s'agit :
+        |
+        | - d'un nouveau produit
+        | - ou d'un nouvel arrivage d'un produit déjà existant
+        |
+        */
+
+        $existingProduct = null;
+
+        if ($reference !== '') {
+
+            $existingProduct = Product::where(
+                'reference',
+                $reference
+            )->first();
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | VARIABLES POUR LA PREVISUALISATION
+        |--------------------------------------------------------------------------
+        */
+
+        $oldQuantity = 0;
+
+        $oldAveragePurchasePrice = 0;
+
+        $weightedPurchasePrice =
+            $newPurchasePrice;
+
+        $futureQuantity =
+            $newQuantity;
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRODUIT EXISTANT
+        |--------------------------------------------------------------------------
+        */
+
+        if ($existingProduct) {
 
             /*
             |--------------------------------------------------------------------------
-            | NUMERO REEL DE LA LIGNE EXCEL
+            | STOCK ACTUEL
             |--------------------------------------------------------------------------
             */
 
-            $excelLine = $index + 1;
+            $oldQuantity =
+                (float) $existingProduct->quantity;
 
             /*
             |--------------------------------------------------------------------------
-            | IGNORER LES LIGNES COMPLETEMENT VIDES
+            | ANCIEN PRIX D'ACHAT MOYEN PONDERE
+            |--------------------------------------------------------------------------
+            |
+            | purchase_price contient maintenant le prix d'achat moyen pondéré.
+            |
+            */
+
+            $oldAveragePurchasePrice =
+                (float) $existingProduct->purchase_price;
+
+            /*
+            |--------------------------------------------------------------------------
+            | STOCK APRES IMPORT
             |--------------------------------------------------------------------------
             */
 
-            $allEmpty = true;
+            $futureQuantity =
+                $oldQuantity + $newQuantity;
 
-            for ($i = 0; $i <= 14; $i++) {
-                if (trim((string) ($row[$i] ?? '')) !== '') {
-                    $allEmpty = false;
-                    break;
+            /*
+            |--------------------------------------------------------------------------
+            | PRIX D'ACHAT MOYEN PONDERE
+            |--------------------------------------------------------------------------
+            |
+            | FORMULE :
+            |
+            | (stock actuel × ancien prix achat moyen)
+            | +
+            | (nouvelle quantité × nouveau prix achat)
+            |
+            | ------------------------------------------------
+            | stock actuel + nouvelle quantité
+            |
+            */
+
+            if ($newQuantity > 0) {
+
+                if ($oldQuantity > 0) {
+
+                    $weightedPurchasePrice = (
+                        ($oldQuantity * $oldAveragePurchasePrice)
+                        +
+                        ($newQuantity * $newPurchasePrice)
+                    ) / $futureQuantity;
+
+                } else {
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | STOCK ACTUEL = 0
+                    |--------------------------------------------------------------------------
+                    |
+                    | L'ancien prix n'entre plus dans le calcul.
+                    |
+                    */
+
+                    $weightedPurchasePrice =
+                        $newPurchasePrice;
                 }
-            }
 
-            if ($allEmpty) {
-                continue;
+            } else {
+
+                /*
+                |--------------------------------------------------------------------------
+                | AUCUN NOUVEL ARRIVAGE
+                |--------------------------------------------------------------------------
+                */
+
+                $weightedPurchasePrice =
+                    $oldAveragePurchasePrice;
             }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | ARRONDI PRIX D'ACHAT MOYEN
+        |--------------------------------------------------------------------------
+        */
+
+        $weightedPurchasePrice =
+            round(
+                $weightedPurchasePrice,
+                4
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRIX DE REVIENT PONDERE
+        |--------------------------------------------------------------------------
+        |
+        | REGLE METIER :
+        |
+        | Prix de revient pondéré
+        | =
+        | Prix d'achat moyen pondéré
+        | ×
+        | DERNIER coefficient d'achat
+        |
+        */
+
+        $weightedCostPrice =
+            round(
+                $weightedPurchasePrice *
+                $latestCoefPurchase,
+                4
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRIX DE VENTE
+        |--------------------------------------------------------------------------
+        */
+
+        $salePrice =
+            round(
+                $weightedCostPrice *
+                $coefSale,
+                2
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | UNITES
+        |--------------------------------------------------------------------------
+        */
+
+        $unitType = strtolower(
+            trim(
+                (string) ($row[14] ?? 'piece')
+            )
+        );
+
+        if ($unitType === '') {
+            $unitType = 'piece';
+        }
+
+        $unitLabel =
+            in_array(
+                $unitType,
+                ['litre', 'liter', 'l']
+            )
+                ? 'L'
+                : (
+                    in_array(
+                        $unitType,
+                        [
+                            'kg',
+                            'kilogramme',
+                            'kilogram'
+                        ]
+                    )
+                        ? 'Kg'
+                        : (
+                            $unitType === 'carton'
+                                ? 'Carton'
+                                : 'Pièce'
+                        )
+                );
+
+        /*
+        |--------------------------------------------------------------------------
+        | DATA
+        |--------------------------------------------------------------------------
+        |
+        | IMPORTANT :
+        |
+        | purchase_price envoyé à storeImport doit rester le prix du
+        | NOUVEL ARRIVAGE.
+        |
+        | Il ne faut surtout pas envoyer weightedPurchasePrice comme
+        | purchase_price, sinon storeImport ferait une deuxième pondération.
+        |
+        */
+
+        $data[] = [
+
+            'excel_line' =>
+                $excelLine,
+
+            'reference' =>
+                $reference,
+
+            'designation' =>
+                trim((string) ($row[1] ?? '')),
+
+            'brand_name' =>
+                trim((string) ($row[2] ?? '')),
+
+            'model_name' =>
+                trim((string) ($row[3] ?? '')),
+
+            'family_name' =>
+                trim((string) ($row[4] ?? '')),
+
+            'subfamily_name' =>
+                trim((string) ($row[5] ?? '')),
+
+            'rayon_name' =>
+                trim((string) ($row[6] ?? '')),
+
+            'location_name' =>
+                trim((string) ($row[7] ?? '')),
 
             /*
             |--------------------------------------------------------------------------
-            | CHAMPS OBLIGATOIRES
+            | QUANTITE DU NOUVEL ARRIVAGE
             |--------------------------------------------------------------------------
             */
 
-            $errors = [];
+            'quantity' =>
+                $newQuantity,
 
-            if (trim((string) ($row[0] ?? '')) === '') {
-                $errors[] = 'REFERENCE';
-            }
+            'min_stock' =>
+                is_numeric($row[9] ?? null)
+                    ? (float) $row[9]
+                    : 0,
 
-            if (trim((string) ($row[1] ?? '')) === '') {
-                $errors[] = 'DESIGNATION';
-            }
-
-            if (trim((string) ($row[2] ?? '')) === '') {
-                $errors[] = 'MARQUE';
-            }
-
-            if (trim((string) ($row[3] ?? '')) === '') {
-                $errors[] = 'MODELE';
-            }
-
-            if (
-                !isset($row[11]) ||
-                trim((string) $row[11]) === '' ||
-                !is_numeric($row[11]) ||
-                (float) $row[11] < 0
-            ) {
-                $errors[] = 'PRIX_ACHAT';
-            }
-
-            if (
-                !isset($row[12]) ||
-                trim((string) $row[12]) === '' ||
-                !is_numeric($row[12]) ||
-                (float) $row[12] < 0
-            ) {
-                $errors[] = 'COEF_ACHAT';
-            }
-
-            if (
-                !isset($row[13]) ||
-                trim((string) $row[13]) === '' ||
-                !is_numeric($row[13]) ||
-                (float) $row[13] < 0
-            ) {
-                $errors[] = 'COEF_VENTE';
-            }
+            'max_stock' =>
+                is_numeric($row[10] ?? null)
+                    ? (float) $row[10]
+                    : 0,
 
             /*
             |--------------------------------------------------------------------------
-            | CALCULS
+            | PRIX D'ACHAT REEL DU NOUVEL ARRIVAGE
+            |--------------------------------------------------------------------------
+            |
+            | Ce champ est envoyé à storeImport().
+            |
+            */
+
+            'purchase_price' =>
+                $newPurchasePrice,
+
+            /*
+            |--------------------------------------------------------------------------
+            | DERNIER COEFFICIENT D'ACHAT
             |--------------------------------------------------------------------------
             */
 
-            $purchasePrice =
-                isset($row[11]) && is_numeric($row[11])
-                    ? (float) $row[11]
-                    : 0;
+            'coef_purchase' =>
+                $latestCoefPurchase,
 
-            $coefPurchase =
-                isset($row[12]) && is_numeric($row[12])
-                    ? (float) $row[12]
-                    : 0;
+            /*
+            |--------------------------------------------------------------------------
+            | PRIX DE REVIENT QUI SERA ENREGISTRE
+            |--------------------------------------------------------------------------
+            */
 
-            $coefSale =
-                isset($row[13]) && is_numeric($row[13])
-                    ? (float) $row[13]
-                    : 0;
+            'cost_price' =>
+                $weightedCostPrice,
 
-            $costPrice =
-                $purchasePrice * $coefPurchase;
+            /*
+            |--------------------------------------------------------------------------
+            | COEFFICIENT DE VENTE
+            |--------------------------------------------------------------------------
+            */
 
-            $salePrice =
-                $costPrice * $coefSale;
+            'coef_sale' =>
+                $coefSale,
+
+            /*
+            |--------------------------------------------------------------------------
+            | PRIX DE VENTE QUI SERA ENREGISTRE
+            |--------------------------------------------------------------------------
+            */
+
+            'sale_price' =>
+                $salePrice,
+
+            /*
+            |--------------------------------------------------------------------------
+            | INFORMATIONS DE PREVISUALISATION
+            |--------------------------------------------------------------------------
+            |
+            | Ces champs permettent à la vue d'afficher le détail du calcul.
+            |
+            */
+
+            'existing_product' =>
+                $existingProduct !== null,
+
+            'old_quantity' =>
+                $oldQuantity,
+
+            'old_purchase_price' =>
+                round(
+                    $oldAveragePurchasePrice,
+                    4
+                ),
+
+            'weighted_purchase_price' =>
+                $weightedPurchasePrice,
+
+            'future_quantity' =>
+                $futureQuantity,
 
             /*
             |--------------------------------------------------------------------------
@@ -345,121 +755,35 @@ class ProductController extends Controller
             |--------------------------------------------------------------------------
             */
 
-            $unitType = strtolower(
-                trim((string) ($row[14] ?? 'piece'))
-            );
+            'unit_type' =>
+                $unitType,
 
-            if ($unitType === '') {
-                $unitType = 'piece';
-            }
+            'unit_label' =>
+                $unitLabel,
 
-            $unitLabel =
-                in_array($unitType, ['litre', 'liter', 'l'])
-                    ? 'L'
-                    : (
-                        in_array($unitType, ['kg', 'kilogramme', 'kilogram'])
-                            ? 'Kg'
-                            : (
-                                $unitType === 'carton'
-                                    ? 'Carton'
-                                    : 'Pièce'
-                            )
-                    );
+            'status' =>
+                'disponible',
 
-            /*
-            |--------------------------------------------------------------------------
-            | DATA
-            |--------------------------------------------------------------------------
-            */
-
-            $data[] = [
-
-                'excel_line' =>
-                    $excelLine,
-
-                'reference' =>
-                    trim((string) ($row[0] ?? '')),
-
-                'designation' =>
-                    trim((string) ($row[1] ?? '')),
-
-                'brand_name' =>
-                    trim((string) ($row[2] ?? '')),
-
-                'model_name' =>
-                    trim((string) ($row[3] ?? '')),
-
-                'family_name' =>
-                    trim((string) ($row[4] ?? '')),
-
-                'subfamily_name' =>
-                    trim((string) ($row[5] ?? '')),
-
-                'rayon_name' =>
-                    trim((string) ($row[6] ?? '')),
-
-                'location_name' =>
-                    trim((string) ($row[7] ?? '')),
-
-                'quantity' =>
-                    is_numeric($row[8] ?? null)
-                        ? (float) $row[8]
-                        : 0,
-
-                'min_stock' =>
-                    is_numeric($row[9] ?? null)
-                        ? (float) $row[9]
-                        : 0,
-
-                'max_stock' =>
-                    is_numeric($row[10] ?? null)
-                        ? (float) $row[10]
-                        : 0,
-
-                'purchase_price' =>
-                    $purchasePrice,
-
-                'coef_purchase' =>
-                    $coefPurchase,
-
-                'cost_price' =>
-                    $costPrice,
-
-                'coef_sale' =>
-                    $coefSale,
-
-                'sale_price' =>
-                    $salePrice,
-
-                'unit_type' =>
-                    $unitType,
-
-                'unit_label' =>
-                    $unitLabel,
-
-                'status' =>
-                    'disponible',
-
-                'errors' =>
-                    $errors,
-            ];
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | RETURN VIEW
-        |--------------------------------------------------------------------------
-        */
-
-        return view(
-            'products.import_preview',
-            compact(
-                'data',
-                'supplier',
-                'depot'
-            )
-        );
+            'errors' =>
+                $errors,
+        ];
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | RETURN VIEW
+    |--------------------------------------------------------------------------
+    */
+
+    return view(
+        'products.import_preview',
+        compact(
+            'data',
+            'supplier',
+            'depot'
+        )
+    );
+}
 
     /*
     |--------------------------------------------------------------------------
@@ -468,7 +792,7 @@ class ProductController extends Controller
     */
 
 
-    public function storeImport(Request $request)
+   public function storeImport(Request $request)
     {
         /*
         |--------------------------------------------------------------------------
@@ -540,6 +864,12 @@ class ProductController extends Controller
                 }
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | VERIFICATION DES CHAMPS NUMERIQUES OBLIGATOIRES
+            |--------------------------------------------------------------------------
+            */
+
             $numericRequiredFields = [
                 'purchase_price' => 'PRIX_ACHAT',
                 'coef_purchase' => 'COEF_ACHAT',
@@ -563,6 +893,29 @@ class ProductController extends Controller
                             $label
                         );
                 }
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | VERIFICATION QUANTITE
+            |--------------------------------------------------------------------------
+            */
+
+            $quantity = $product['quantity'] ?? 0;
+
+            if (
+                !is_numeric($quantity) ||
+                (float) $quantity < 0
+            ) {
+                return redirect()
+                    ->back()
+                    ->withInput()
+                    ->with(
+                        'error',
+                        'Ligne ' .
+                        $excelLine .
+                        ' : QUANTITE invalide.'
+                    );
             }
         }
 
@@ -618,6 +971,12 @@ class ProductController extends Controller
                     ? $locationName
                     : 'Non défini';
 
+            /*
+            |--------------------------------------------------------------------------
+            | CREATION / RECUPERATION DES RELATIONS
+            |--------------------------------------------------------------------------
+            */
+
             $brand = Brand::firstOrCreate([
                 'name' => $brandName,
             ]);
@@ -647,24 +1006,37 @@ class ProductController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | CALCULS
+            | DONNEES DU NOUVEL ARRIVAGE
             |--------------------------------------------------------------------------
             */
 
-            $purchasePrice =
+            $newQuantity =
+                (float) ($product['quantity'] ?? 0);
+
+            $newPurchasePrice =
                 (float) $product['purchase_price'];
 
-            $coefPurchase =
+            /*
+            |--------------------------------------------------------------------------
+            | DERNIER COEFFICIENT D'ACHAT
+            |--------------------------------------------------------------------------
+            |
+            | C'est le coefficient fourni par le nouvel arrivage.
+            | Il sera utilisé sur le nouveau prix d'achat moyen pondéré.
+            |
+            */
+
+            $latestCoefPurchase =
                 (float) $product['coef_purchase'];
+
+            /*
+            |--------------------------------------------------------------------------
+            | COEFFICIENT DE VENTE
+            |--------------------------------------------------------------------------
+            */
 
             $coefSale =
                 (float) $product['coef_sale'];
-
-            $costPrice =
-                $purchasePrice * $coefPurchase;
-
-            $salePrice =
-                $costPrice * $coefSale;
 
             /*
             |--------------------------------------------------------------------------
@@ -677,21 +1049,175 @@ class ProductController extends Controller
                 $product['reference']
             )->first();
 
+            /*
+            |--------------------------------------------------------------------------
+            | PRODUIT EXISTANT
+            |--------------------------------------------------------------------------
+            */
+
             if ($existingProduct) {
 
-                $newQuantity =
-                    (float) ($product['quantity'] ?? 0);
+                /*
+                |--------------------------------------------------------------------------
+                | STOCK ACTUEL
+                |--------------------------------------------------------------------------
+                |
+                | IMPORTANT :
+                |
+                | quantity représente le stock actuellement disponible.
+                | C'est cette quantité qu'il faut utiliser pour la pondération.
+                |
+                | On ne doit PAS utiliser initial_quantity ou received_quantity.
+                |
+                */
 
-                $highestPurchasePrice = max(
-                    (float) $existingProduct->purchase_price,
-                    $purchasePrice
-                );
+                $oldQuantity =
+                    (float) $existingProduct->quantity;
 
-                $costPrice =
-                    $highestPurchasePrice * $coefPurchase;
+                /*
+                |--------------------------------------------------------------------------
+                | ANCIEN PRIX D'ACHAT MOYEN
+                |--------------------------------------------------------------------------
+                |
+                | purchase_price représente maintenant le prix d'achat moyen pondéré
+                | du stock restant.
+                |
+                */
+
+                $oldAveragePurchasePrice =
+                    (float) $existingProduct->purchase_price;
+
+                /*
+                |--------------------------------------------------------------------------
+                | NOUVELLE QUANTITE TOTALE
+                |--------------------------------------------------------------------------
+                */
+
+                $totalQuantity =
+                    $oldQuantity + $newQuantity;
+
+                /*
+                |--------------------------------------------------------------------------
+                | PRIX D'ACHAT MOYEN PONDERE
+                |--------------------------------------------------------------------------
+                |
+                | FORMULE :
+                |
+                | (stock actuel × ancien prix d'achat moyen)
+                | +
+                | (nouvelle quantité × nouveau prix d'achat)
+                |
+                | ------------------------------------------------
+                | stock actuel + nouvelle quantité
+                |
+                |
+                | Exemple :
+                |
+                | stock actuel             = 40
+                | ancien prix achat moyen  = 100
+                | nouvel arrivage          = 100
+                | nouveau prix achat       = 120
+                |
+                | ((40 × 100) + (100 × 120)) / 140
+                |
+                | = 114.2857
+                |
+                */
+
+                if ($newQuantity > 0) {
+
+                    if ($oldQuantity > 0) {
+
+                        $weightedPurchasePrice = (
+                            ($oldQuantity * $oldAveragePurchasePrice)
+                            +
+                            ($newQuantity * $newPurchasePrice)
+                        ) / $totalQuantity;
+
+                    } else {
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | STOCK ACTUEL = 0
+                        |--------------------------------------------------------------------------
+                        |
+                        | Lorsqu'il n'existe plus de stock, l'ancien prix ne doit
+                        | pas participer au nouveau calcul.
+                        |
+                        */
+
+                        $weightedPurchasePrice =
+                            $newPurchasePrice;
+                    }
+
+                } else {
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | PAS DE NOUVELLE QUANTITE
+                    |--------------------------------------------------------------------------
+                    |
+                    | Aucun arrivage réel :
+                    | on conserve le prix moyen existant.
+                    |
+                    */
+
+                    $weightedPurchasePrice =
+                        $oldAveragePurchasePrice;
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | PRECISION DU PRIX D'ACHAT MOYEN
+                |--------------------------------------------------------------------------
+                */
+
+                $weightedPurchasePrice =
+                    round(
+                        $weightedPurchasePrice,
+                        4
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | PRIX DE REVIENT PONDERE
+                |--------------------------------------------------------------------------
+                |
+                | REGLE METIER VALIDEE :
+                |
+                | Prix de revient pondéré
+                | =
+                | Prix d'achat moyen pondéré
+                | ×
+                | DERNIER coefficient d'achat
+                |
+                */
+
+                $weightedCostPrice =
+                    round(
+                        $weightedPurchasePrice *
+                        $latestCoefPurchase,
+                        4
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | PRIX DE VENTE
+                |--------------------------------------------------------------------------
+                */
 
                 $salePrice =
-                    $costPrice * $coefSale;
+                    round(
+                        $weightedCostPrice *
+                        $coefSale,
+                        2
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | MISE A JOUR PRODUIT
+                |--------------------------------------------------------------------------
+                */
 
                 $existingProduct->update([
 
@@ -720,42 +1246,27 @@ class ProductController extends Controller
                     |--------------------------------------------------------------------------
                     | STOCK DISPONIBLE
                     |--------------------------------------------------------------------------
-                    |
-                    | Un import Excel représente une nouvelle entrée réelle de stock.
-                    | On augmente donc la quantité disponible.
-                    |
                     */
+
                     'quantity' =>
-                        (float) $existingProduct->quantity +
-                        $newQuantity,
+                        $totalQuantity,
 
                     /*
                     |--------------------------------------------------------------------------
-                    | QUANTITÉ INITIALE
+                    | QUANTITE INITIALE CUMULEE
                     |--------------------------------------------------------------------------
-                    |
-                    | Contrairement à un ajustement inventaire, une nouvelle arrivée
-                    | de stock doit augmenter la quantité initiale cumulée.
-                    |
-                    | Exemple :
-                    | initiale actuelle = 50
-                    | nouvel arrivage   = 10
-                    | nouvelle initiale = 60
-                    |
                     */
+
                     'initial_quantity' =>
                         (float) $existingProduct->initial_quantity +
                         $newQuantity,
 
                     /*
                     |--------------------------------------------------------------------------
-                    | QUANTITÉ REÇUE
+                    | QUANTITE RECUE CUMULEE
                     |--------------------------------------------------------------------------
-                    |
-                    | Un import Excel représente un stock réellement arrivé.
-                    | La quantité reçue doit donc augmenter avec l'arrivage.
-                    |
                     */
+
                     'received_quantity' =>
                         (float) ($existingProduct->received_quantity ?? 0) +
                         $newQuantity,
@@ -766,17 +1277,47 @@ class ProductController extends Controller
                     'max_stock' =>
                         (float) ($product['max_stock'] ?? 0),
 
+                    /*
+                    |--------------------------------------------------------------------------
+                    | PRIX D'ACHAT MOYEN PONDERE
+                    |--------------------------------------------------------------------------
+                    */
+
                     'purchase_price' =>
-                        $highestPurchasePrice,
+                        $weightedPurchasePrice,
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | DERNIER COEFFICIENT D'ACHAT
+                    |--------------------------------------------------------------------------
+                    */
 
                     'coef_purchase' =>
-                        $coefPurchase,
+                        $latestCoefPurchase,
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | PRIX DE REVIENT MOYEN PONDERE
+                    |--------------------------------------------------------------------------
+                    */
 
                     'cost_price' =>
-                        $costPrice,
+                        $weightedCostPrice,
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | COEFFICIENT DE VENTE
+                    |--------------------------------------------------------------------------
+                    */
 
                     'coef_sale' =>
                         $coefSale,
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | PRIX DE VENTE
+                    |--------------------------------------------------------------------------
+                    */
 
                     'sale_price' =>
                         $salePrice,
@@ -787,16 +1328,66 @@ class ProductController extends Controller
                     'unit_label' =>
                         $product['unit_label'] ?? 'Pièce',
 
-                   'status' =>
-                    'disponible',
+                    'status' =>
+                        'disponible',
 
-                 'supply_status' =>
-                    null,
+                    'supply_status' =>
+                        null,
                 ]);
 
-                $createdProduct = $existingProduct;
+                $createdProduct =
+                    $existingProduct;
 
             } else {
+
+                /*
+                |--------------------------------------------------------------------------
+                | NOUVEAU PRODUIT
+                |--------------------------------------------------------------------------
+                |
+                | Pour le premier arrivage :
+                |
+                | Prix achat moyen = prix achat du premier arrivage.
+                |
+                */
+
+                $weightedPurchasePrice =
+                    round(
+                        $newPurchasePrice,
+                        4
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | PRIX DE REVIENT
+                |--------------------------------------------------------------------------
+                */
+
+                $weightedCostPrice =
+                    round(
+                        $weightedPurchasePrice *
+                        $latestCoefPurchase,
+                        4
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | PRIX DE VENTE
+                |--------------------------------------------------------------------------
+                */
+
+                $salePrice =
+                    round(
+                        $weightedCostPrice *
+                        $coefSale,
+                        2
+                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | CREATION PRODUIT
+                |--------------------------------------------------------------------------
+                */
 
                 $createdProduct = Product::create([
 
@@ -832,30 +1423,18 @@ class ProductController extends Controller
 
                     /*
                     |--------------------------------------------------------------------------
-                    | STOCK À LA CRÉATION
+                    | STOCK
                     |--------------------------------------------------------------------------
-                    |
-                    | Pour un nouveau produit :
-                    |
-                    | quantité initiale = quantité disponible
-                    |
                     */
+
                     'quantity' =>
-                        (float) ($product['quantity'] ?? 0),
+                        $newQuantity,
 
                     'initial_quantity' =>
-                        (float) ($product['quantity'] ?? 0),
+                        $newQuantity,
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | QUANTITÉ REÇUE
-                    |--------------------------------------------------------------------------
-                    |
-                    | Le fichier Excel représente un arrivage réel.
-                    |
-                    */
                     'received_quantity' =>
-                        (float) ($product['quantity'] ?? 0),
+                        $newQuantity,
 
                     'min_stock' =>
                         (float) ($product['min_stock'] ?? 0),
@@ -863,14 +1442,20 @@ class ProductController extends Controller
                     'max_stock' =>
                         (float) ($product['max_stock'] ?? 0),
 
+                    /*
+                    |--------------------------------------------------------------------------
+                    | PRIX
+                    |--------------------------------------------------------------------------
+                    */
+
                     'purchase_price' =>
-                        $purchasePrice,
+                        $weightedPurchasePrice,
 
                     'coef_purchase' =>
-                        $coefPurchase,
+                        $latestCoefPurchase,
 
                     'cost_price' =>
-                        $costPrice,
+                        $weightedCostPrice,
 
                     'coef_sale' =>
                         $coefSale,
@@ -878,11 +1463,11 @@ class ProductController extends Controller
                     'sale_price' =>
                         $salePrice,
 
-                  'status' =>
-                    'disponible',
+                    'status' =>
+                        'disponible',
 
-                'supply_status' =>
-                    null,
+                    'supply_status' =>
+                        null,
                 ]);
             }
 
@@ -905,28 +1490,27 @@ class ProductController extends Controller
                 ]
             );
 
-            $depotStock->quantity +=
-                (float) ($product['quantity'] ?? 0);
+            $depotStock->quantity =
+                (float) $depotStock->quantity +
+                $newQuantity;
 
             /*
             |--------------------------------------------------------------------------
-            | RAYON / EMPLACEMENT PROPRES À CE DÉPÔT
+            | RAYON / EMPLACEMENT PROPRES AU DEPOT
             |--------------------------------------------------------------------------
-            |
-            | Une même pièce peut se trouver dans plusieurs dépôts, chacun avec un
-            | rayon/emplacement différent. On les enregistre donc sur la ligne de
-            | stock de CE dépôt, et pas seulement sur la fiche produit globale.
-            |
             */
 
-            $depotStock->rayon_id = $rayon->id;
-            $depotStock->location_id = $location->id;
+            $depotStock->rayon_id =
+                $rayon->id;
+
+            $depotStock->location_id =
+                $location->id;
 
             $depotStock->save();
 
             /*
             |--------------------------------------------------------------------------
-            | STOCK MOVEMENT
+            | MOUVEMENT DE STOCK
             |--------------------------------------------------------------------------
             */
 
@@ -939,7 +1523,7 @@ class ProductController extends Controller
                     'in',
 
                 'quantity' =>
-                    (float) ($product['quantity'] ?? 0),
+                    $newQuantity,
 
                 'source' =>
                     'Import Excel',
@@ -955,6 +1539,13 @@ class ProductController extends Controller
             |--------------------------------------------------------------------------
             | FOURNISSEUR
             |--------------------------------------------------------------------------
+            |
+            | IMPORTANT :
+            |
+            | Ici nous gardons le VRAI prix d'achat du nouvel arrivage.
+            |
+            | Il ne faut PAS enregistrer weightedPurchasePrice ici.
+            |
             */
 
             $createdProduct
@@ -967,7 +1558,7 @@ class ProductController extends Controller
                             $createdProduct->reference,
 
                         'purchase_price' =>
-                            $purchasePrice,
+                            $newPurchasePrice,
 
                         'delivery_delay' =>
                             3,
@@ -1341,57 +1932,118 @@ class ProductController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    public function sold(Request $request)
+   public function sold(Request $request)
     {
+        /*
+        |--------------------------------------------------------------------------
+        | FILTRES
+        |--------------------------------------------------------------------------
+        */
+
+        $search = trim(
+            (string) $request->input('search', '')
+        );
+
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+
         /*
         |--------------------------------------------------------------------------
         | QUERY
         |--------------------------------------------------------------------------
+        |
+        | sold_quantity est calculée uniquement à partir :
+        | - des ventes non annulées
+        | - de la période sélectionnée
+        |
         */
 
         $query = Product::with([
-
             'brand',
             'model',
             'family',
             'subfamily',
             'rayon',
             'location',
+        ])
+        ->withSum([
+            'saleItems as sold_quantity' => function ($query) use (
+                $dateFrom,
+                $dateTo
+            ) {
+                $query->whereHas(
+                    'sale',
+                    function ($q) use ($dateFrom, $dateTo) {
 
-        ])->withSum([
-            'saleItems as sold_quantity' => function ($query) {
-                $query->whereHas('sale', function ($q) {
-                    $q->whereNotIn(
-                        'status',
-                        ['cancelled']
-                    );
-                });
-            }
-        ], 'quantity') ->having('sold_quantity', '>', 0);
+                        /*
+                        |--------------------------------------------------------------------------
+                        | EXCLURE LES VENTES ANNULÉES
+                        |--------------------------------------------------------------------------
+                        */
+
+                        $q->whereNotIn(
+                            'status',
+                            ['cancelled']
+                        );
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | DATE DÉBUT
+                        |--------------------------------------------------------------------------
+                        */
+
+                        if ($dateFrom) {
+                            $q->whereDate(
+                                'created_at',
+                                '>=',
+                                $dateFrom
+                            );
+                        }
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | DATE FIN
+                        |--------------------------------------------------------------------------
+                        */
+
+                        if ($dateTo) {
+                            $q->whereDate(
+                                'created_at',
+                                '<=',
+                                $dateTo
+                            );
+                        }
+                    }
+                );
+            },
+        ], 'quantity')
+        ->having(
+            'sold_quantity',
+            '>',
+            0
+        );
 
         /*
         |--------------------------------------------------------------------------
-        | SEARCH
+        | RECHERCHE
         |--------------------------------------------------------------------------
         */
 
-        if ($request->search) {
-
-            $query->where(function ($q) use ($request) {
-
-                $q->where(
-                    'designation',
-                    'like',
-                    '%' . $request->search . '%'
-                )
-
-                ->orWhere(
-                    'reference',
-                    'like',
-                    '%' . $request->search . '%'
-                );
-
-            });
+        if ($search !== '') {
+            $query->where(
+                function ($q) use ($search) {
+                    $q->where(
+                        'designation',
+                        'like',
+                        '%' . $search . '%'
+                    )
+                    ->orWhere(
+                        'reference',
+                        'like',
+                        '%' . $search . '%'
+                    );
+                }
+            );
         }
 
         /*
@@ -1402,13 +2054,18 @@ class ProductController extends Controller
 
         $products = $query
             ->latest()
-            ->paginate(10);
+            ->paginate(10)
+            ->withQueryString();
 
-        $suppliers = Supplier::orderBy('name')->get();
-
-        $depots = Depot::where('is_active', true)
-            ->orderBy('name')
+        $suppliers = Supplier::orderBy('name')
             ->get();
+
+        $depots = Depot::where(
+            'is_active',
+            true
+        )
+        ->orderBy('name')
+        ->get();
 
         /*
         |--------------------------------------------------------------------------
@@ -1416,21 +2073,84 @@ class ProductController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        return view('products.index', [
+        return view(
+            'products.index',
+            [
+                'products' => $products,
 
-            'products' => $products,
+                'suppliers' => $suppliers,
 
-            'suppliers' => $suppliers,
+                'depots' => $depots,
 
-            'depots' => $depots,
+                'pageTitle' => 'Produits vendus',
 
-            'pageTitle' => 'Produits vendus',
+                'hideButtons' => true,
 
-            'hideButtons' => true,
+                'dateFrom' => $dateFrom,
 
-        ]);
+                'dateTo' => $dateTo,
+            ]
+        );
     }
+    /*
+|--------------------------------------------------------------------------
+| EXPORT EXCEL - PRODUITS VENDUS
+|--------------------------------------------------------------------------
+*/
 
+   public function exportSoldExcel(Request $request)
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | FILTRES
+        |--------------------------------------------------------------------------
+        */
+
+        $search = trim(
+            (string) $request->input(
+                'search',
+                ''
+            )
+        );
+
+        $dateFrom = $request->input(
+            'date_from'
+        );
+
+        $dateTo = $request->input(
+            'date_to'
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | NOM DU FICHIER
+        |--------------------------------------------------------------------------
+        */
+
+        $fileName =
+            'produits_vendus_'
+            . now()->format('Y-m-d_H-i-s')
+            . '.xlsx';
+
+        /*
+        |--------------------------------------------------------------------------
+        | EXPORT
+        |--------------------------------------------------------------------------
+        */
+
+        return Excel::download(
+            new SoldProductsExport(
+                $search !== ''
+                    ? $search
+                    : null,
+
+                $dateFrom ?: null,
+
+                $dateTo ?: null
+            ),
+            $fileName
+        );
+    }
     /**
      * Liste des pièces à commander.
      *
