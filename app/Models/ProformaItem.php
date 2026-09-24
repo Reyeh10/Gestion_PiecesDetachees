@@ -2,53 +2,63 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class PurchaseItem extends Model
+class ProformaItem extends Model
 {
+    use HasFactory;
+
+    /*
+    |--------------------------------------------------------------------------
+    | TABLE
+    |--------------------------------------------------------------------------
+    */
+
+    protected $table = 'proforma_items';
+
+    /*
+    |--------------------------------------------------------------------------
+    | CHAMPS AUTORISÉS
+    |--------------------------------------------------------------------------
+    */
+
     protected $fillable = [
-        'purchase_id',
+        'proforma_id',
         'product_id',
+        'depot_id',
         'quantity',
         'price',
         'total',
-
-        'previous_quantity',
-        'previous_purchase_price',
-        'previous_cost_price',
-        'previous_sale_price',
-        'previous_coef_purchase',
-        'previous_coef_sale',
-
-        'new_weighted_purchase_price',
-    ];
-
-    protected $casts = [
-        'quantity' => 'decimal:2',
-        'price' => 'decimal:2',
-        'total' => 'decimal:2',
-
-        'previous_quantity' => 'decimal:2',
-        'previous_purchase_price' => 'decimal:4',
-        'previous_cost_price' => 'decimal:4',
-        'previous_sale_price' => 'decimal:2',
-
-        'previous_coef_purchase' => 'decimal:2',
-        'previous_coef_sale' => 'decimal:2',
-
-        'new_weighted_purchase_price' => 'decimal:4',
     ];
 
     /*
     |--------------------------------------------------------------------------
-    | ACHAT
+    | CASTS
     |--------------------------------------------------------------------------
     */
 
-    public function purchase()
+    protected $casts = [
+        'proforma_id' => 'integer',
+        'product_id' => 'integer',
+        'depot_id' => 'integer',
+        'quantity' => 'decimal:2',
+        'price' => 'decimal:2',
+        'total' => 'decimal:2',
+    ];
+
+    /*
+    |--------------------------------------------------------------------------
+    | PROFORMA
+    |--------------------------------------------------------------------------
+    */
+
+    public function proforma(): BelongsTo
     {
         return $this->belongsTo(
-            Purchase::class
+            Proforma::class,
+            'proforma_id'
         );
     }
 
@@ -58,10 +68,25 @@ class PurchaseItem extends Model
     |--------------------------------------------------------------------------
     */
 
-    public function product()
+    public function product(): BelongsTo
     {
         return $this->belongsTo(
-            Product::class
+            Product::class,
+            'product_id'
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | DÉPÔT
+    |--------------------------------------------------------------------------
+    */
+
+    public function depot(): BelongsTo
+    {
+        return $this->belongsTo(
+            Depot::class,
+            'depot_id'
         );
     }
 }
