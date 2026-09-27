@@ -3,13 +3,18 @@
     $user = auth()->user();
 
     /**
-     * --------------------------------------------------------------------------
-     * NOUVELLES COMMANDES REÇUES DU GARAGE
-     * --------------------------------------------------------------------------
-     * Compteur des commandes App Atelier qui n'ont pas encore été ouvertes.
-     * Visible pour : admin, chef_magasinier, vendeur.
-     */
 
+     * --------------------------------------------------------------------------
+
+     * NOUVELLES COMMANDES REÇUES DU GARAGE
+
+     * --------------------------------------------------------------------------
+
+     * Compteur des commandes App Atelier qui n'ont pas encore été ouvertes.
+
+     * Visible pour : admin, chef_magasinier, vendeur.
+
+     */
 
     $nouvellesCommandesGarage = 0;
 
@@ -106,8 +111,11 @@
     }
 
     /* Empêche le libellé d'un lien de repousser (ou de faire chevaucher)
+
        son badge de notification : le texte se tronque avec "…" au lieu de
+
        déborder derrière le badge. */
+
     #layout-menu .menu-link > .flex-grow-1 {
 
         min-width: 0 !important;
@@ -666,8 +674,6 @@
 
     </a>
 
-
-
 </div>
 
 {{-- OMBRE SOUS L'EN-TÊTE --}}
@@ -831,6 +837,7 @@
                     {{-- ===================================================== --}}
 
                     {{--
+
                     <li class="menu-item
 
                         {{
@@ -862,6 +869,7 @@
                         </a>
 
                     </li>
+
                     --}}
 
                     <li class="menu-item
@@ -1158,7 +1166,31 @@
 
                     <i class="menu-icon tf-icons bx bx-car"></i>
 
-                    <div>Véhicules</div>
+                    <div
+                        style="
+                            display: flex;
+                            flex-direction: column;
+                            justify-content: center;
+                            line-height: 1.15;
+                        "
+                    >
+                        <span>
+                            Véhicules
+                        </span>
+
+                        <span
+                            style="
+                                margin-top: 3px;
+                                font-size: 9px;
+                                font-weight: 700;
+                                letter-spacing: .45px;
+                                text-transform: uppercase;
+                                opacity: .65;
+                            "
+                        >
+                            Pièces spéciales
+                        </span>
+                    </div>
 
                 </a>
 
@@ -1242,9 +1274,9 @@
 
                     {{-- NOUVEAU VÉHICULE --}}
 
-                    <li class="menu-item
+                    <!--li class="menu-item
 
-                        {{
+                        { {
 
                             request()->routeIs('vehicles.create')
 
@@ -1254,9 +1286,9 @@
 
                         }}"
 
-                    >
+                     >
 
-                        <a href="{{ route('vehicles.create') }}"
+                        <a href="{ { route('vehicles.create') }}"
 
                         class="menu-link">
 
@@ -1268,7 +1300,7 @@
 
                         </a>
 
-                    </li>
+                    </li-->
 
                     {{-- HISTORIQUE / TRAÇABILITÉ --}}
 
@@ -1287,6 +1319,9 @@
                     >
 
                         <a href="{{ route('vehicles.history') }}"
+                            data-vehicle-history-popup="true"
+                            aria-haspopup="dialog"
+                            aria-controls="vehicleHistoryModal"
 
                         class="menu-link">
 
@@ -1804,7 +1839,61 @@
 
                     </li>
 
-                @endif
+                               @endif
+
+        {{-- ===================================================== --}}
+
+        {{-- BONS DE COMMANDE FOURNISSEURS --}}
+
+        {{-- ===================================================== --}}
+
+        @if($user && in_array($user->role, [
+
+            'admin',
+
+            'chef_magasinier',
+
+            'magasinier',
+
+            'vendeur'
+
+        ]))
+
+            <li class="menu-item
+
+                {{
+
+                    request()->routeIs('supplier-orders.*')
+
+                        ? 'active'
+
+                        : ''
+
+                }}
+
+            ">
+
+                <a
+
+                    href="{{ route('supplier-orders.index') }}"
+
+                    class="menu-link"
+
+                >
+
+                    <i class="menu-icon tf-icons bx bx-file"></i>
+
+                    <div class="flex-grow-1 text-truncate">
+
+                        Bons de commande
+
+                    </div>
+
+                </a>
+
+            </li>
+
+        @endif
 
         {{-- ===================================================== --}}
 
@@ -1825,6 +1914,7 @@
         {{-- ACHATS --}}
 
         {{--
+
         @if($user && in_array($user->role, [
 
             'admin',
@@ -1886,6 +1976,7 @@
         </li>
 
         @endif
+
         --}}
 
        {{-- ===================================================== --}}
@@ -2226,76 +2317,276 @@
 
     </ul>
 
-    <script>
+  <script>
 
-        document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', function () {
 
-            const body = document.body;
+    const body = document.body;
 
-            const html = document.documentElement;
+    const html = document.documentElement;
 
-            const sidebar = document.getElementById('layout-menu');
+    const sidebar = document.getElementById('layout-menu');
 
-            // Sous-menus du sidebar
+    if (!sidebar) {
 
-            document.querySelectorAll('#layout-menu .menu-link.menu-toggle').forEach(function (toggle) {
+        return;
 
-                toggle.addEventListener('click', function (event) {
+    }
 
-                    event.preventDefault();
+    /* ============================================================
 
-                    event.stopPropagation();
+       STCD MOTORS
 
-                    const parent = this.closest('.menu-item');
+       GESTION DES SOUS-MENUS
 
-                    if (parent) {
+       ============================================================ */
 
-                        parent.classList.toggle('open');
+    const toggles = sidebar.querySelectorAll(
 
-                    }
+        '.menu-link.menu-toggle'
 
-                });
+    );
 
-            });
+    /*
 
-            // Fermeture du menu sur mobile après clic sur un vrai lien
+     * Les éléments contenant une page active doivent rester ouverts.
 
-            if (sidebar) {
+     *
 
-                sidebar.querySelectorAll('a.menu-link:not(.menu-toggle)').forEach(function (link) {
+     * Cela permet par exemple :
 
-                    link.addEventListener('click', function () {
+     *
 
-                        if (window.innerWidth < 1200) {
+     * Produits
 
-                            body.classList.remove('layout-menu-expanded');
+     *   └── Tous les produits   <- actif
 
-                            html.classList.remove('layout-menu-expanded');
+     *
 
-                        }
+     * de rester développé après le chargement de la page.
 
-                    });
+     */
 
-                });
+    sidebar
 
-            }
+        .querySelectorAll('.menu-item.active')
 
-            // En revenant sur ordinateur, le sidebar doit rester visible
+        .forEach(function (activeItem) {
 
-            window.addEventListener('resize', function () {
+            let parent = activeItem.parentElement;
 
-                if (window.innerWidth >= 1200) {
+            while (parent && parent !== sidebar) {
 
-                    body.classList.remove('layout-menu-expanded');
+                if (
 
-                    html.classList.remove('layout-menu-expanded');
+                    parent.classList &&
+
+                    parent.classList.contains('menu-item')
+
+                ) {
+
+                    parent.classList.add('open');
 
                 }
 
-            });
+                parent = parent.parentElement;
+
+            }
 
         });
 
-    </script>
+    /* ============================================================
+
+       CLIC SUR UN MENU PARENT
+
+       ============================================================ */
+
+    toggles.forEach(function (toggle) {
+
+        /*
+
+         * capture = true
+
+         *
+
+         * Notre événement passe avant le gestionnaire JavaScript
+
+         * du template.
+
+         */
+
+        toggle.addEventListener(
+
+            'click',
+
+            function (event) {
+
+                event.preventDefault();
+
+                event.stopPropagation();
+
+                event.stopImmediatePropagation();
+
+                const parent =
+
+                    this.closest('.menu-item');
+
+                if (!parent) {
+
+                    return;
+
+                }
+
+                const willOpen =
+
+                    !parent.classList.contains('open');
+
+                /* =================================================
+
+                   ACCORDÉON
+
+                   On ferme les autres menus du même niveau.
+
+                   ================================================= */
+
+                const parentList =
+
+                    parent.parentElement;
+
+                if (parentList) {
+
+                    Array.from(parentList.children)
+
+                        .forEach(function (sibling) {
+
+                            if (
+
+                                sibling !== parent &&
+
+                                sibling.classList &&
+
+                                sibling.classList.contains(
+
+                                    'menu-item'
+
+                                )
+
+                            ) {
+
+                                sibling.classList.remove(
+
+                                    'open'
+
+                                );
+
+                            }
+
+                        });
+
+                }
+
+                /* =================================================
+
+                   OUVERTURE / FERMETURE
+
+                   ================================================= */
+
+                if (willOpen) {
+
+                    parent.classList.add('open');
+
+                } else {
+
+                    parent.classList.remove('open');
+
+                }
+
+            },
+
+            true
+
+        );
+
+    });
+
+    /* ============================================================
+
+       FERMETURE MOBILE APRÈS CLIC SUR UN VRAI LIEN
+
+       ============================================================ */
+
+    sidebar
+
+        .querySelectorAll(
+
+            'a.menu-link:not(.menu-toggle)'
+
+        )
+
+        .forEach(function (link) {
+
+            link.addEventListener(
+
+                'click',
+
+                function () {
+
+                    if (window.innerWidth < 1200) {
+
+                        body.classList.remove(
+
+                            'layout-menu-expanded'
+
+                        );
+
+                        html.classList.remove(
+
+                            'layout-menu-expanded'
+
+                        );
+
+                    }
+
+                }
+
+            );
+
+        });
+
+    /* ============================================================
+
+       RETOUR SUR ORDINATEUR
+
+       ============================================================ */
+
+    window.addEventListener(
+
+        'resize',
+
+        function () {
+
+            if (window.innerWidth >= 1200) {
+
+                body.classList.remove(
+
+                    'layout-menu-expanded'
+
+                );
+
+                html.classList.remove(
+
+                    'layout-menu-expanded'
+
+                );
+
+            }
+
+        }
+
+    );
+
+});
+
+</script>
 
 </aside>

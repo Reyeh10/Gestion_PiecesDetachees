@@ -427,6 +427,70 @@
 
 
     /* ============================================================
+       HEADER FIXE AU DÉFILEMENT
+       Desktop : fixé à droite du sidebar
+    ============================================================ */
+
+    @media (min-width: 1200px) {
+
+        .layout-page > .layout-navbar {
+
+            position: fixed !important;
+
+            top: 0 !important;
+            left: var(--sidebar-width) !important;
+            right: 0 !important;
+
+            width: calc(100% - var(--sidebar-width)) !important;
+            max-width: calc(100% - var(--sidebar-width)) !important;
+
+            margin: 0 !important;
+
+            z-index: 1050 !important;
+        }
+
+        /*
+         * Le header fixed sort du flux.
+         * On réserve donc sa hauteur avant le contenu.
+         */
+        .layout-page > .content-wrapper {
+
+            padding-top: 72px !important;
+        }
+    }
+
+
+    /* ============================================================
+       TABLETTE / MOBILE
+       Header sur toute la largeur
+    ============================================================ */
+
+    @media (max-width: 1199.98px) {
+
+        .layout-page > .layout-navbar {
+
+            position: fixed !important;
+
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+
+            width: 100% !important;
+            max-width: 100% !important;
+
+            margin: 0 !important;
+
+            z-index: 1050 !important;
+        }
+
+        .layout-page > .content-wrapper {
+
+            padding-top: 72px !important;
+        }
+    }
+
+
+    /* ============================================================
        CONTENEURS BOOTSTRAP
     ============================================================ */
 
@@ -1078,7 +1142,566 @@
 
     }
 }
+/* ================================================================
+   STCD MOTORS — SIDEBAR PREMIUM / HIÉRARCHIE DES SOUS-MENUS
+   ================================================================ */
 
+/* ---------- MENU PRINCIPAL ---------- */
+
+#layout-menu .menu-inner {
+    padding: 10px 10px 24px !important;
+}
+
+#layout-menu .menu-item {
+    position: relative;
+}
+
+/* liens niveau principal */
+#layout-menu > .menu-inner > .menu-item > .menu-link {
+    min-height: 42px !important;
+    margin: 3px 0 !important;
+    padding: 9px 12px !important;
+
+    border-radius: 9px !important;
+
+    font-weight: 500 !important;
+    color: #cbd5e1 !important;
+}
+
+#layout-menu > .menu-inner > .menu-item > .menu-link:hover {
+    color: #ffffff !important;
+    background: rgba(99, 102, 241, .12) !important;
+}
+
+/* icône niveau principal */
+#layout-menu > .menu-inner > .menu-item > .menu-link .menu-icon {
+    width: 22px !important;
+    min-width: 22px !important;
+
+    margin-right: 10px !important;
+
+    color: #9db9ff !important;
+
+    font-size: 18px !important;
+}
+
+
+/* ================================================================
+   TITRES DE SECTIONS
+   ================================================================ */
+
+#layout-menu > .menu-inner > .menu-header {
+    position: relative;
+
+    margin: 18px 0 7px !important;
+    padding: 0 10px !important;
+
+    min-height: auto !important;
+}
+
+#layout-menu > .menu-inner > .menu-header .menu-header-text {
+    color: #8892aa !important;
+
+    font-size: 10px !important;
+    font-weight: 700 !important;
+
+    letter-spacing: 1.15px !important;
+    text-transform: uppercase;
+}
+
+
+/* ================================================================
+   PARENT QUI POSSÈDE UN SOUS-MENU
+   ================================================================ */
+
+#layout-menu .menu-item > .menu-link.menu-toggle {
+    position: relative;
+}
+
+/* espace pour la flèche */
+#layout-menu .menu-item > .menu-link.menu-toggle {
+    padding-right: 38px !important;
+}
+
+
+/* ---------- FLÈCHE ---------- */
+
+#layout-menu .menu-item > .menu-link.menu-toggle::after {
+    content: "";
+
+    position: absolute;
+
+    top: 50%;
+    right: 15px;
+
+    width: 7px;
+    height: 7px;
+
+    border-right: 2px solid #8ea6d8;
+    border-bottom: 2px solid #8ea6d8;
+
+    transform:
+        translateY(-65%)
+        rotate(45deg);
+
+    transition:
+        transform .20s ease,
+        border-color .20s ease;
+}
+
+/* parent ouvert */
+#layout-menu .menu-item.open > .menu-link.menu-toggle::after {
+    transform:
+        translateY(-35%)
+        rotate(225deg);
+
+    border-color: #ffffff;
+}
+
+
+/* ================================================================
+   PARENT OUVERT
+   ================================================================ */
+
+#layout-menu .menu-item.open > .menu-link.menu-toggle {
+    color: #ffffff !important;
+
+    background:
+        linear-gradient(
+            90deg,
+            rgba(78, 91, 213, .24),
+            rgba(78, 91, 213, .08)
+        ) !important;
+}
+
+#layout-menu .menu-item.open > .menu-link.menu-toggle .menu-icon {
+    color: #8da9ff !important;
+}
+
+
+/* ================================================================
+   CONTENEUR DU SOUS-MENU
+   ================================================================ */
+
+#layout-menu .menu-sub {
+    position: relative;
+
+    display: none;
+
+    width: calc(100% - 14px) !important;
+
+    margin:
+        3px
+        0
+        8px
+        14px !important;
+
+    padding:
+        6px
+        6px
+        7px
+        17px !important;
+
+    background:
+        rgba(8, 15, 35, .25) !important;
+
+    border-radius: 8px !important;
+
+    overflow: visible !important;
+}
+
+
+/* afficher le sous-menu */
+#layout-menu .menu-item.open > .menu-sub {
+    display: block !important;
+}
+
+
+/* ================================================================
+   LIGNE VERTICALE DU SOUS-MENU
+   ================================================================ */
+
+#layout-menu .menu-sub::before {
+    content: "";
+
+    position: absolute;
+
+    top: 8px;
+    bottom: 8px;
+    left: 12px;
+
+    width: 1px;
+
+    background:
+        linear-gradient(
+            180deg,
+            rgba(113, 139, 255, .60),
+            rgba(113, 139, 255, .12)
+        );
+
+    border-radius: 10px;
+}
+
+
+/* ================================================================
+   ÉLÉMENTS DU SOUS-MENU
+   ================================================================ */
+
+#layout-menu .menu-sub > .menu-item {
+    position: relative;
+
+    width: 100% !important;
+
+    margin: 2px 0 !important;
+}
+
+
+/* lien */
+#layout-menu .menu-sub > .menu-item > .menu-link {
+    position: relative;
+
+    width: 100% !important;
+
+    min-height: 34px !important;
+
+    margin: 0 !important;
+
+    padding:
+        7px
+        10px
+        7px
+        27px !important;
+
+    color: #aeb9cf !important;
+
+    background: transparent !important;
+
+    border-radius: 7px !important;
+
+    font-size: 13px !important;
+
+    transition:
+        color .18s ease,
+        background-color .18s ease,
+        transform .18s ease !important;
+}
+
+
+/* texte sous-menu */
+#layout-menu .menu-sub > .menu-item > .menu-link > div {
+    font-size: 13px !important;
+    font-weight: 500 !important;
+
+    line-height: 1.3 !important;
+}
+
+
+/* ================================================================
+   CONNECTEUR / POINT DES SOUS-MENUS
+   ================================================================ */
+
+/* ================================================================
+   SOUS-MENUS — PETITS POINTS RONDS
+   ================================================================ */
+
+#layout-menu
+.menu-sub
+> .menu-item
+> .menu-link::before {
+
+    content: "" !important;
+
+    position: absolute !important;
+
+    top: 50% !important;
+    left: 8px !important;
+
+    width: 7px !important;
+    height: 7px !important;
+
+    display: block !important;
+
+    margin: 0 !important;
+
+    transform:
+        translateY(-50%) !important;
+
+    background:
+        #8396df !important;
+
+    border:
+        2px solid
+        rgba(165, 178, 255, .45) !important;
+
+    border-radius:
+        50% !important;
+
+    box-shadow:
+        none !important;
+
+    z-index: 2;
+}
+
+
+/* petite branche horizontale */
+#layout-menu .menu-sub > .menu-item > .menu-link::after {
+    display: none !important;
+}
+
+
+/* ================================================================
+   HOVER DU SOUS-MENU
+   ================================================================ */
+
+#layout-menu .menu-sub > .menu-item > .menu-link:hover {
+    color: #ffffff !important;
+
+    background:
+        rgba(91, 108, 255, .12) !important;
+
+    transform: translateX(2px);
+}
+
+#layout-menu
+.menu-sub
+> .menu-item
+> .menu-link:hover::before {
+
+    background:
+        #aab7ff !important;
+
+    border-color:
+        #d5dcff !important;
+
+    transform:
+        translateY(-50%)
+        scale(1.15) !important;
+}
+
+/* ================================================================
+   SOUS-MENU ACTIF
+   ================================================================ */
+
+#layout-menu
+.menu-sub
+> .menu-item.active
+> .menu-link {
+
+    color: #ffffff !important;
+
+    background:
+        linear-gradient(
+            90deg,
+            rgba(80, 96, 230, .45),
+            rgba(80, 96, 230, .16)
+        ) !important;
+
+    box-shadow:
+        inset 3px 0 0 #7084ff !important;
+
+    font-weight: 600 !important;
+}
+
+
+#layout-menu
+.menu-sub
+> .menu-item.active
+> .menu-link::before {
+
+    content: "" !important;
+
+    width: 8px !important;
+    height: 8px !important;
+
+    background:
+        #ffffff !important;
+
+    border:
+        2px solid
+        #8fa1ff !important;
+
+    border-radius:
+        50% !important;
+
+    transform:
+        translateY(-50%) !important;
+
+    box-shadow:
+        0 0 0 3px
+        rgba(113, 132, 255, .20) !important;
+}
+
+
+/* ================================================================
+   PETITS TITRES À L'INTÉRIEUR DES SOUS-MENUS
+   Exemple :
+   GESTION DES PRODUITS
+   RÉAPPROVISIONNEMENT
+   ================================================================ */
+
+#layout-menu .menu-sub > .menu-header {
+    position: relative;
+
+    margin:
+        10px
+        0
+        4px !important;
+
+    padding:
+        2px
+        8px
+        2px
+        27px !important;
+
+    min-height: auto !important;
+}
+
+#layout-menu
+.menu-sub
+> .menu-header
+.menu-header-text {
+
+    color: #7583a3 !important;
+
+    font-size: 9px !important;
+    font-weight: 700 !important;
+
+    letter-spacing: .8px !important;
+
+    text-transform: uppercase;
+}
+
+
+/* ================================================================
+   TABLEAU DE BORD ACTIF
+   ================================================================ */
+
+#layout-menu
+> .menu-inner
+> .menu-item.active
+> .menu-link:not(.menu-toggle) {
+
+    color: #ffffff !important;
+
+    background:
+        linear-gradient(
+            135deg,
+            #5368e9,
+            #6574e8
+        ) !important;
+
+    box-shadow:
+        0 5px 15px
+        rgba(45, 62, 180, .25) !important;
+}
+
+
+/* ================================================================
+   SCROLLBAR
+   ================================================================ */
+
+#layout-menu::-webkit-scrollbar {
+    width: 5px;
+}
+
+#layout-menu::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#layout-menu::-webkit-scrollbar-thumb {
+    background:
+        rgba(135, 151, 190, .30);
+
+    border-radius: 20px;
+}
+
+#layout-menu::-webkit-scrollbar-thumb:hover {
+    background:
+        rgba(135, 151, 190, .50);
+}
+
+/* ================================================================
+   STCD MOTORS — FLÈCHE DEVANT CHAQUE MODULE PRINCIPAL
+   ================================================================ */
+
+/*
+ * Tous les modules principaux :
+ * Produits, Catégories, Fournisseurs, Clients, Véhicules,
+ * Dépôts, Transferts, Ventes, Utilisateurs, etc.
+ */
+#layout-menu
+> .menu-inner
+> .menu-item
+> .menu-link::before {
+
+    content: "›";
+
+    position: relative !important;
+
+    top: auto !important;
+    left: auto !important;
+
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    flex: 0 0 14px !important;
+
+    width: 14px !important;
+    height: 20px !important;
+
+    margin-right: 5px !important;
+
+    color: #7389d8 !important;
+
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+
+    transform: none !important;
+
+    transition:
+        color .18s ease,
+        transform .18s ease !important;
+}
+
+
+/* Survol */
+#layout-menu
+> .menu-inner
+> .menu-item
+> .menu-link:hover::before {
+
+    color: #ffffff !important;
+
+    transform: translateX(2px) !important;
+}
+
+
+/* Module actif */
+#layout-menu
+> .menu-inner
+> .menu-item.active
+> .menu-link::before {
+
+    color: #ffffff !important;
+}
+
+
+/* Module ouvert */
+#layout-menu
+> .menu-inner
+> .menu-item.open
+> .menu-link.menu-toggle::before {
+
+    color: #a9b8ff !important;
+
+    transform: rotate(90deg) !important;
+}
 </style>
 
 {{-- END: Theme CSS --}}

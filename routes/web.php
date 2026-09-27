@@ -22,11 +22,13 @@ use App\Http\Controllers\ProformaController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\DepotTransferController;
 use App\Http\Controllers\VehiclePartRequestController;
+use App\Http\Controllers\SupplierOrderController;
 use App\Http\Controllers\VehicleHistoryController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\FournisseurCommandeController;
 
 use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\NotificationController;
 
 
 //use Illuminate\Http\Request;
@@ -86,6 +88,44 @@ Route::middleware('auth')->group(function () {
         [UserController::class, 'changePassword']
 
     )->name('password.change');
+
+});
+
+Route::middleware(['auth'])->group(function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | NOTIFICATIONS
+    |--------------------------------------------------------------------------
+    */
+
+    Route::patch(
+        '/notifications/read-all',
+        [
+            NotificationController::class,
+            'markAllAsRead',
+        ]
+    )->name('notifications.read-all');
+
+
+    Route::delete(
+        '/notifications/read',
+        [
+            NotificationController::class,
+            'clearRead',
+        ]
+    )->name('notifications.clear-read');
+
+
+    Route::get(
+        '/notifications/{notification}/open',
+        [
+            NotificationController::class,
+            'open',
+        ]
+    )
+        ->whereUuid('notification')
+        ->name('notifications.open');
 
 });
 
@@ -181,6 +221,8 @@ Route::middleware([
     );
 
 });
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -1364,19 +1406,142 @@ Route::middleware(['auth'])->group(function () {
     )->name(
         'vehicle-part-requests.import-template'
     );
-    /*
+       /*
     |--------------------------------------------------------------------------
-    | Autres routes CRUD
+    | BONS DE COMMANDE FOURNISSEUR
     |--------------------------------------------------------------------------
     |
-    | On exclut index parce que nous l'avons déclaré manuellement plus haut.
+    | Ces routes sont placées AVANT les routes dynamiques afin d'éviter
+    | tout conflit de résolution par Laravel.
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | CRÉER UN BC DEPUIS UNE PIÈCE COMMANDÉE
+    |--------------------------------------------------------------------------
+    */
+    Route::get(
+        '/supplier-orders/create-from-part-request/{vehiclePartRequest}',
+        [
+            SupplierOrderController::class,
+            'createFromPartRequest',
+        ]
+    )
+        ->whereNumber('vehiclePartRequest')
+        ->name('supplier-orders.create-from-part-request');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | LISTE DES BONS DE COMMANDE
+    |--------------------------------------------------------------------------
+    */
+    Route::get(
+        '/supplier-orders',
+        [
+            SupplierOrderController::class,
+            'index',
+        ]
+    )->name('supplier-orders.index');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ENREGISTRER UN BON DE COMMANDE
+    |--------------------------------------------------------------------------
+    */
+    Route::post(
+        '/supplier-orders',
+        [
+            SupplierOrderController::class,
+            'store',
+        ]
+    )->name('supplier-orders.store');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | APPROUVER UN BON DE COMMANDE
+    |--------------------------------------------------------------------------
+    */
+    Route::patch(
+        '/supplier-orders/{supplierOrder}/approve',
+        [
+            SupplierOrderController::class,
+            'approve',
+        ]
+    )
+        ->whereNumber('supplierOrder')
+        ->name('supplier-orders.approve');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | MARQUER LE BC COMME ENVOYÉ AU FOURNISSEUR
+    |--------------------------------------------------------------------------
+    */
+    Route::patch(
+        '/supplier-orders/{supplierOrder}/mark-as-sent',
+        [
+            SupplierOrderController::class,
+            'markAsSent',
+        ]
+    )
+        ->whereNumber('supplierOrder')
+        ->name('supplier-orders.mark-as-sent');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ANNULER UN BON DE COMMANDE
+    |--------------------------------------------------------------------------
+    */
+    Route::patch(
+        '/supplier-orders/{supplierOrder}/cancel',
+        [
+            SupplierOrderController::class,
+            'cancel',
+        ]
+    )
+        ->whereNumber('supplierOrder')
+        ->name('supplier-orders.cancel');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | AFFICHER UN BON DE COMMANDE
+    |--------------------------------------------------------------------------
+    |
+    | IMPORTANT :
+    | Cette route dynamique reste APRÈS toutes les routes spécifiques.
+    |
+    */
+    Route::get(
+        '/supplier-orders/{supplierOrder}',
+        [
+            SupplierOrderController::class,
+            'show',
+        ]
+    )
+        ->whereNumber('supplierOrder')
+        ->name('supplier-orders.show');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | AUTRES ROUTES CRUD DES DEMANDES DE PIÈCES
+    |--------------------------------------------------------------------------
+    |
+    | L'index est déjà déclaré manuellement plus haut.
+    |
+    */
     Route::resource(
         'vehicle-part-requests',
         VehiclePartRequestController::class
-    )->except(['index']);
+    )->except([
+        'index',
+    ]);
 
 });
 /*

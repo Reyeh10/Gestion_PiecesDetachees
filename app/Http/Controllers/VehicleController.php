@@ -1,7 +1,5 @@
 <?php
-
 namespace App\Http\Controllers;
-
 use App\Models\Customer;
 use App\Models\Vehicle;
 use Illuminate\Http\RedirectResponse;
@@ -10,18 +8,19 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Throwable;
-
 class VehicleController extends Controller
 {
+
     /**
-     * Afficher la liste des véhicules.
-     */
+    * Afficher la liste des véhicules.
+    */
+
+
     public function index(Request $request): View
     {
         $search = trim(
             (string) $request->input('search', '')
         );
-
         $vehicles = Vehicle::query()
             ->with('customer')
            ->withCount('sales')
@@ -30,7 +29,6 @@ class VehicleController extends Controller
                 function ($query) use ($search) {
                     $normalizedPlate =
                         $this->normalizePlate($search);
-
                     $query->where(
                         function ($vehicleQuery) use (
                             $search,
@@ -79,25 +77,32 @@ class VehicleController extends Controller
             ->orderBy('plate_number')
             ->paginate(15)
             ->withQueryString();
+        // Charger les clients pour le formulaire de création dans le popup.
+        // Les rôles sans bouton de création ne chargent pas cette liste.
+        $customers = in_array(auth()->user()->role, ['admin', 'chef_magasinier', 'magasinier'])
+            ? Customer::query()->orderBy('name')->get()
+            : collect();
 
         return view(
             'vehicles.index',
             compact(
                 'vehicles',
-                'search'
+                'search',
+                'customers'
             )
         );
     }
 
     /**
-     * Afficher le formulaire de création.
-     */
+    * Afficher le formulaire de création.
+    */
+
+
     public function create(): View
     {
         $customers = Customer::query()
             ->orderBy('name')
             ->get();
-
         return view(
             'vehicles.create',
             compact('customers')
@@ -105,10 +110,13 @@ class VehicleController extends Controller
     }
 
     /**
-     * Enregistrer un véhicule.
-     */
+    * Enregistrer un véhicule.
+    */
+
+
     public function store(Request $request): RedirectResponse
     {
+
         /*
         |--------------------------------------------------------------------------
         | NORMALISATION AVANT VALIDATION
@@ -119,7 +127,6 @@ class VehicleController extends Controller
             'plate_number' => $this->normalizePlate(
                 (string) $request->input('plate_number')
             ),
-
             'vin' => $this->normalizeVin(
                 $request->input('vin')
             ),
@@ -138,46 +145,39 @@ class VehicleController extends Controller
                     'integer',
                     'exists:customers,id',
                 ],
-
                 'plate_number' => [
                     'required',
                     'string',
                     'max:50',
                     'unique:vehicles,plate_number',
                 ],
-
                 'vin' => [
                     'nullable',
                     'string',
                     'max:100',
                     'unique:vehicles,vin',
                 ],
-
                 'brand' => [
                     'nullable',
                     'string',
                     'max:100',
                 ],
-
                 'model' => [
                     'nullable',
                     'string',
                     'max:100',
                 ],
-
                 'year' => [
                     'nullable',
                     'integer',
                     'min:1900',
                     'max:' . (date('Y') + 1),
                 ],
-
                 'color' => [
                     'nullable',
                     'string',
                     'max:100',
                 ],
-
                 'notes' => [
                     'nullable',
                     'string',
@@ -187,51 +187,38 @@ class VehicleController extends Controller
             [
                 'plate_number.required' =>
                     'L’immatriculation est obligatoire.',
-
                 'plate_number.unique' =>
                     'Cette immatriculation existe déjà.',
-
                 'plate_number.max' =>
                     'L’immatriculation ne doit pas dépasser 50 caractères.',
-
                 'vin.unique' =>
                     'Ce numéro VIN existe déjà.',
-
                 'vin.max' =>
                     'Le numéro VIN ne doit pas dépasser 100 caractères.',
-
                 'customer_id.exists' =>
                     'Le client sélectionné est invalide.',
-
                 'year.integer' =>
                     'L’année doit être un nombre valide.',
-
                 'year.min' =>
                     'L’année ne peut pas être inférieure à 1900.',
-
                 'year.max' =>
                     'L’année saisie est invalide.',
             ]
         );
-
         DB::beginTransaction();
-
         try {
             $vehicle = Vehicle::create($validated);
-
             DB::commit();
-
             return redirect()
-                ->route('vehicles.show', $vehicle)
+                // Après la création, afficher la liste avec le message de succès.
+                ->route('vehicles.index')
                 ->with(
                     'success',
                     'Véhicule ajouté avec succès.'
                 );
         } catch (Throwable $exception) {
             DB::rollBack();
-
             report($exception);
-
             return redirect()
                 ->back()
                 ->withInput()
@@ -242,14 +229,15 @@ class VehicleController extends Controller
         }
     }
 
-    /**
-     * Afficher un véhicule.
-     */
+   /**
+   * Afficher un véhicule.
+   */
+
+
    public function show(Vehicle $vehicle): View
     {
         $vehicle->load([
             'customer',
-
             'sales' => function ($query) {
                 $query
                     ->with([
@@ -264,14 +252,11 @@ class VehicleController extends Controller
                     )
                     ->latest();
             },
-
             'partRequests' => function ($query) {
             $query->latest('requested_at')
                 ->latest('id');
         },
-        
         ]);
-
         return view(
             'vehicles.show',
             compact('vehicle')
@@ -279,14 +264,15 @@ class VehicleController extends Controller
     }
 
     /**
-     * Afficher le formulaire de modification.
-     */
+    * Afficher le formulaire de modification.
+    */
+
+
     public function edit(Vehicle $vehicle): View
     {
         $customers = Customer::query()
             ->orderBy('name')
             ->get();
-
         return view(
             'vehicles.edit',
             compact(
@@ -297,12 +283,15 @@ class VehicleController extends Controller
     }
 
     /**
-     * Modifier un véhicule.
-     */
+    * Modifier un véhicule.
+    */
+
+
     public function update(
         Request $request,
         Vehicle $vehicle
     ): RedirectResponse {
+
         /*
         |--------------------------------------------------------------------------
         | NORMALISATION AVANT VALIDATION
@@ -313,7 +302,6 @@ class VehicleController extends Controller
             'plate_number' => $this->normalizePlate(
                 (string) $request->input('plate_number')
             ),
-
             'vin' => $this->normalizeVin(
                 $request->input('vin')
             ),
@@ -332,54 +320,45 @@ class VehicleController extends Controller
                     'integer',
                     'exists:customers,id',
                 ],
-
                 'plate_number' => [
                     'required',
                     'string',
                     'max:50',
-
                     Rule::unique(
                         'vehicles',
                         'plate_number'
                     )->ignore($vehicle->id),
                 ],
-
                 'vin' => [
                     'nullable',
                     'string',
                     'max:100',
-
                     Rule::unique(
                         'vehicles',
                         'vin'
                     )->ignore($vehicle->id),
                 ],
-
                 'brand' => [
                     'nullable',
                     'string',
                     'max:100',
                 ],
-
                 'model' => [
                     'nullable',
                     'string',
                     'max:100',
                 ],
-
                 'year' => [
                     'nullable',
                     'integer',
                     'min:1900',
                     'max:' . (date('Y') + 1),
                 ],
-
                 'color' => [
                     'nullable',
                     'string',
                     'max:100',
                 ],
-
                 'notes' => [
                     'nullable',
                     'string',
@@ -389,28 +368,20 @@ class VehicleController extends Controller
             [
                 'plate_number.required' =>
                     'L’immatriculation est obligatoire.',
-
                 'plate_number.unique' =>
                     'Cette immatriculation existe déjà.',
-
                 'vin.unique' =>
                     'Ce numéro VIN existe déjà.',
-
                 'customer_id.exists' =>
                     'Le client sélectionné est invalide.',
-
                 'year.integer' =>
                     'L’année doit être un nombre valide.',
             ]
         );
-
         DB::beginTransaction();
-
         try {
             $vehicle->update($validated);
-
             DB::commit();
-
             return redirect()
                 ->route('vehicles.show', $vehicle)
                 ->with(
@@ -419,9 +390,7 @@ class VehicleController extends Controller
                 );
         } catch (Throwable $exception) {
             DB::rollBack();
-
             report($exception);
-
             return redirect()
                 ->back()
                 ->withInput()
@@ -433,12 +402,15 @@ class VehicleController extends Controller
     }
 
     /**
-     * Supprimer un véhicule.
-     *
-     * Seul l'administrateur peut supprimer.
-     */
+    * Supprimer un véhicule.
+    *
+    * Seul l'administrateur peut supprimer.
+    */
+
+
     public function destroy(Vehicle $vehicle): RedirectResponse
     {
+
         /*
         |--------------------------------------------------------------------------
         | CONTRÔLE DU RÔLE
@@ -455,15 +427,15 @@ class VehicleController extends Controller
             );
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | PROTECTION DE L'HISTORIQUE
-        |--------------------------------------------------------------------------
-        |
-        | Un véhicule ayant déjà été utilisé dans une vente ne doit pas être
-        | supprimé. Cela préservera l'historique des factures et des pièces.
-        |
-        */
+       /*
+       |--------------------------------------------------------------------------
+       | PROTECTION DE L'HISTORIQUE
+       |--------------------------------------------------------------------------
+       |
+       | Un véhicule ayant déjà été utilisé dans une vente ne doit pas être
+       | supprimé. Cela préservera l'historique des factures et des pièces.
+       |
+       */
 
        if ($vehicle->sales()->exists()) {
             return redirect()
@@ -473,14 +445,10 @@ class VehicleController extends Controller
                     'Ce véhicule ne peut pas être supprimé, car il est lié à une ou plusieurs ventes.'
                 );
         }
-
         DB::beginTransaction();
-
         try {
             $vehicle->delete();
-
             DB::commit();
-
             return redirect()
                 ->route('vehicles.index')
                 ->with(
@@ -489,9 +457,7 @@ class VehicleController extends Controller
                 );
         } catch (Throwable $exception) {
             DB::rollBack();
-
             report($exception);
-
             return redirect()
                 ->route('vehicles.index')
                 ->with(
@@ -502,25 +468,30 @@ class VehicleController extends Controller
     }
 
     /**
-     * Normaliser une immatriculation.
-     *
-     * Exemple :
-     * 336 d 106 devient 336D106.
-     */
+    * Normaliser une immatriculation.
+    *
+    * Exemple :
+    * 336 d 106 devient 336D106.
+    */
+
+
     private function normalizePlate(string $plate): string
     {
         return strtoupper(
             preg_replace(
                 '/[^A-Z0-9]/',
                 '',
-                trim($plate)
+                // Convertir avant de filtrer pour conserver les lettres minuscules.
+                strtoupper(trim($plate))
             ) ?? ''
         );
     }
 
     /**
-     * Normaliser le VIN.
-     */
+    * Normaliser le VIN.
+    */
+
+
     private function normalizeVin(mixed $vin): ?string
     {
         if (
@@ -529,7 +500,6 @@ class VehicleController extends Controller
         ) {
             return null;
         }
-
         return strtoupper(
             preg_replace(
                 '/\s+/',

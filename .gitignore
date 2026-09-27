@@ -17,3 +17,28 @@ yarn-error.log
 /.fleet
 /.idea
 /.vscode
+
+# ============================================================
+# FICHIERS DE SAUVEGARDE LOCAUX
+# ============================================================
+*.backup
+*.backup-*
+*.backup_*
+*.backup[0-9]*
+*.bak
+*.old
+*.orig
+*.tmp
+*.temp
+
+# Fichiers créés pendant les corrections/tests
+*.erreur
+*.erreur-*
+*.erreur_*
+
+# Copies locales de .env
+.env.*
+!.env.example
+
+# Fichiers temporaires de routes
+routes.json

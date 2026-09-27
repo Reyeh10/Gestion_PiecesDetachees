@@ -37,14 +37,24 @@ class VehiclePartRequestController extends Controller
 
     public function index(Request $request): View
     {
-        $query = VehiclePartRequest::query()
+      $query = VehiclePartRequest::query()
             ->with([
                 'vehicle.customer',
                 'product',
                 'supplier',
                 'creator',
-            ]);
 
+                /*
+                |--------------------------------------------------------------------------
+                | BON DE COMMANDE FOURNISSEUR
+                |--------------------------------------------------------------------------
+                |
+                | Permet de savoir immédiatement si cette demande de pièce
+                | possède déjà un bon de commande.
+                |
+                */
+                'latestSupplierOrderItem.supplierOrder',
+            ]);
 
         /*
         |--------------------------------------------------------------------------
@@ -197,11 +207,12 @@ class VehiclePartRequestController extends Controller
     {
         $query =
             VehiclePartRequest::query()
-                ->with([
+               ->with([
                     'vehicle.customer',
                     'product',
                     'supplier',
                     'creator',
+                    'latestSupplierOrderItem.supplierOrder',
                 ])
                 ->whereIn(
                     'status',

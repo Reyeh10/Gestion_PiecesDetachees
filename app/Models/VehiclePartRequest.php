@@ -440,4 +440,29 @@ class VehiclePartRequest extends Model
             true
         );
     }
+
+    /*
+|--------------------------------------------------------------------------
+| BONS DE COMMANDE FOURNISSEUR
+|--------------------------------------------------------------------------
+*/
+
+public function supplierOrderItems()
+{
+    return $this->hasMany(
+        SupplierOrderItem::class,
+        'vehicle_part_request_id'
+    );
+}
+
+/**
+ * Retourne la ligne du BC actif la plus récente.
+ */
+public function latestSupplierOrderItem()
+{
+    return $this->hasOne(
+        SupplierOrderItem::class,
+        'vehicle_part_request_id'
+    )->latestOfMany();
+}
 }

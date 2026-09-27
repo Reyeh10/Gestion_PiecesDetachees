@@ -522,7 +522,783 @@
         }
     }
 
+    /* ============================================================
+   ACTIONS COMPACTES
+   ============================================================ */
+
+.vpr-actions-compact {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+}
+
+.vpr-action-form {
+    display: inline-flex;
+    margin: 0;
+    padding: 0;
+}
+
+.vpr-action-icon {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 0;
+    margin: 0;
+
+    border: 0;
+    border-radius: 7px;
+
+    font-size: 15px;
+    line-height: 1;
+
+    text-decoration: none;
+    cursor: pointer;
+
+    transition:
+        transform .15s ease,
+        box-shadow .15s ease,
+        opacity .15s ease;
+}
+
+.vpr-action-icon i {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.vpr-action-icon:hover {
+    transform: translateY(-1px);
+    text-decoration: none;
+}
+
+
+/* VOIR */
+
+.vpr-action-view {
+    background: #dff6fb;
+    color: #27a9c0;
+}
+
+.vpr-action-view:hover {
+    color: #188da4;
+    box-shadow: 0 3px 8px rgba(39, 169, 192, .18);
+}
+
+
+/* MODIFIER */
+
+.vpr-action-edit {
+    background: #fff1cf;
+    color: #d99418;
+}
+
+.vpr-action-edit:hover {
+    color: #b8750b;
+    box-shadow: 0 3px 8px rgba(217, 148, 24, .18);
+}
+
+
+/* GÉNÉRER BC */
+
+.vpr-action-bc {
+    background: #e4f7e9;
+    color: #35a85c;
+}
+
+.vpr-action-bc:hover {
+    color: #278d4a;
+    box-shadow: 0 3px 8px rgba(53, 168, 92, .18);
+}
+
+
+/* BC EXISTANT */
+
+.vpr-action-bc-existing {
+    width: 34px;
+    min-width: 34px;
+
+    background: #ebeaff;
+    color: #696cff;
+}
+
+.vpr-bc-label {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .2px;
+}
+
+.vpr-action-bc-existing:hover {
+    color: #5558dc;
+    box-shadow: 0 3px 8px rgba(105, 108, 255, .18);
+}
+
+
+/* SUPPRIMER */
+
+.vpr-action-delete {
+    background: #ffe4e6;
+    color: #e25560;
+}
+
+.vpr-action-delete:hover {
+    color: #c93d49;
+    box-shadow: 0 3px 8px rgba(226, 85, 96, .18);
+}
+
+
+/* ============================================================
+   TABLEAU PLUS COMPACT
+   ============================================================ */
+
+.vpr-table th {
+    padding: 10px 12px;
+}
+
+.vpr-table td {
+    padding: 9px 12px;
+}
+
+
+/* ACTIONS : largeur réduite */
+
+.vpr-table th:last-child,
+.vpr-table td:last-child {
+    width: 150px;
+    min-width: 150px;
+}
+
+
+/* Dates un peu plus compactes */
+
+.vpr-table td {
+    vertical-align: middle;
+}
+
+
+/* ============================================================
+   ÉCRANS PLUS PETITS
+   ============================================================ */
+
+@media (max-width: 1400px) {
+
+    .vpr-table th {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    .vpr-table td {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    .vpr-action-icon {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+    }
+
+    .vpr-action-icon i {
+        font-size: 15px;
+    }
+
+    .vpr-actions-compact {
+        gap: 4px;
+    }
+
+    .vpr-table th:last-child,
+    .vpr-table td:last-child {
+        width: 135px;
+        min-width: 135px;
+    }
+
+    /* ============================================================
+   RESPONSIVE — PETITS ÉCRANS / LAPTOP
+   ============================================================ */
+
+/*
+|--------------------------------------------------------------------------
+| TABLEAU
+|--------------------------------------------------------------------------
+| On force le tableau à utiliser toute la largeur disponible,
+| sans largeur minimale excessive.
+*/
+.vpr-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| CELLULES
+|--------------------------------------------------------------------------
+*/
+.vpr-table th,
+.vpr-table td {
+    padding: 8px 7px !important;
+    vertical-align: middle !important;
+    overflow: hidden;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| LARGEUR DES COLONNES
+|--------------------------------------------------------------------------
+*/
+
+/* Véhicule */
+.vpr-table th:nth-child(1),
+.vpr-table td:nth-child(1) {
+    width: 14%;
+}
+
+/* Pièce */
+.vpr-table th:nth-child(2),
+.vpr-table td:nth-child(2) {
+    width: 22%;
+}
+
+/* Quantité */
+.vpr-table th:nth-child(3),
+.vpr-table td:nth-child(3) {
+    width: 11%;
+}
+
+/* Demande */
+.vpr-table th:nth-child(4),
+.vpr-table td:nth-child(4) {
+    width: 14%;
+}
+
+/* Commande */
+.vpr-table th:nth-child(5),
+.vpr-table td:nth-child(5) {
+    width: 14%;
+}
+
+/* Statut */
+.vpr-table th:nth-child(6),
+.vpr-table td:nth-child(6) {
+    width: 13%;
+}
+
+/* Actions */
+.vpr-table th:last-child,
+.vpr-table td:last-child {
+    width: 12%;
+    min-width: 0 !important;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| TEXTE
+|--------------------------------------------------------------------------
+*/
+
+.vpr-table th {
+    font-size: 11px !important;
+    white-space: nowrap;
+}
+
+.vpr-table td {
+    font-size: 12px !important;
+}
+
+.vpr-table .vehicle-number {
+    font-size: 12px !important;
+}
+
+.vpr-table small {
+    font-size: 10px !important;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| DATES
+|--------------------------------------------------------------------------
+*/
+
+.vpr-table td:nth-child(4),
+.vpr-table td:nth-child(5) {
+    white-space: nowrap;
+    font-size: 11px !important;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| BADGE STATUT
+|--------------------------------------------------------------------------
+*/
+
+.vpr-status-badge {
+    font-size: 9px !important;
+    padding: 5px 7px !important;
+    white-space: nowrap;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| ACTIONS COMPACTES
+|--------------------------------------------------------------------------
+*/
+
+.vpr-actions-compact,
+.vpr-actions {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    flex-wrap: nowrap !important;
+}
+
+.vpr-action-icon {
+    width: 27px !important;
+    height: 27px !important;
+    min-width: 27px !important;
+
+    padding: 0 !important;
+
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    border-radius: 6px !important;
+}
+
+.vpr-action-icon i {
+    font-size: 14px !important;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| ÉCRAN <= 1400px
+|--------------------------------------------------------------------------
+*/
+
+@media (max-width: 1400px) {
+
+    .vpr-table th,
+    .vpr-table td {
+        padding: 7px 5px !important;
+    }
+
+    .vpr-table th {
+        font-size: 10px !important;
+    }
+
+    .vpr-table td {
+        font-size: 11px !important;
+    }
+
+    .vpr-table .vehicle-number {
+        font-size: 11px !important;
+    }
+
+    .vpr-table small {
+        font-size: 9px !important;
+    }
+
+    .vpr-status-badge {
+        font-size: 8px !important;
+        padding: 4px 5px !important;
+    }
+
+    .vpr-action-icon {
+        width: 25px !important;
+        height: 25px !important;
+        min-width: 25px !important;
+    }
+
+    .vpr-action-icon i {
+        font-size: 13px !important;
+    }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| ÉCRAN <= 1200px
+|--------------------------------------------------------------------------
+*/
+
+@media (max-width: 1200px) {
+
+    .vpr-table th,
+    .vpr-table td {
+        padding: 6px 4px !important;
+    }
+
+    .vpr-table th {
+        font-size: 9px !important;
+    }
+
+    .vpr-table td {
+        font-size: 10px !important;
+    }
+
+    /*
+    | Pièce un peu plus importante
+    */
+    .vpr-table th:nth-child(1),
+    .vpr-table td:nth-child(1) {
+        width: 13%;
+    }
+
+    .vpr-table th:nth-child(2),
+    .vpr-table td:nth-child(2) {
+        width: 23%;
+    }
+
+    .vpr-table th:nth-child(3),
+    .vpr-table td:nth-child(3) {
+        width: 10%;
+    }
+
+    .vpr-table th:nth-child(4),
+    .vpr-table td:nth-child(4) {
+        width: 14%;
+    }
+
+    .vpr-table th:nth-child(5),
+    .vpr-table td:nth-child(5) {
+        width: 14%;
+    }
+
+    .vpr-table th:nth-child(6),
+    .vpr-table td:nth-child(6) {
+        width: 13%;
+    }
+
+    .vpr-table th:last-child,
+    .vpr-table td:last-child {
+        width: 13%;
+    }
+
+    .vpr-action-icon {
+        width: 24px !important;
+        height: 24px !important;
+        min-width: 24px !important;
+    }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| TRÈS PETITS ÉCRANS
+|--------------------------------------------------------------------------
+| À ce niveau, plutôt que couper des informations,
+| on autorise le défilement horizontal uniquement du tableau.
+*/
+/* ============================================================
+   RESPONSIVE FINAL — AUCUN DÉBORDEMENT DE PAGE
+   ============================================================ */
+
+.vpr-table-wrapper {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+.vpr-table {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+}
+
+
+/* ============================================================
+   LAPTOP / PETIT ÉCRAN
+   ============================================================ */
+
+@media (max-width: 1199.98px) {
+
+    .vpr-table {
+        width: 100% !important;
+        min-width: 0 !important;
+        table-layout: fixed !important;
+    }
+
+    .vpr-table th,
+    .vpr-table td {
+        padding: 6px 4px !important;
+        font-size: 10px !important;
+    }
+
+
+    /* Véhicule */
+
+    .vpr-table th:nth-child(1),
+    .vpr-table td:nth-child(1) {
+        width: 13% !important;
+    }
+
+
+    /* Pièce */
+
+    .vpr-table th:nth-child(2),
+    .vpr-table td:nth-child(2) {
+        width: 22% !important;
+    }
+
+
+    /* Quantité */
+
+    .vpr-table th:nth-child(3),
+    .vpr-table td:nth-child(3) {
+        width: 10% !important;
+    }
+
+
+    /* Demande */
+
+    .vpr-table th:nth-child(4),
+    .vpr-table td:nth-child(4) {
+        width: 13% !important;
+    }
+
+
+    /* Commande */
+
+    .vpr-table th:nth-child(5),
+    .vpr-table td:nth-child(5) {
+        width: 13% !important;
+    }
+
+
+    /* Statut */
+
+    .vpr-table th:nth-child(6),
+    .vpr-table td:nth-child(6) {
+        width: 15% !important;
+    }
+
+
+    /* Actions */
+
+    .vpr-table th:nth-child(7),
+    .vpr-table td:nth-child(7) {
+        width: 14% !important;
+        min-width: 0 !important;
+    }
+
+
+    /* Dates */
+
+    .vpr-table td:nth-child(4),
+    .vpr-table td:nth-child(5) {
+        white-space: normal !important;
+        line-height: 1.25;
+    }
+
+
+    /* Statut */
+
+    .vpr-status-badge {
+        max-width: 100%;
+        padding: 4px 5px !important;
+
+        font-size: 8px !important;
+        line-height: 1.1;
+
+        white-space: normal !important;
+        text-align: center;
+    }
+
+
+    /* Actions */
+
+    .vpr-actions,
+    .vpr-actions-compact {
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+
+        gap: 3px !important;
+        flex-wrap: nowrap !important;
+    }
+
+    .vpr-action-icon {
+        width: 23px !important;
+        height: 23px !important;
+        min-width: 23px !important;
+
+        padding: 0 !important;
+        border-radius: 5px !important;
+    }
+
+    .vpr-action-icon i {
+        font-size: 12px !important;
+    }
+
+
+    /* Éviter qu'un texte force la largeur du tableau */
+
+    .vpr-table td {
+        overflow: hidden;
+        overflow-wrap: anywhere;
+    }
+
+}
+
+
+/* ============================================================
+   TABLETTE / TRÈS PETIT ÉCRAN
+   ============================================================ */
+
+@media (max-width: 900px) {
+
+    .vpr-table-wrapper {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+    }
+
+    .vpr-table {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        table-layout: fixed !important;
+    }
+
+    .vpr-table th,
+    .vpr-table td {
+        padding: 5px 3px !important;
+        font-size: 9px !important;
+    }
+
+    .vpr-table th {
+        font-size: 8px !important;
+    }
+
+    .vpr-action-icon {
+        width: 21px !important;
+        height: 21px !important;
+        min-width: 21px !important;
+    }
+
+    .vpr-action-icon i {
+        font-size: 11px !important;
+    }
+}
+}
+
 </style>
+
+{{-- ============================================================= --}}
+{{-- DESIGN COMPACT : BOUTONS, EN-TÊTE ET FILTRES                    --}}
+{{-- Styles limités à cette page ; les actions métier sont conservées. --}}
+{{-- ============================================================= --}}
+<style>
+    /* Carte sobre : réduire les marges pour laisser plus de place au tableau. */
+    .vpr-index-page { padding: 8px 0 24px; }
+    .vpr-index-page .vpr-index-inner { max-width: 100%; }
+    .vpr-index-page .vpr-index-card {
+        border-color: #e6eaf1; border-radius: 12px;
+        box-shadow: 0 4px 18px rgba(30,41,59,.04);
+    }
+    .vpr-index-page .vpr-index-header { padding: 18px 20px; }
+    .vpr-index-page .vpr-index-title-row { gap: 12px; }
+    .vpr-index-page .vpr-index-title-row h3 {
+        font-family: inherit; font-size: 20px; font-weight: 700;
+        letter-spacing: -.3px; margin-bottom: 4px; color: #27364b;
+    }
+    .vpr-index-page .vpr-index-title-row p { font-size: 12px; color: #7b879a; }
+    .vpr-index-page .vpr-index-body { padding: 16px 20px 20px; }
+
+    /* Boutons principaux : largeur naturelle et hauteur de 32 px. */
+    .vpr-index-page .vpr-new-button,
+    .vpr-index-page .vpr-filter-actions .btn {
+        width: auto; min-width: 0; min-height: 32px; height: 32px;
+        flex: 0 0 auto; padding: 5px 11px;
+        font-size: 12px; line-height: 20px; font-weight: 600;
+        border-radius: 6px; gap: 5px; white-space: nowrap;
+        box-shadow: none; transition: background-color .15s ease, border-color .15s ease;
+    }
+    .vpr-index-page .vpr-new-button i,
+    .vpr-index-page .vpr-filter-actions .btn i { font-size: 15px; }
+    .vpr-index-page .vpr-new-button,
+    .vpr-index-page .vpr-filter-actions .btn-primary {
+        color: #fff; background: #5867db; border-color: #5867db;
+    }
+    .vpr-index-page .vpr-new-button:hover,
+    .vpr-index-page .vpr-filter-actions .btn-primary:hover {
+        background: #4655c3; border-color: #4655c3;
+    }
+    .vpr-index-page .vpr-filter-actions .btn-secondary {
+        color: #607087; background: #fff; border: 1px solid #dce2ec;
+    }
+    .vpr-index-page .vpr-filter-actions .btn-secondary:hover {
+        color: #334155; background: #eef2f7; border-color: #c5cedb;
+    }
+
+    /* Champs réguliers, libellés discrets et grille sans marges négatives. */
+    .vpr-index-page .vpr-filter-panel {
+        padding: 14px; margin-bottom: 16px; border-color: #e7ebf2;
+        border-radius: 9px; background: #f8fafc;
+    }
+    .vpr-index-page .vpr-filter-panel > .row {
+        display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px; width: 100%; margin: 0;
+    }
+    .vpr-index-page .vpr-filter-panel > .row > div {
+        width: auto; min-width: 0; margin: 0; padding: 0;
+    }
+    .vpr-index-page .vpr-filter-panel .form-label {
+        font-size: 11px; font-weight: 600; text-transform: none;
+        letter-spacing: 0; margin-bottom: 6px; color: #52627a;
+    }
+    .vpr-index-page .vpr-filter-panel .form-control,
+    .vpr-index-page .vpr-filter-panel .form-select {
+        height: 36px; min-height: 36px; font-size: 12px;
+        padding-top: 6px; padding-bottom: 6px;
+        border-radius: 6px; border-color: #dce3ed;
+    }
+    .vpr-index-page .vehicle-search-group .input-group { flex-wrap: nowrap; }
+    .vpr-index-page .vehicle-search-group .input-group-text {
+        min-width: 32px; height: 36px; padding: 6px 8px;
+        border-radius: 6px 0 0 6px; border-color: #dce3ed;
+    }
+    .vpr-index-page .vehicle-search-group .form-control { border-radius: 0 6px 6px 0; min-width: 0; }
+    .vpr-index-page .vehicle-search-info { min-height: 0; margin-top: 4px; font-size: 10px; }
+    .vpr-index-page .vehicle-search-info:empty { display: none; }
+    .vpr-index-page .vpr-filter-actions {
+        justify-content: flex-end; gap: 7px; margin-top: 12px;
+        padding-top: 10px; border-top: 1px solid #e7ebf2; flex-wrap: wrap;
+    }
+
+    /* Deux champs par rangée sur ordinateur étroit et tablette. */
+    @media (max-width: 1199.98px) {
+        .vpr-index-page .vpr-filter-panel > .row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    /* Sur téléphone, garder des champs lisibles et les boutons côte à côte. */
+    @media (max-width: 575.98px) {
+        .vpr-index-page { padding: 0 0 16px; }
+        .vpr-index-page .vpr-index-header,
+        .vpr-index-page .vpr-index-body { padding: 12px; }
+        .vpr-index-page .vpr-index-title-row h3 { font-size: 17px; }
+        .vpr-index-page .vpr-filter-panel { padding: 12px; }
+        .vpr-index-page .vpr-filter-panel > .row { grid-template-columns: minmax(0, 1fr); }
+        .vpr-index-page .vpr-new-button,
+        .vpr-index-page .vpr-filter-actions .btn { width: auto; min-width: 0; flex: 0 0 auto; }
+    }
+</style>
+
 
 
 <div class="vpr-index-page">
@@ -1372,12 +2148,12 @@
 
 
                                     {{-- ========================= --}}
-                                    {{-- ACTIONS --}}
+                                    {{-- ACTIONS COMPACTES --}}
                                     {{-- ========================= --}}
 
                                     <td class="text-center">
 
-                                        <div class="vpr-actions">
+                                        <div class="vpr-actions-compact">
 
 
                                             {{-- VOIR --}}
@@ -1390,23 +2166,13 @@
                                                     )
                                                 }}"
                                                 class="
-                                                    btn
-                                                    btn-info
-                                                    btn-sm
-                                                    text-white
+                                                    vpr-action-icon
+                                                    vpr-action-view
                                                 "
                                                 title="Voir"
+                                                aria-label="Voir"
                                             >
-
-                                                <i
-                                                    class="
-                                                        bx
-                                                        bx-show
-                                                    "
-                                                ></i>
-
-                                                Voir
-
+                                                <i class="bx bx-show"></i>
                                             </a>
 
 
@@ -1414,9 +2180,7 @@
 
                                             @if(
                                                 in_array(
-                                                    auth()
-                                                        ->user()
-                                                        ->role,
+                                                    auth()->user()->role,
                                                     [
                                                         'admin',
                                                         'chef_magasinier',
@@ -1434,23 +2198,87 @@
                                                         )
                                                     }}"
                                                     class="
-                                                        btn
-                                                        btn-warning
-                                                        btn-sm
+                                                        vpr-action-icon
+                                                        vpr-action-edit
                                                     "
                                                     title="Modifier"
+                                                    aria-label="Modifier"
                                                 >
-
-                                                    <i
-                                                        class="
-                                                            bx
-                                                            bx-edit
-                                                        "
-                                                    ></i>
-
-                                                    Modifier
-
+                                                    <i class="bx bx-edit"></i>
                                                 </a>
+
+                                            @endif
+
+
+                                            {{-- BON DE COMMANDE --}}
+
+                                           @if(
+                                                    $partRequest->status
+                                                    ===
+                                                    \App\Models\VehiclePartRequest::STATUS_ORDERED
+                                                )
+
+                                                @php
+                                                    $supplierOrderItem =
+                                                        $partRequest
+                                                            ->latestSupplierOrderItem;
+
+                                                    $supplierOrder =
+                                                        $supplierOrderItem
+                                                            ?->supplierOrder;
+                                                @endphp
+
+
+                                                @if($supplierOrder)
+
+                                                    {{-- BC EXISTANT --}}
+
+                                                    <a
+                                                        href="{{
+                                                            route(
+                                                                'supplier-orders.show',
+                                                                $supplierOrder
+                                                            )
+                                                        }}"
+                                                        class="
+                                                            vpr-action-icon
+                                                            vpr-action-bc-existing
+                                                        "
+                                                        title="{{
+                                                            'Voir '
+                                                            .
+                                                            $supplierOrder
+                                                                ->order_number
+                                                        }}"
+                                                        aria-label="Voir le bon de commande"
+                                                    >
+                                                        <span class="vpr-bc-label">
+                                                            BC
+                                                        </span>
+                                                    </a>
+
+                                                @else
+
+                                                    {{-- GÉNÉRER BC --}}
+
+                                                    <a
+                                                        href="{{
+                                                            route(
+                                                                'supplier-orders.create-from-part-request',
+                                                                $partRequest
+                                                            )
+                                                        }}"
+                                                        class="
+                                                            vpr-action-icon
+                                                            vpr-action-bc
+                                                        "
+                                                        title="Générer le bon de commande"
+                                                        aria-label="Générer le bon de commande"
+                                                    >
+                                                        <i class="bx bx-file-blank"></i>
+                                                    </a>
+
+                                                @endif
 
                                             @endif
 
@@ -1458,9 +2286,7 @@
                                             {{-- SUPPRIMER --}}
 
                                             @if(
-                                                auth()
-                                                    ->user()
-                                                    ->role
+                                                auth()->user()->role
                                                 ===
                                                 'admin'
                                             )
@@ -1475,32 +2301,23 @@
                                                     }}"
                                                     class="
                                                         delete-part-request-form
+                                                        vpr-action-form
                                                     "
                                                 >
 
                                                     @csrf
                                                     @method('DELETE')
 
-
                                                     <button
                                                         type="submit"
                                                         class="
-                                                            btn
-                                                            btn-danger
-                                                            btn-sm
+                                                            vpr-action-icon
+                                                            vpr-action-delete
                                                         "
                                                         title="Supprimer"
+                                                        aria-label="Supprimer"
                                                     >
-
-                                                        <i
-                                                            class="
-                                                                bx
-                                                                bx-trash
-                                                            "
-                                                        ></i>
-
-                                                        Supprimer
-
+                                                        <i class="bx bx-trash"></i>
                                                     </button>
 
                                                 </form>
