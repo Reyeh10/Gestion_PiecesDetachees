@@ -1297,6 +1297,127 @@
         .vpr-index-page .vpr-new-button,
         .vpr-index-page .vpr-filter-actions .btn { width: auto; min-width: 0; flex: 0 0 auto; }
     }
+
+    /* ================================================================ */
+/* SÉLECTION MULTIPLE POUR BON DE COMMANDE                          */
+/* ================================================================ */
+
+.vpr-multi-bc-form {
+    margin-bottom: 12px;
+}
+
+.vpr-multi-bc-bar {
+    min-height: 52px;
+    padding: 8px 12px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+
+    background: #f8f9fc;
+    border: 1px solid #e6e9f2;
+    border-radius: 10px;
+}
+
+.vpr-multi-bc-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+}
+
+.vpr-select-all-label {
+    margin: 0;
+
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+
+    cursor: pointer;
+
+    color: #566078;
+    font-size: 12px;
+    font-weight: 700;
+
+    white-space: nowrap;
+}
+
+.vpr-bc-checkbox {
+    width: 16px;
+    height: 16px;
+
+    cursor: pointer;
+
+    accent-color: #696cff;
+}
+
+.vpr-multi-bc-selection {
+    color: #8a93a6;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.vpr-multi-bc-button {
+    min-height: 34px;
+    padding: 6px 11px;
+
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    border-radius: 8px;
+
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.vpr-multi-bc-button:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
+.vpr-multi-bc-count {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 999px;
+
+    background: rgba(255, 255, 255, .20);
+
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.vpr-bc-unavailable {
+    color: #b5bdcc;
+    font-weight: 700;
+}
+
+.vpr-bc-item-checkbox:checked {
+    transform: scale(1.05);
+}
+
+@media (max-width: 700px) {
+
+    .vpr-multi-bc-bar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .vpr-multi-bc-left {
+        justify-content: space-between;
+    }
+
+    .vpr-multi-bc-button {
+        justify-content: center;
+    }
+}
 </style>
 
 
@@ -1720,6 +1841,84 @@
                 </form>
 
 
+                {{-- ================================================================ --}}
+                {{-- CRÉATION D'UN BC AVEC PLUSIEURS PIÈCES                           --}}
+                {{-- ================================================================ --}}
+                {{--                                                                  --}}
+                {{-- Seules les pièces :                                              --}}
+                {{-- - au statut COMMANDÉE ;                                          --}}
+                {{-- - sans BC actif ;                                                --}}
+                {{-- - avec un fournisseur ;                                          --}}
+                {{-- peuvent être sélectionnées.                                      --}}
+                {{--                                                                  --}}
+                {{-- Le serveur refait toutes les vérifications avant création.       --}}
+                {{-- ================================================================ --}}
+
+                @if($currentList === 'ordered')
+
+                    <form
+                        id="multiBcForm"
+                        method="GET"
+                        action="{{ route('supplier-orders.create-from-part-requests') }}"
+                        class="vpr-multi-bc-form"
+                    >
+
+                        <div class="vpr-multi-bc-bar">
+
+                            <div class="vpr-multi-bc-left">
+
+                                <label class="vpr-select-all-label">
+
+                                    <input
+                                        type="checkbox"
+                                        id="selectAllBc"
+                                        class="vpr-bc-checkbox"
+                                    >
+
+                                    <span>
+                                        Tout sélectionner
+                                    </span>
+
+                                </label>
+
+
+                                <span
+                                    id="multiBcSelectionText"
+                                    class="vpr-multi-bc-selection"
+                                >
+                                    0 pièce sélectionnée
+                                </span>
+
+                            </div>
+
+
+                            <button
+                                type="submit"
+                                id="generateMultiBcButton"
+                                class="btn btn-primary vpr-multi-bc-button"
+                                disabled
+                            >
+
+                                <i class="bx bx-file-blank"></i>
+
+                                <span>
+                                    Générer BC
+                                </span>
+
+                                <span
+                                    id="multiBcCount"
+                                    class="vpr-multi-bc-count"
+                                >
+                                    0
+                                </span>
+
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                @endif
                 {{-- ============================================= --}}
                 {{-- TABLEAU --}}
                 {{-- ============================================= --}}
@@ -1738,6 +1937,20 @@
                         <thead>
 
                             <tr>
+
+                            @if($currentList === 'ordered')
+
+                                    <th
+                                        class="text-center"
+                                        style="width: 46px;"
+                                    >
+                                        <i
+                                            class="bx bx-check-square"
+                                            title="Sélection BC"
+                                        ></i>
+                                    </th>
+
+                                @endif
 
                                 <th>
                                     Véhicule
@@ -1790,8 +2003,92 @@
 
                         <tbody>
 
-                          @forelse($partRequests as $partRequest)
-                                <tr>
+                         @forelse($partRequests as $partRequest)
+
+                                    @php
+                                        /*
+                                        |--------------------------------------------------------------------------
+                                        | ÉLIGIBILITÉ À LA SÉLECTION MULTI-BC
+                                        |--------------------------------------------------------------------------
+                                        |
+                                        | Une pièce peut être sélectionnée uniquement si :
+                                        |
+                                        | - elle est COMMANDÉE ;
+                                        | - elle possède un fournisseur ;
+                                        | - elle ne possède pas déjà un BC actif.
+                                        |
+                                        */
+
+                                        $multiBcSupplierOrderItem =
+                                            $partRequest
+                                                ->latestSupplierOrderItem;
+
+                                        $multiBcSupplierOrder =
+                                            $multiBcSupplierOrderItem
+                                                ?->supplierOrder;
+
+                                        $canSelectForMultiBc =
+                                            $partRequest->status
+                                                ===
+                                                \App\Models\VehiclePartRequest::STATUS_ORDERED
+                                            &&
+                                            !empty($partRequest->supplier_id)
+                                            &&
+                                            !$multiBcSupplierOrder;
+                                    @endphp
+
+                                    <tr>
+                                    @if($currentList === 'ordered')
+
+                                        <td class="text-center">
+
+                                            @if($canSelectForMultiBc)
+
+                                                <input
+                                                    type="checkbox"
+                                                    name="vehicle_part_request_ids[]"
+                                                    value="{{ $partRequest->id }}"
+                                                    form="multiBcForm"
+                                                    class="
+                                                        vpr-bc-item-checkbox
+                                                        vpr-bc-checkbox
+                                                    "
+                                                    data-supplier-id="{{
+                                                        $partRequest->supplier_id
+                                                    }}"
+                                                    data-supplier-name="{{
+                                                        $partRequest->supplier?->name
+                                                        ?? 'Fournisseur'
+                                                    }}"
+                                                    aria-label="{{
+                                                        'Sélectionner '
+                                                        .
+                                                        $partRequest->part_name
+                                                    }}"
+                                                >
+
+                                            @elseif(
+                                                $partRequest->status
+                                                ===
+                                                \App\Models\VehiclePartRequest::STATUS_ORDERED
+                                            )
+
+                                                <span
+                                                    class="vpr-bc-unavailable"
+                                                    title="{{
+                                                        $multiBcSupplierOrder
+                                                            ? 'Cette pièce possède déjà un BC'
+                                                            : 'Aucun fournisseur associé'
+                                                    }}"
+                                                >
+                                                    —
+                                                </span>
+
+                                            @endif
+
+                                        </td>
+
+                                    @endif
                                     {{-- ========================= --}}
                                     {{-- VÉHICULE --}}
                                     {{-- ========================= --}}
@@ -2335,43 +2632,18 @@
 
                                 <tr>
 
-                                    <td
-                                        colspan="{{
-                                            $currentList
-                                            ===
-                                            'received'
-                                                ? 8
-                                                : 7
-                                        }}"
-                                        class="
-                                            text-center
-                                            py-5
-                                        "
-                                    >
-
-                                        <i
-                                            class="
-                                                bx
-                                                bx-package
-                                                fs-1
-                                                text-muted
-                                                d-block
-                                                mb-2
-                                            "
-                                        ></i>
-
-                                        <p
-                                            class="
-                                                text-muted
-                                                mb-0
-                                            "
-                                        >
-
-                                            Aucune pièce trouvée.
-
-                                        </p>
-
-                                    </td>
+                                   <td
+                                    colspan="{{
+                                        $currentList === 'received'
+                                            ? 9
+                                            : (
+                                                $currentList === 'ordered'
+                                                    ? 9
+                                                    : 8
+                                            )
+                                    }}"
+                                    class="text-center py-5"
+                                >
 
                                 </tr>
 
@@ -2781,6 +3053,353 @@ document.addEventListener(
     }
 );
 
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | SÉLECTION MULTIPLE POUR LE BON DE COMMANDE
+    |--------------------------------------------------------------------------
+    */
+
+    const form =
+        document.getElementById('multiBcForm');
+
+    if (!form) {
+        return;
+    }
+
+
+    const selectAll =
+        document.getElementById('selectAllBc');
+
+    const checkboxes =
+        Array.from(
+            document.querySelectorAll(
+                '.vpr-bc-item-checkbox'
+            )
+        );
+
+    const button =
+        document.getElementById(
+            'generateMultiBcButton'
+        );
+
+    const countBadge =
+        document.getElementById(
+            'multiBcCount'
+        );
+
+    const selectionText =
+        document.getElementById(
+            'multiBcSelectionText'
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CASES ACTUELLEMENT SÉLECTIONNÉES
+    |--------------------------------------------------------------------------
+    */
+
+    function selectedCheckboxes() {
+
+        return checkboxes.filter(
+            checkbox => checkbox.checked
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | FOURNISSEUR ACTUEL
+    |--------------------------------------------------------------------------
+    |
+    | Dès qu'une pièce est sélectionnée, seules les pièces appartenant au
+    | même fournisseur restent disponibles.
+    |
+    |--------------------------------------------------------------------------
+    */
+
+    function currentSupplierId() {
+
+        const selected =
+            selectedCheckboxes();
+
+        if (selected.length === 0) {
+            return null;
+        }
+
+        return selected[0].dataset.supplierId;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | METTRE À JOUR L'INTERFACE
+    |--------------------------------------------------------------------------
+    */
+
+    function updateInterface() {
+
+        const selected =
+            selectedCheckboxes();
+
+        const count =
+            selected.length;
+
+        const supplierId =
+            currentSupplierId();
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | COMPTEUR
+        |--------------------------------------------------------------------------
+        */
+
+        countBadge.textContent =
+            count;
+
+        selectionText.textContent =
+            count
+            +
+            (
+                count > 1
+                    ? ' pièces sélectionnées'
+                    : ' pièce sélectionnée'
+            );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | BOUTON
+        |--------------------------------------------------------------------------
+        */
+
+        button.disabled =
+            count === 0;
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | BLOQUER LES AUTRES FOURNISSEURS
+        |--------------------------------------------------------------------------
+        */
+
+        checkboxes.forEach(function (checkbox) {
+
+            if (
+                supplierId
+                &&
+                !checkbox.checked
+                &&
+                checkbox.dataset.supplierId
+                    !==
+                    supplierId
+            ) {
+
+                checkbox.disabled = true;
+
+                checkbox.title =
+                    'Cette pièce appartient à un autre fournisseur.';
+
+            } else {
+
+                checkbox.disabled = false;
+
+                checkbox.title = '';
+            }
+        });
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | ÉTAT DU "TOUT SÉLECTIONNER"
+        |--------------------------------------------------------------------------
+        */
+
+        const available =
+            checkboxes.filter(
+                checkbox =>
+                    !checkbox.disabled
+            );
+
+        const checkedAvailable =
+            available.filter(
+                checkbox =>
+                    checkbox.checked
+            );
+
+        selectAll.checked =
+            available.length > 0
+            &&
+            checkedAvailable.length
+                ===
+                available.length;
+
+        selectAll.indeterminate =
+            checkedAvailable.length > 0
+            &&
+            checkedAvailable.length
+                <
+                available.length;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CLIC SUR UNE PIÈCE
+    |--------------------------------------------------------------------------
+    */
+
+    checkboxes.forEach(function (checkbox) {
+
+        checkbox.addEventListener(
+            'change',
+            updateInterface
+        );
+    });
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | TOUT SÉLECTIONNER
+    |--------------------------------------------------------------------------
+    |
+    | S'il n'y a encore aucune sélection, "Tout sélectionner" sélectionne
+    | uniquement les pièces du fournisseur de la première pièce disponible.
+    |
+    | Cela garantit qu'un BC ne mélange jamais plusieurs fournisseurs.
+    |
+    |--------------------------------------------------------------------------
+    */
+
+    selectAll.addEventListener(
+        'change',
+        function () {
+
+            if (!selectAll.checked) {
+
+                checkboxes.forEach(
+                    checkbox => {
+                        checkbox.checked = false;
+                    }
+                );
+
+                updateInterface();
+
+                return;
+            }
+
+
+            let supplierId =
+                currentSupplierId();
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | AUCUNE PIÈCE ENCORE SÉLECTIONNÉE
+            |--------------------------------------------------------------------------
+            */
+
+            if (!supplierId) {
+
+                const firstAvailable =
+                    checkboxes.find(
+                        checkbox =>
+                            !checkbox.disabled
+                    );
+
+                supplierId =
+                    firstAvailable
+                        ? firstAvailable.dataset.supplierId
+                        : null;
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | SÉLECTIONNER UNIQUEMENT LE MÊME FOURNISSEUR
+            |--------------------------------------------------------------------------
+            */
+
+            checkboxes.forEach(
+                function (checkbox) {
+
+                    checkbox.checked =
+                        supplierId !== null
+                        &&
+                        checkbox.dataset.supplierId
+                            ===
+                            supplierId;
+                }
+            );
+
+            updateInterface();
+        }
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | SÉCURITÉ AVANT ENVOI
+    |--------------------------------------------------------------------------
+    */
+
+    form.addEventListener(
+        'submit',
+        function (event) {
+
+            const selected =
+                selectedCheckboxes();
+
+            if (selected.length === 0) {
+
+                event.preventDefault();
+
+                alert(
+                    'Sélectionnez au moins une pièce commandée.'
+                );
+
+                return;
+            }
+
+
+            const suppliers =
+                [
+                    ...new Set(
+                        selected.map(
+                            checkbox =>
+                                checkbox.dataset.supplierId
+                        )
+                    )
+                ];
+
+
+            if (suppliers.length !== 1) {
+
+                event.preventDefault();
+
+                alert(
+                    'Toutes les pièces sélectionnées doivent appartenir au même fournisseur.'
+                );
+            }
+        }
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | INITIALISATION
+    |--------------------------------------------------------------------------
+    */
+
+    updateInterface();
+
+});
 </script>
 
 @endsection

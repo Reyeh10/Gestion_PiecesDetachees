@@ -1432,6 +1432,27 @@ Route::middleware(['auth'])->group(function () {
         ->name('supplier-orders.create-from-part-request');
 
 
+        /*
+|--------------------------------------------------------------------------
+| CRÉER UN BC DEPUIS PLUSIEURS PIÈCES COMMANDÉES
+|--------------------------------------------------------------------------
+|
+| Cette route reçoit plusieurs vehicle_part_request_ids[].
+|
+| Elle ouvre le formulaire permettant de créer UN SEUL BC
+| contenant plusieurs lignes.
+|
+|--------------------------------------------------------------------------
+*/
+
+Route::get(
+    '/supplier-orders/create-from-part-requests',
+    [
+        SupplierOrderController::class,
+        'createFromPartRequests',
+    ]
+)->name('supplier-orders.create-from-part-requests');
+
     /*
     |--------------------------------------------------------------------------
     | LISTE DES BONS DE COMMANDE
@@ -1478,6 +1499,27 @@ Route::middleware(['auth'])->group(function () {
 
     /*
     |--------------------------------------------------------------------------
+    | REJETER UN BON DE COMMANDE
+    |--------------------------------------------------------------------------
+    |
+    | Le rejet est une décision administrative différente de l'annulation.
+    | Le motif du rejet sera obligatoirement enregistré.
+    |
+    */
+
+    Route::patch(
+        '/supplier-orders/{supplierOrder}/reject',
+        [
+            SupplierOrderController::class,
+            'reject',
+        ]
+    )
+        ->whereNumber('supplierOrder')
+        ->name('supplier-orders.reject');
+
+
+    /*
+    |--------------------------------------------------------------------------
     | MARQUER LE BC COMME ENVOYÉ AU FOURNISSEUR
     |--------------------------------------------------------------------------
     */
@@ -1508,6 +1550,38 @@ Route::middleware(['auth'])->group(function () {
         ->name('supplier-orders.cancel');
 
 
+            /*
+    |--------------------------------------------------------------------------
+    | AFFICHER UNE SIGNATURE ÉLECTRONIQUE DU BON DE COMMANDE
+    |--------------------------------------------------------------------------
+    |
+    | Cette route permet d'afficher de manière sécurisée la signature
+    | électronique enregistrée dans le stockage privé.
+    |
+    | IMPORTANT :
+    | Cette route doit rester AVANT :
+    |
+    | /supplier-orders/{supplierOrder}
+    |
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/supplier-orders/{supplierOrder}/signatures/{type}',
+        [
+            SupplierOrderController::class,
+            'showSignature',
+        ]
+    )
+        ->whereNumber('supplierOrder')
+        ->whereIn(
+            'type',
+            [
+                'prepared',
+                'approved',
+            ]
+        )
+        ->name('supplier-orders.signature');
     /*
     |--------------------------------------------------------------------------
     | AFFICHER UN BON DE COMMANDE

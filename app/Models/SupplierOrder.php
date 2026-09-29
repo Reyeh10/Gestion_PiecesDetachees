@@ -17,9 +17,12 @@ class SupplierOrder extends Model
         'depot_id',
         'created_by',
         'approved_by',
+        'rejected_by',
         'order_date',
         'expected_delivery_date',
         'approved_at',
+        'rejected_at',
+        'rejection_reason',
         'sent_at',
         'status',
         'currency',
@@ -45,6 +48,7 @@ class SupplierOrder extends Model
         'order_date' => 'date',
         'expected_delivery_date' => 'date',
         'approved_at' => 'datetime',
+        'rejected_at' => 'datetime',
         'sent_at' => 'datetime',
 
         'subtotal' => 'decimal:2',
@@ -69,6 +73,8 @@ class SupplierOrder extends Model
     public const STATUS_DRAFT = 'draft';
 
     public const STATUS_APPROVED = 'approved';
+
+    public const STATUS_REJECTED = 'rejected';
 
     public const STATUS_SENT = 'sent';
 
@@ -111,6 +117,25 @@ class SupplierOrder extends Model
         );
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | UTILISATEUR AYANT REJETÉ LE BON DE COMMANDE
+    |--------------------------------------------------------------------------
+    |
+    | Cette relation permet de connaître l'utilisateur qui a rejeté
+    | le bon de commande.
+    |
+    */
+
+    public function rejector(): BelongsTo
+    {
+        return $this->belongsTo(
+            User::class,
+            'rejected_by'
+        );
+    }
+
+
     public function items(): HasMany
     {
         return $this->hasMany(
@@ -118,7 +143,60 @@ class SupplierOrder extends Model
         );
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | SIGNATURES ÉLECTRONIQUES
+    |--------------------------------------------------------------------------
+    |
+    | Un bon de commande peut avoir plusieurs types de signatures.
+    |
+    | Actuellement :
+    |
+    | - prepared : signature du préparateur ;
+    | - approved : signature de l'approbateur.
+    |
+    */
 
+    public function signatures(): HasMany
+    {
+        return $this->hasMany(
+            SupplierOrderSignature::class
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | SIGNATURE DU PRÉPARATEUR
+    |--------------------------------------------------------------------------
+    */
+
+    public function preparedSignature()
+    {
+        return $this->hasOne(
+            SupplierOrderSignature::class
+        )->where(
+            'type',
+            SupplierOrderSignature::TYPE_PREPARED
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | SIGNATURE DE L'APPROBATEUR
+    |--------------------------------------------------------------------------
+    */
+
+    public function approvedSignature()
+    {
+        return $this->hasOne(
+            SupplierOrderSignature::class
+        )->where(
+            'type',
+            SupplierOrderSignature::TYPE_APPROVED
+        );
+    }
     /*
     |--------------------------------------------------------------------------
     | HELPERS
@@ -134,6 +212,18 @@ class SupplierOrder extends Model
     {
         return $this->status === self::STATUS_APPROVED;
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | BON DE COMMANDE REJETÉ
+    |--------------------------------------------------------------------------
+    */
+
+    public function isRejected(): bool
+    {
+        return $this->status === self::STATUS_REJECTED;
+    }
+
 
     public function isSent(): bool
     {

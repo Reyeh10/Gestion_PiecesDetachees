@@ -228,4 +228,6 @@ class SupplierController extends Controller
         return redirect()->route('suppliers.index')
             ->with('success', 'Fournisseur supprimé avec succès.');
     }
+
+    
 }

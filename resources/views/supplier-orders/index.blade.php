@@ -13,6 +13,7 @@
         'partial_received' => 'Réception partielle',
         'received' => 'Reçu',
         'cancelled' => 'Annulé',
+        'rejected' => 'Rejeté',
     ];
 
 @endphp
@@ -176,6 +177,46 @@
     .orders-status-cancelled {
         background: #ffebed;
         color: #c44751;
+    }
+
+
+    /*
+    |----------------------------------------------------------------------
+    | STATUT REJETÉ
+    |----------------------------------------------------------------------
+    */
+
+    .orders-status-rejected {
+        background: #fee2e2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+    }
+
+
+    /*
+    |----------------------------------------------------------------------
+    | LIGNE DU BON DE COMMANDE REJETÉ
+    |----------------------------------------------------------------------
+    |
+    | Le fond rouge reste volontairement léger afin de conserver
+    | une excellente lisibilité du tableau.
+    |
+    */
+
+    .orders-row-rejected {
+        background: #fff5f5;
+    }
+
+    .orders-table tbody tr.orders-row-rejected:hover {
+        background: #ffeded;
+    }
+
+    .orders-row-rejected td:first-child {
+        border-left: 4px solid #dc2626;
+    }
+
+    .orders-row-rejected .orders-number {
+        color: #dc2626;
     }
 
     .orders-money {
@@ -435,7 +476,13 @@
                             as $supplierOrder
                         )
 
-                            <tr>
+                            <tr
+                                @class([
+                                    'orders-row-rejected' =>
+                                        $supplierOrder->status ===
+                                        \App\Models\SupplierOrder::STATUS_REJECTED,
+                                ])
+                            >
 
                                 <td>
 

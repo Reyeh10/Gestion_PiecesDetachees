@@ -545,6 +545,29 @@
         break-inside: avoid !important;
     }
 
+
+    /*
+    |--------------------------------------------------------
+    | VÉHICULE + CLIENT / PROPRIÉTAIRE À L'IMPRESSION
+    |--------------------------------------------------------
+    */
+
+    .order-vehicle-customer-section {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+        margin-top: 10px !important;
+    }
+
+    .order-vehicle-customer-row {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 10px !important;
+
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
     .order-info-box {
         padding: 9px 11px !important;
 
@@ -801,6 +824,26 @@
     }
 }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | VÉHICULE / CLIENT - PROPRIÉTAIRE
+    |--------------------------------------------------------------------------
+    */
+
+    .order-vehicle-customer-section {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 14px;
+    }
+
+    .order-vehicle-customer-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+    }
+
     @media(max-width: 800px) {
         .order-head,
         .order-info-section {
@@ -896,6 +939,22 @@
 
         @method('PATCH')
 
+                {{--
+        |--------------------------------------------------------------------------
+        | SIGNATURE ÉLECTRONIQUE DE L'APPROBATEUR
+        |--------------------------------------------------------------------------
+        |
+        | Le JavaScript placera ici le PNG Base64 généré depuis le canvas.
+        |
+        --}}
+
+        <input
+            type="hidden"
+            name="signature"
+            id="approvalSignatureData"
+            value=""
+        >
+
         <button
             type="submit"
             class="order-btn order-btn-success"
@@ -909,6 +968,37 @@
         </button>
 
     </form>
+
+@endif
+
+
+{{-- ============================================================
+    REJET DU BON DE COMMANDE
+
+    RÈGLE :
+    - Le BC doit être au statut BROUILLON.
+    - Seul un ADMINISTRATEUR peut le rejeter.
+    - Le motif du rejet sera obligatoire.
+============================================================ --}}
+
+@if(
+    auth()->check()
+    &&
+    auth()->user()->role === 'admin'
+    &&
+    $supplierOrder->status === \App\Models\SupplierOrder::STATUS_DRAFT
+)
+
+    <button
+        type="button"
+        class="order-btn order-btn-danger"
+        id="openRejectSupplierOrderModal"
+        title="Rejeter le bon de commande"
+    >
+        <i class="bx bx-x"></i>
+
+        Rejeter
+    </button>
 
 @endif
 
@@ -971,6 +1061,7 @@
                     >
                         @csrf
                         @method('PATCH')
+
 
                         <button
                             type="submit"
@@ -1108,6 +1199,208 @@
 
 
             {{-- MÉTADONNÉES --}}
+
+
+            {{--
+            |--------------------------------------------------------------------------
+            | VÉHICULES ET CLIENTS / PROPRIÉTAIRES
+            |--------------------------------------------------------------------------
+            |
+            | Un bon de commande peut contenir plusieurs pièces.
+            |
+            | Plusieurs pièces peuvent appartenir au même véhicule.
+            | Nous regroupons donc les véhicules par ID afin d'éviter
+            | d'afficher plusieurs fois le même véhicule.
+            |
+            --}}
+
+            @php
+
+                $orderVehicles = $supplierOrder
+                    ->items
+                    ->map(
+                        fn ($item) =>
+                            $item
+                                ->vehiclePartRequest
+                                ?->vehicle
+                    )
+                    ->filter()
+                    ->unique('id')
+                    ->values();
+
+            @endphp
+
+
+            @if($orderVehicles->isNotEmpty())
+
+                <div class="order-vehicle-customer-section">
+
+                    @foreach($orderVehicles as $orderVehicle)
+
+                        <div class="order-vehicle-customer-row">
+
+                            {{-- =====================================================
+                                VÉHICULE
+                            ====================================================== --}}
+
+                            <div class="order-info-box">
+
+                                <div class="order-info-title">
+                                    Véhicule
+                                </div>
+
+                                <div class="order-info-name">
+
+                                    {{
+                                        $orderVehicle->plate_number
+                                        ?: 'Immatriculation non renseignée'
+                                    }}
+
+                                </div>
+
+
+                                <div class="order-info-line">
+
+                                    <strong>Marque / Modèle :</strong>
+
+                                    {{
+                                        trim(
+                                            ($orderVehicle->brand ?? '')
+                                            . ' '
+                                            . ($orderVehicle->model ?? '')
+                                        )
+                                        ?: '-'
+                                    }}
+
+                                </div>
+
+
+                                <div class="order-info-line">
+
+                                    <strong>VIN / Châssis :</strong>
+
+                                    {{
+                                        $orderVehicle->vin
+                                        ?: '-'
+                                    }}
+
+                                </div>
+
+
+                                <div class="order-info-line">
+
+                                    <strong>Année :</strong>
+
+                                    {{
+                                        $orderVehicle->year
+                                        ?: '-'
+                                    }}
+
+                                </div>
+
+
+                                <div class="order-info-line">
+
+                                    <strong>Couleur :</strong>
+
+                                    {{
+                                        $orderVehicle->color
+                                        ?: '-'
+                                    }}
+
+                                </div>
+
+                            </div>
+
+
+                            {{-- =====================================================
+                                CLIENT / PROPRIÉTAIRE
+                            ====================================================== --}}
+
+                            <div class="order-info-box">
+
+                                <div class="order-info-title">
+                                    Client / Propriétaire
+                                </div>
+
+
+                                @if($orderVehicle->customer)
+
+                                    <div class="order-info-name">
+
+                                        {{
+                                            $orderVehicle
+                                                ->customer
+                                                ->name
+                                        }}
+
+                                    </div>
+
+
+                                    <div class="order-info-line">
+
+                                        <strong>Code client :</strong>
+
+                                        {{
+                                            $orderVehicle
+                                                ->customer
+                                                ->code
+                                            ?: '-'
+                                        }}
+
+                                    </div>
+
+
+                                    <div class="order-info-line">
+
+                                        <strong>Téléphone :</strong>
+
+                                        {{
+                                            $orderVehicle
+                                                ->customer
+                                                ->phone
+                                            ?: '-'
+                                        }}
+
+                                    </div>
+
+
+                                    <div class="order-info-line">
+
+                                        <strong>Email :</strong>
+
+                                        {{
+                                            $orderVehicle
+                                                ->customer
+                                                ->email
+                                            ?: '-'
+                                        }}
+
+                                    </div>
+
+                                @else
+
+                                    <div class="order-info-name">
+                                        Client non renseigné
+                                    </div>
+
+                                    <div class="order-info-line">
+                                        Aucun client ou propriétaire
+                                        n'est associé à ce véhicule.
+                                    </div>
+
+                                @endif
+
+                            </div>
+
+                        </div>
+
+                    @endforeach
+
+                </div>
+
+            @endif
+
 
             <div class="order-meta">
 
@@ -1442,32 +1735,82 @@
 
             <div class="order-signatures">
 
-                <div class="order-signature">
+             <div class="order-signature">
 
-                    <strong>
-                        Préparé par
-                    </strong>
-
-                    <div class="order-signature-line"></div>
-
-                    {{ $supplierOrder->creator?->name
-                        ?? 'Nom / Signature' }}
-
-                </div>
+    <strong>
+        Approuvé par
+    </strong>
 
 
-                <div class="order-signature">
+    {{--
+    |--------------------------------------------------------------------------
+    | SIGNATURE ÉLECTRONIQUE DE L'APPROBATEUR
+    |--------------------------------------------------------------------------
+    --}}
 
-                    <strong>
-                        Approuvé par
-                    </strong>
+    @if($supplierOrder->approvedSignature)
 
-                    <div class="order-signature-line"></div>
+        <div class="order-electronic-signature">
 
-                    {{ $supplierOrder->approver?->name
-                        ?? 'Nom / Signature' }}
+            <img
+                src="{{
+                    route(
+                        'supplier-orders.signature',
+                        [
+                            'supplierOrder' => $supplierOrder,
+                            'type' => \App\Models\SupplierOrderSignature::TYPE_APPROVED,
+                        ]
+                    )
+                }}"
+                alt="Signature électronique de l'approbateur"
+                class="order-signature-image"
+            >
 
-                </div>
+        </div>
+
+    @else
+
+        <div class="order-signature-empty"></div>
+
+    @endif
+
+
+    <div class="order-signature-line"></div>
+
+
+    <div class="order-signature-name">
+
+        {{ $supplierOrder->approver?->name
+            ?? 'Nom / Signature' }}
+
+    </div>
+
+
+    @if(
+        $supplierOrder->approvedSignature
+        &&
+        $supplierOrder->approvedSignature->signed_at
+    )
+
+        <div class="order-signature-date">
+
+            Signé le
+
+            {{
+                $supplierOrder
+                    ->approvedSignature
+                    ->signed_at
+                    ->format('d/m/Y à H:i')
+            }}
+
+        </div>
+
+    @endif
+
+</div>
+
+
+
 
             </div>
 
@@ -1566,6 +1909,88 @@
 
             </div>
 
+                        {{--
+            |--------------------------------------------------------------------------
+            | ZONE DE SIGNATURE ÉLECTRONIQUE
+            |--------------------------------------------------------------------------
+            --}}
+
+            <div class="bc-signature-section">
+
+                <div class="bc-signature-header">
+
+                    <div>
+
+                        <strong>
+                            Signature de l'approbateur
+                        </strong>
+
+                        <small>
+                            Signez avec la souris ou avec votre doigt.
+                        </small>
+
+                    </div>
+
+                    <button
+                        type="button"
+                        id="clearApprovalSignature"
+                        class="bc-signature-clear"
+                    >
+                        <i class="bx bx-eraser"></i>
+                        Effacer
+                    </button>
+
+                </div>
+
+
+                <div
+                    class="bc-signature-pad"
+                    id="approvalSignaturePad"
+                >
+
+                    <canvas
+                        id="approvalSignatureCanvas"
+                        aria-label="Zone de signature électronique"
+                    ></canvas>
+
+                    <div
+                        id="approvalSignaturePlaceholder"
+                        class="bc-signature-placeholder"
+                    >
+                        <i class="bx bx-pen"></i>
+
+                        <span>
+                            Signez ici
+                        </span>
+                    </div>
+
+                </div>
+
+
+                <div
+                    id="approvalSignatureError"
+                    class="bc-signature-error"
+                    role="alert"
+                >
+                    Veuillez apposer votre signature avant d'approuver.
+                </div>
+
+
+                <div class="bc-signature-user">
+
+                    <i class="bx bx-user-check"></i>
+
+                    <span>
+                        Signataire :
+                        <strong>
+                            {{ auth()->user()->name }}
+                        </strong>
+                    </span>
+
+                </div>
+
+            </div>
+
         </div>
 
 
@@ -1584,15 +2009,210 @@
                 id="confirmApproveSupplierOrder"
                 class="bc-approve-btn bc-approve-btn-confirm"
             >
-                <i class="bx bx-check"></i>
+                <i class="bx bx-pen"></i>
 
-                Approuver le BC
+                Signer et approuver
             </button>
 
         </div>
 
     </div>
 </div>
+
+
+
+{{-- ================================================================
+    MODALE DE REJET DU BON DE COMMANDE
+================================================================ --}}
+
+@if(
+    auth()->check()
+    &&
+    auth()->user()->role === 'admin'
+    &&
+    $supplierOrder->status === \App\Models\SupplierOrder::STATUS_DRAFT
+)
+
+<div
+    id="rejectSupplierOrderModal"
+    class="bc-reject-modal"
+    aria-hidden="true"
+>
+
+    <div
+        class="bc-reject-backdrop"
+        data-close-reject-modal
+    ></div>
+
+
+    <div
+        class="bc-reject-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rejectSupplierOrderTitle"
+    >
+
+        {{-- BOUTON FERMER --}}
+
+        <button
+            type="button"
+            class="bc-reject-close"
+            data-close-reject-modal
+            aria-label="Fermer"
+        >
+            <i class="bx bx-x"></i>
+        </button>
+
+
+        {{-- ICÔNE --}}
+
+        <div class="bc-reject-icon">
+            <i class="bx bx-x-circle"></i>
+        </div>
+
+
+        {{-- TITRE --}}
+
+        <h3 id="rejectSupplierOrderTitle">
+            Rejeter le bon de commande
+        </h3>
+
+
+        <p class="bc-reject-subtitle">
+            Vous êtes sur le point de rejeter
+            <strong>
+                {{ $supplierOrder->order_number }}
+            </strong>.
+        </p>
+
+
+        {{-- FORMULAIRE --}}
+
+        <form
+            method="POST"
+            action="{{
+                route(
+                    'supplier-orders.reject',
+                    $supplierOrder
+                )
+            }}"
+            id="rejectSupplierOrderForm"
+        >
+
+            @csrf
+
+            @method('PATCH')
+
+
+            <div class="bc-reject-field">
+
+                <label for="rejectionReason">
+
+                    Motif du rejet
+
+                    <span class="bc-reject-required">
+                        *
+                    </span>
+
+                </label>
+
+
+                <textarea
+                    name="rejection_reason"
+                    id="rejectionReason"
+                    rows="5"
+                    maxlength="2000"
+                    required
+                    placeholder="Indiquez clairement la raison du rejet..."
+                >{{ old('rejection_reason') }}</textarea>
+
+
+                <div class="bc-reject-counter">
+
+                    <span id="rejectionReasonCounter">
+                        0
+                    </span>
+
+                    / 2000 caractères
+
+                </div>
+
+
+                <div
+                    id="rejectionReasonError"
+                    class="bc-reject-error"
+                    role="alert"
+                >
+                    Veuillez indiquer un motif d'au moins 3 caractères.
+                </div>
+
+
+                @error('rejection_reason')
+
+                    <div class="bc-reject-server-error">
+                        {{ $message }}
+                    </div>
+
+                @enderror
+
+            </div>
+
+
+            {{-- INFORMATION DE TRAÇABILITÉ --}}
+
+            <div class="bc-reject-info">
+
+                <i class="bx bx-info-circle"></i>
+
+                <div>
+
+                    <strong>
+                        Cette décision sera enregistrée.
+                    </strong>
+
+                    <span>
+                        Le signataire administratif, la date,
+                        l'heure et le motif seront conservés
+                        dans l'historique du bon de commande.
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            {{-- ACTIONS --}}
+
+            <div class="bc-reject-actions">
+
+                <button
+                    type="button"
+                    class="bc-reject-btn bc-reject-btn-cancel"
+                    data-close-reject-modal
+                >
+                    Retour
+                </button>
+
+
+                <button
+                    type="submit"
+                    class="bc-reject-btn bc-reject-btn-confirm"
+                    id="confirmRejectSupplierOrder"
+                >
+                    <i class="bx bx-x-circle"></i>
+
+                    Confirmer le rejet
+                </button>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+@endif
 
 
 <style>
@@ -1643,7 +2263,7 @@
         position: relative;
 
         width: 100%;
-        max-width: 460px;
+        max-width: 560px;
 
         background: #ffffff;
 
@@ -1876,6 +2496,190 @@
         transform: none;
     }
 
+        /*
+    ============================================================
+    SIGNATURE ÉLECTRONIQUE
+    ============================================================
+    */
+
+    .bc-signature-section {
+        margin-top: 20px;
+        text-align: left;
+    }
+
+
+    .bc-signature-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 15px;
+        margin-bottom: 10px;
+    }
+
+
+    .bc-signature-header strong {
+        display: block;
+        color: #27324a;
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+
+    .bc-signature-header small {
+        display: block;
+        margin-top: 3px;
+        color: #94a3b8;
+        font-size: 11px;
+    }
+
+
+    .bc-signature-clear {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+
+        padding: 6px 9px;
+
+        border: 1px solid #e2e8f0;
+        border-radius: 7px;
+
+        background: #ffffff;
+        color: #64748b;
+
+        font-size: 11px;
+        font-weight: 600;
+
+        cursor: pointer;
+
+        transition: .18s ease;
+    }
+
+
+    .bc-signature-clear:hover {
+        background: #f8fafc;
+        color: #334155;
+    }
+
+
+    .bc-signature-pad {
+        position: relative;
+
+        width: 100%;
+        height: 170px;
+
+        overflow: hidden;
+
+        border: 2px dashed #cbd5e1;
+        border-radius: 12px;
+
+        background: #ffffff;
+
+        transition:
+            border-color .18s ease,
+            box-shadow .18s ease;
+    }
+
+
+    .bc-signature-pad.is-drawing,
+    .bc-signature-pad.has-signature {
+        border-style: solid;
+        border-color: #86d49b;
+
+        box-shadow:
+            0 0 0 3px rgba(40, 167, 69, .07);
+    }
+
+
+    .bc-signature-pad.has-error {
+        border-color: #dc3545;
+
+        box-shadow:
+            0 0 0 3px rgba(220, 53, 69, .07);
+    }
+
+
+    #approvalSignatureCanvas {
+        position: absolute;
+        inset: 0;
+
+        display: block;
+
+        width: 100%;
+        height: 100%;
+
+        cursor: crosshair;
+
+        touch-action: none;
+    }
+
+
+    .bc-signature-placeholder {
+        position: absolute;
+        inset: 0;
+
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+
+        gap: 5px;
+
+        color: #b3bdca;
+
+        font-size: 12px;
+
+        pointer-events: none;
+
+        transition: opacity .15s ease;
+    }
+
+
+    .bc-signature-placeholder i {
+        font-size: 25px;
+    }
+
+
+    .bc-signature-pad.has-signature
+    .bc-signature-placeholder {
+        opacity: 0;
+    }
+
+
+    .bc-signature-error {
+        display: none;
+
+        margin-top: 7px;
+
+        color: #dc3545;
+
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+
+    .bc-signature-error.is-visible {
+        display: block;
+    }
+
+
+    .bc-signature-user {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+
+        margin-top: 9px;
+
+        color: #64748b;
+
+        font-size: 11px;
+    }
+
+
+    .bc-signature-user i {
+        color: #28a745;
+        font-size: 16px;
+    }
 
     body.bc-modal-open {
         overflow: hidden;
@@ -1896,14 +2700,106 @@
         .bc-approve-btn {
             width: 100%;
         }
+
+                .bc-signature-pad {
+            height: 150px;
+        }
+
+
+        .bc-signature-header {
+            align-items: flex-start;
+        }
     }
 
+    /*
+|--------------------------------------------------------------------------
+| SIGNATURE ÉLECTRONIQUE AFFICHÉE SUR LE BC
+|--------------------------------------------------------------------------
+*/
+
+.order-electronic-signature {
+    width: 220px;
+    height: 85px;
+
+    margin: 14px auto 4px;
+
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+
+    overflow: hidden;
+}
+
+
+.order-signature-image {
+    display: block;
+
+    max-width: 210px;
+    max-height: 80px;
+
+    width: auto;
+    height: auto;
+
+    object-fit: contain;
+}
+
+
+.order-signature-empty {
+    width: 220px;
+    height: 85px;
+
+    margin: 14px auto 4px;
+}
+
+
+.order-signature-name {
+    margin-top: 8px;
+
+    font-size: 13px;
+    font-weight: 500;
+
+    color: #667085;
+}
+
+
+.order-signature-date {
+    margin-top: 4px;
+
+    font-size: 10px;
+
+    color: #98a2b3;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| IMPRESSION
+|--------------------------------------------------------------------------
+*/
+
+@media print {
+
+    .order-signature-image {
+        max-width: 190px;
+        max-height: 70px;
+    }
+
+    .order-signature-date {
+        font-size: 9px;
+    }
+}
 </style>
 
 
 <script>
 
 document.addEventListener('DOMContentLoaded', function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | ÉLÉMENTS
+    |--------------------------------------------------------------------------
+    */
 
     const form =
         document.getElementById(
@@ -1920,18 +2816,440 @@ document.addEventListener('DOMContentLoaded', function () {
             'confirmApproveSupplierOrder'
         );
 
+    const canvas =
+        document.getElementById(
+            'approvalSignatureCanvas'
+        );
 
-    if (!form || !modal || !confirmButton) {
+    const signaturePad =
+        document.getElementById(
+            'approvalSignaturePad'
+        );
+
+    const signatureInput =
+        document.getElementById(
+            'approvalSignatureData'
+        );
+
+    const clearButton =
+        document.getElementById(
+            'clearApprovalSignature'
+        );
+
+    const errorMessage =
+        document.getElementById(
+            'approvalSignatureError'
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ARRÊTER SI LA MODALE N'EXISTE PAS
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        !form
+        ||
+        !modal
+        ||
+        !confirmButton
+        ||
+        !canvas
+        ||
+        !signaturePad
+        ||
+        !signatureInput
+        ||
+        !clearButton
+        ||
+        !errorMessage
+    ) {
         return;
     }
 
 
+    const context =
+        canvas.getContext('2d');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ÉTAT
+    |--------------------------------------------------------------------------
+    */
+
+    let drawing = false;
+
+    let hasSignature = false;
+
     let confirmed = false;
 
+    let lastX = 0;
+
+    let lastY = 0;
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CONFIGURATION DU TRAIT
+    |--------------------------------------------------------------------------
+    */
+
+    context.lineCap = 'round';
+
+    context.lineJoin = 'round';
+
+    context.strokeStyle = '#111827';
+
+    context.lineWidth = 2.2;
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | DIMENSIONNER LE CANVAS
+    |--------------------------------------------------------------------------
+    |
+    | Le canvas doit tenir compte du devicePixelRatio afin que la signature
+    | reste nette sur les écrans haute résolution.
+    |
+    */
+
+    function resizeCanvas() {
+
+        const rectangle =
+            signaturePad.getBoundingClientRect();
+
+        const ratio =
+            Math.max(
+                window.devicePixelRatio || 1,
+                1
+            );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | SAUVEGARDER LE DESSIN EXISTANT
+        |--------------------------------------------------------------------------
+        */
+
+        let existingSignature = null;
+
+        if (hasSignature) {
+
+            existingSignature =
+                canvas.toDataURL(
+                    'image/png'
+                );
+        }
+
+
+        canvas.width =
+            Math.round(
+                rectangle.width * ratio
+            );
+
+        canvas.height =
+            Math.round(
+                rectangle.height * ratio
+            );
+
+        canvas.style.width =
+            rectangle.width + 'px';
+
+        canvas.style.height =
+            rectangle.height + 'px';
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | REMETTRE LE CONTEXTE À L'ÉCHELLE CSS
+        |--------------------------------------------------------------------------
+        */
+
+        context.setTransform(
+            ratio,
+            0,
+            0,
+            ratio,
+            0,
+            0
+        );
+
+        context.lineCap = 'round';
+
+        context.lineJoin = 'round';
+
+        context.strokeStyle = '#111827';
+
+        context.lineWidth = 2.2;
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | RESTAURER LA SIGNATURE APRÈS REDIMENSIONNEMENT
+        |--------------------------------------------------------------------------
+        */
+
+        if (existingSignature) {
+
+            const image = new Image();
+
+            image.onload = function () {
+
+                context.drawImage(
+                    image,
+                    0,
+                    0,
+                    rectangle.width,
+                    rectangle.height
+                );
+            };
+
+            image.src = existingSignature;
+        }
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | POSITION DU POINTEUR
+    |--------------------------------------------------------------------------
+    */
+
+    function getPointerPosition(event) {
+
+        const rectangle =
+            canvas.getBoundingClientRect();
+
+        return {
+
+            x:
+                event.clientX
+                -
+                rectangle.left,
+
+            y:
+                event.clientY
+                -
+                rectangle.top,
+        };
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | COMMENCER LA SIGNATURE
+    |--------------------------------------------------------------------------
+    */
+
+    function startDrawing(event) {
+
+        if (confirmed) {
+            return;
+        }
+
+        event.preventDefault();
+
+        drawing = true;
+
+        const position =
+            getPointerPosition(
+                event
+            );
+
+        lastX = position.x;
+
+        lastY = position.y;
+
+        context.beginPath();
+
+        context.moveTo(
+            lastX,
+            lastY
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | PETIT POINT
+        |--------------------------------------------------------------------------
+        |
+        | Cela permet qu'un simple clic/toucher soit également visible.
+        |
+        */
+
+        context.lineTo(
+            lastX + 0.01,
+            lastY + 0.01
+        );
+
+        context.stroke();
+
+        signaturePad.classList.add(
+            'is-drawing'
+        );
+
+        signaturePad.classList.remove(
+            'has-error'
+        );
+
+        errorMessage.classList.remove(
+            'is-visible'
+        );
+
+        try {
+
+            canvas.setPointerCapture(
+                event.pointerId
+            );
+
+        } catch (error) {
+
+            /*
+            |--------------------------------------------------------------------------
+            | Certains navigateurs peuvent refuser setPointerCapture.
+            |--------------------------------------------------------------------------
+            */
+        }
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | DESSINER
+    |--------------------------------------------------------------------------
+    */
+
+    function draw(event) {
+
+        if (!drawing) {
+            return;
+        }
+
+        event.preventDefault();
+
+        const position =
+            getPointerPosition(
+                event
+            );
+
+        context.lineTo(
+            position.x,
+            position.y
+        );
+
+        context.stroke();
+
+        lastX = position.x;
+
+        lastY = position.y;
+
+        hasSignature = true;
+
+        signaturePad.classList.add(
+            'has-signature'
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | TERMINER LE TRAIT
+    |--------------------------------------------------------------------------
+    */
+
+    function stopDrawing(event) {
+
+        if (!drawing) {
+            return;
+        }
+
+        event.preventDefault();
+
+        drawing = false;
+
+        context.closePath();
+
+        signaturePad.classList.remove(
+            'is-drawing'
+        );
+
+        /*
+        |--------------------------------------------------------------------------
+        | CONSIDÉRER AUSSI UN SIMPLE POINT COMME UNE INTERACTION
+        |--------------------------------------------------------------------------
+        */
+
+        hasSignature = true;
+
+        signaturePad.classList.add(
+            'has-signature'
+        );
+
+        try {
+
+            canvas.releasePointerCapture(
+                event.pointerId
+            );
+
+        } catch (error) {
+
+            /*
+            |--------------------------------------------------------------------------
+            | Aucun traitement nécessaire.
+            |--------------------------------------------------------------------------
+            */
+        }
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | EFFACER
+    |--------------------------------------------------------------------------
+    */
+
+    function clearSignature() {
+
+        const rectangle =
+            canvas.getBoundingClientRect();
+
+        context.clearRect(
+            0,
+            0,
+            rectangle.width,
+            rectangle.height
+        );
+
+        drawing = false;
+
+        hasSignature = false;
+
+        signatureInput.value = '';
+
+        signaturePad.classList.remove(
+            'is-drawing',
+            'has-signature',
+            'has-error'
+        );
+
+        errorMessage.classList.remove(
+            'is-visible'
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | OUVRIR LA MODALE
+    |--------------------------------------------------------------------------
+    */
 
     function openModal() {
 
-        modal.classList.add('is-open');
+        modal.classList.add(
+            'is-open'
+        );
 
         modal.setAttribute(
             'aria-hidden',
@@ -1942,15 +3260,48 @@ document.addEventListener('DOMContentLoaded', function () {
             'bc-modal-open'
         );
 
-        setTimeout(function () {
-            confirmButton.focus();
-        }, 100);
+
+        /*
+        |--------------------------------------------------------------------------
+        | LE CANVAS DOIT ÊTRE DIMENSIONNÉ APRÈS AFFICHAGE
+        |--------------------------------------------------------------------------
+        */
+
+        requestAnimationFrame(
+            function () {
+
+                resizeCanvas();
+
+            }
+        );
+
+
+        setTimeout(
+            function () {
+
+                canvas.focus();
+
+            },
+            100
+        );
     }
 
 
+    /*
+    |--------------------------------------------------------------------------
+    | FERMER LA MODALE
+    |--------------------------------------------------------------------------
+    */
+
     function closeModal() {
 
-        modal.classList.remove('is-open');
+        if (confirmed) {
+            return;
+        }
+
+        modal.classList.remove(
+            'is-open'
+        );
 
         modal.setAttribute(
             'aria-hidden',
@@ -1962,6 +3313,12 @@ document.addEventListener('DOMContentLoaded', function () {
         );
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | INTERCEPTER LE FORMULAIRE
+    |--------------------------------------------------------------------------
+    */
 
     form.addEventListener(
         'submit',
@@ -1978,13 +3335,664 @@ document.addEventListener('DOMContentLoaded', function () {
     );
 
 
+    /*
+    |--------------------------------------------------------------------------
+    | ÉVÉNEMENTS DU CANVAS
+    |--------------------------------------------------------------------------
+    */
+
+    canvas.addEventListener(
+        'pointerdown',
+        startDrawing
+    );
+
+    canvas.addEventListener(
+        'pointermove',
+        draw
+    );
+
+    canvas.addEventListener(
+        'pointerup',
+        stopDrawing
+    );
+
+    canvas.addEventListener(
+        'pointercancel',
+        stopDrawing
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | EFFACER LA SIGNATURE
+    |--------------------------------------------------------------------------
+    */
+
+    clearButton.addEventListener(
+        'click',
+        clearSignature
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | FERMETURE
+    |--------------------------------------------------------------------------
+    */
+
     modal
         .querySelectorAll(
             '[data-close-approve-modal]'
         )
-        .forEach(function (element) {
+        .forEach(
+            function (element) {
 
-            element.addEventListener(
+                element.addEventListener(
+                    'click',
+                    closeModal
+                );
+            }
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | SIGNER ET APPROUVER
+    |--------------------------------------------------------------------------
+    */
+
+    confirmButton.addEventListener(
+        'click',
+        function () {
+
+            /*
+            |--------------------------------------------------------------------------
+            | SIGNATURE OBLIGATOIRE
+            |--------------------------------------------------------------------------
+            */
+
+            if (!hasSignature) {
+
+                signaturePad.classList.add(
+                    'has-error'
+                );
+
+                errorMessage.classList.add(
+                    'is-visible'
+                );
+
+                return;
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | CONVERTIR LE CANVAS EN PNG BASE64
+            |--------------------------------------------------------------------------
+            */
+
+            const signatureData =
+                canvas.toDataURL(
+                    'image/png'
+                );
+
+            if (
+                !signatureData
+                ||
+                !signatureData.startsWith(
+                    'data:image/png;base64,'
+                )
+            ) {
+
+                signaturePad.classList.add(
+                    'has-error'
+                );
+
+                errorMessage.textContent =
+                    'Impossible de générer la signature. Veuillez recommencer.';
+
+                errorMessage.classList.add(
+                    'is-visible'
+                );
+
+                return;
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | PLACER LA SIGNATURE DANS LE FORMULAIRE
+            |--------------------------------------------------------------------------
+            */
+
+            signatureInput.value =
+                signatureData;
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | VERROUILLER LA SOUMISSION
+            |--------------------------------------------------------------------------
+            */
+
+            confirmed = true;
+
+            confirmButton.disabled = true;
+
+            clearButton.disabled = true;
+
+            confirmButton.innerHTML =
+                '<i class="bx bx-loader-alt bx-spin"></i> Signature...';
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | ENVOYER LE FORMULAIRE
+            |--------------------------------------------------------------------------
+            */
+
+            form.requestSubmit();
+        }
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | TOUCHE ÉCHAP
+    |--------------------------------------------------------------------------
+    */
+
+    document.addEventListener(
+        'keydown',
+        function (event) {
+
+            if (
+                event.key === 'Escape'
+                &&
+                modal.classList.contains(
+                    'is-open'
+                )
+            ) {
+
+                closeModal();
+            }
+        }
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | REDIMENSIONNEMENT
+    |--------------------------------------------------------------------------
+    */
+
+    window.addEventListener(
+        'resize',
+        function () {
+
+            if (
+                modal.classList.contains(
+                    'is-open'
+                )
+            ) {
+
+                resizeCanvas();
+            }
+        }
+    );
+});
+
+</script>
+
+@endif
+
+
+
+<style>
+/* ================================================================
+   MODALE DE REJET DU BON DE COMMANDE
+================================================================ */
+
+.bc-reject-modal {
+    position: fixed;
+    inset: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 20px;
+
+    visibility: hidden;
+    opacity: 0;
+
+    z-index: 100000;
+
+    transition:
+        opacity .18s ease,
+        visibility .18s ease;
+}
+
+.bc-reject-modal.is-open {
+    visibility: visible;
+    opacity: 1;
+}
+
+.bc-reject-backdrop {
+    position: absolute;
+    inset: 0;
+
+    background: rgba(15, 23, 42, .62);
+
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+}
+
+.bc-reject-dialog {
+    position: relative;
+
+    width: 100%;
+    max-width: 560px;
+
+    padding: 32px;
+
+    background: #ffffff;
+
+    border-radius: 18px;
+
+    box-shadow:
+        0 25px 60px rgba(15, 23, 42, .25);
+
+    z-index: 1;
+
+    transform: translateY(14px) scale(.97);
+
+    transition: transform .20s ease;
+}
+
+.bc-reject-modal.is-open .bc-reject-dialog {
+    transform: translateY(0) scale(1);
+}
+
+.bc-reject-close {
+    position: absolute;
+
+    top: 15px;
+    right: 15px;
+
+    width: 34px;
+    height: 34px;
+
+    border: 0;
+    border-radius: 50%;
+
+    background: #f4f6f8;
+
+    font-size: 21px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    cursor: pointer;
+}
+
+.bc-reject-icon {
+    width: 58px;
+    height: 58px;
+
+    margin: 0 auto 15px;
+
+    border-radius: 50%;
+
+    background: #fff1f1;
+    color: #d92d20;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-size: 31px;
+}
+
+.bc-reject-dialog h3 {
+    margin: 0;
+
+    text-align: center;
+
+    font-size: 22px;
+    font-weight: 700;
+
+    color: #1d2939;
+}
+
+.bc-reject-subtitle {
+    margin: 8px 0 25px;
+
+    text-align: center;
+
+    color: #667085;
+    font-size: 14px;
+}
+
+.bc-reject-field label {
+    display: block;
+
+    margin-bottom: 8px;
+
+    font-size: 13px;
+    font-weight: 600;
+
+    color: #344054;
+}
+
+.bc-reject-required {
+    color: #d92d20;
+}
+
+.bc-reject-field textarea {
+    width: 100%;
+
+    min-height: 125px;
+
+    padding: 13px 14px;
+
+    border: 1px solid #d0d5dd;
+    border-radius: 10px;
+
+    resize: vertical;
+
+    font-family: inherit;
+    font-size: 14px;
+
+    outline: none;
+
+    transition:
+        border-color .15s ease,
+        box-shadow .15s ease;
+}
+
+.bc-reject-field textarea:focus {
+    border-color: #d92d20;
+
+    box-shadow:
+        0 0 0 3px rgba(217, 45, 32, .08);
+}
+
+.bc-reject-counter {
+    margin-top: 5px;
+
+    text-align: right;
+
+    color: #98a2b3;
+
+    font-size: 11px;
+}
+
+.bc-reject-error,
+.bc-reject-server-error {
+    margin-top: 7px;
+
+    color: #d92d20;
+
+    font-size: 12px;
+}
+
+.bc-reject-error {
+    display: none;
+}
+
+.bc-reject-error.is-visible {
+    display: block;
+}
+
+.bc-reject-info {
+    display: flex;
+
+    gap: 10px;
+
+    margin-top: 20px;
+    padding: 13px;
+
+    border-radius: 10px;
+
+    background: #f9fafb;
+
+    color: #475467;
+
+    font-size: 12px;
+}
+
+.bc-reject-info > i {
+    margin-top: 2px;
+
+    font-size: 18px;
+}
+
+.bc-reject-info strong,
+.bc-reject-info span {
+    display: block;
+}
+
+.bc-reject-info span {
+    margin-top: 3px;
+}
+
+.bc-reject-actions {
+    display: flex;
+    justify-content: flex-end;
+
+    gap: 10px;
+
+    margin-top: 25px;
+}
+
+.bc-reject-btn {
+    min-height: 39px;
+
+    padding: 9px 16px;
+
+    border: 0;
+    border-radius: 8px;
+
+    font-size: 13px;
+    font-weight: 600;
+
+    cursor: pointer;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 6px;
+}
+
+.bc-reject-btn-cancel {
+    background: #f2f4f7;
+    color: #344054;
+}
+
+.bc-reject-btn-confirm {
+    background: #d92d20;
+    color: #ffffff;
+}
+
+@media (max-width: 576px) {
+
+    .bc-reject-dialog {
+        padding:
+            28px
+            18px
+            20px;
+    }
+
+    .bc-reject-actions {
+        flex-direction: column-reverse;
+    }
+
+    .bc-reject-btn {
+        width: 100%;
+    }
+}
+
+@media print {
+
+    .bc-reject-modal {
+        display: none !important;
+    }
+}
+</style>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | MODALE DE REJET DU BON DE COMMANDE
+    |--------------------------------------------------------------------------
+    */
+
+    const openButton =
+        document.getElementById(
+            'openRejectSupplierOrderModal'
+        );
+
+    const modal =
+        document.getElementById(
+            'rejectSupplierOrderModal'
+        );
+
+    const form =
+        document.getElementById(
+            'rejectSupplierOrderForm'
+        );
+
+    const reason =
+        document.getElementById(
+            'rejectionReason'
+        );
+
+    const counter =
+        document.getElementById(
+            'rejectionReasonCounter'
+        );
+
+    const error =
+        document.getElementById(
+            'rejectionReasonError'
+        );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | LA MODALE N'EXISTE PAS POUR LES UTILISATEURS NON AUTORISÉS
+    |--------------------------------------------------------------------------
+    */
+
+    if (!modal) {
+        return;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | COMPTEUR
+    |--------------------------------------------------------------------------
+    */
+
+    function updateCounter() {
+
+        if (!reason || !counter) {
+            return;
+        }
+
+        counter.textContent =
+            reason.value.length;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | OUVRIR
+    |--------------------------------------------------------------------------
+    */
+
+    function openModal() {
+
+        modal.classList.add(
+            'is-open'
+        );
+
+        modal.setAttribute(
+            'aria-hidden',
+            'false'
+        );
+
+        document.body.style.overflow =
+            'hidden';
+
+        updateCounter();
+
+        setTimeout(function () {
+
+            reason?.focus();
+
+        }, 100);
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | FERMER
+    |--------------------------------------------------------------------------
+    */
+
+    function closeModal() {
+
+        modal.classList.remove(
+            'is-open'
+        );
+
+        modal.setAttribute(
+            'aria-hidden',
+            'true'
+        );
+
+        document.body.style.overflow =
+            '';
+
+        error?.classList.remove(
+            'is-visible'
+        );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | BOUTON REJETER
+    |--------------------------------------------------------------------------
+    */
+
+    openButton?.addEventListener(
+        'click',
+        openModal
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | BOUTONS DE FERMETURE
+    |--------------------------------------------------------------------------
+    */
+
+    modal
+        .querySelectorAll(
+            '[data-close-reject-modal]'
+        )
+        .forEach(function (button) {
+
+            button.addEventListener(
                 'click',
                 closeModal
             );
@@ -1992,23 +4000,11 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
 
-    confirmButton.addEventListener(
-        'click',
-        function () {
-
-            confirmed = true;
-
-            confirmButton.disabled = true;
-
-            confirmButton.innerHTML =
-                '<i class="bx bx-loader-alt bx-spin"></i> Approbation...';
-
-            closeModal();
-
-            form.requestSubmit();
-        }
-    );
-
+    /*
+    |--------------------------------------------------------------------------
+    | TOUCHE ÉCHAP
+    |--------------------------------------------------------------------------
+    */
 
     document.addEventListener(
         'keydown',
@@ -2027,10 +4023,98 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     );
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | COMPTEUR EN TEMPS RÉEL
+    |--------------------------------------------------------------------------
+    */
+
+    reason?.addEventListener(
+        'input',
+        function () {
+
+            updateCounter();
+
+            if (
+                reason.value.trim().length >= 3
+            ) {
+                error?.classList.remove(
+                    'is-visible'
+                );
+            }
+
+        }
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATION AVANT ENVOI
+    |--------------------------------------------------------------------------
+    */
+
+    form?.addEventListener(
+        'submit',
+        function (event) {
+
+            const value =
+                reason?.value.trim() ?? '';
+
+            if (value.length < 3) {
+
+                event.preventDefault();
+
+                error?.classList.add(
+                    'is-visible'
+                );
+
+                reason?.focus();
+
+                return;
+            }
+
+
+            /*
+            |------------------------------------------------------------------
+            | ÉVITER LE DOUBLE CLIC
+            |------------------------------------------------------------------
+            */
+
+            const submitButton =
+                document.getElementById(
+                    'confirmRejectSupplierOrder'
+                );
+
+            if (submitButton) {
+
+                submitButton.disabled = true;
+
+                submitButton.innerHTML =
+                    '<i class="bx bx-loader-alt bx-spin"></i> Rejet en cours...';
+            }
+        }
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | RÉOUVRIR AUTOMATIQUEMENT EN CAS D'ERREUR SERVEUR
+    |--------------------------------------------------------------------------
+    |
+    | Par exemple :
+    | - motif trop court ;
+    | - erreur de validation Laravel.
+    |
+    */
+
+    @if($errors->has('rejection_reason'))
+
+        openModal();
+
+    @endif
+
 });
-
 </script>
-
-@endif
 
 @endsection
