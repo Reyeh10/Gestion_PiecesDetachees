@@ -1128,21 +1128,46 @@
 
             </div>
 
-            <button
+            {{-- ============================================================ --}}
+            {{-- AJOUT DES LIGNES DU PROFORMA                              --}}
+            {{-- ============================================================ --}}
+            {{--
+                Deux types de lignes sont possibles :
 
-                type="button"
+                1. Produit catalogue :
+                   - produit existant dans la base
+                   - dépôt obligatoire
+                   - contrôle du stock
+                   - prix provenant du catalogue
 
-                class="btn btn-success mt-3"
+                2. Produit hors catalogue :
+                   - aucun produit n'est créé automatiquement dans products
+                   - aucun dépôt
+                   - aucun contrôle de stock
+                   - référence / désignation / prix saisis manuellement
+            --}}
 
-                id="addProductButton"
+            <div class="d-flex flex-wrap gap-2 mt-3">
 
-            >
+                <button
+                    type="button"
+                    class="btn btn-success"
+                    id="addProductButton"
+                >
+                    <i class="bx bx-plus"></i>
+                    Produit du catalogue
+                </button>
 
-                <i class="bx bx-plus"></i>
+                <button
+                    type="button"
+                    class="btn btn-outline-primary"
+                    id="addCustomProductButton"
+                >
+                    <i class="bx bx-edit-alt"></i>
+                    Produit hors catalogue
+                </button>
 
-                Ajouter produit
-
-            </button>
+            </div>
 
             <hr class="my-4">
 
@@ -1351,6 +1376,20 @@ document.addEventListener(
             document.getElementById(
 
                 'addProductButton'
+
+            );
+
+        /*
+        |--------------------------------------------------------------------------
+        | BOUTON PRODUIT HORS CATALOGUE
+        |--------------------------------------------------------------------------
+        */
+
+        const addCustomProductButton =
+
+            document.getElementById(
+
+                'addCustomProductButton'
 
             );
 
@@ -2124,6 +2163,269 @@ document.addEventListener(
             rowIndex++;
             return productSelect;
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | AJOUTER UN PRODUIT HORS CATALOGUE
+        |--------------------------------------------------------------------------
+        |
+        | Cette ligne ne correspond à aucun produit de la table products.
+        |
+        | Elle ne possède donc :
+        | - aucun product_id ;
+        | - aucun depot_id ;
+        | - aucun contrôle de stock.
+        |
+        | La référence est facultative.
+        | La désignation, le prix et la quantité sont saisis manuellement.
+        |
+        */
+
+        function addCustomRow(oldItem = null) {
+
+            const currentIndex = rowIndex;
+
+            const row =
+                document.createElement('tr');
+
+            row.dataset.itemType =
+                'custom';
+
+            row.innerHTML = `
+                <td>
+                    <input
+                        type="hidden"
+                        name="items[${currentIndex}][product_id]"
+                        value=""
+                    >
+
+                    <input
+                        type="hidden"
+                        name="items[${currentIndex}][depot_id]"
+                        value=""
+                    >
+
+                    <div class="mb-2">
+                        <span class="badge bg-primary">
+                            Hors catalogue
+                        </span>
+                    </div>
+
+                    <input
+                        type="text"
+                        name="items[${currentIndex}][reference_libre]"
+                        class="form-control custom-reference mb-2"
+                        maxlength="150"
+                        placeholder="Référence (facultatif)"
+                        value="${escapeHtml(oldItem?.reference_libre ?? '')}"
+                    >
+
+                    <input
+                        type="text"
+                        name="items[${currentIndex}][designation_libre]"
+                        class="form-control custom-designation"
+                        maxlength="255"
+                        placeholder="Désignation du produit"
+                        value="${escapeHtml(oldItem?.designation_libre ?? '')}"
+                        required
+                    >
+
+                    <textarea
+                        name="items[${currentIndex}][description_libre]"
+                        class="form-control custom-description mt-2"
+                        rows="2"
+                        placeholder="Description (facultative)"
+                    >${escapeHtml(oldItem?.description_libre ?? '')}</textarea>
+                </td>
+
+                <td class="text-center">
+                    <span class="badge bg-light text-dark">
+                        Hors stock
+                    </span>
+                    <br>
+                    <small class="text-muted">
+                        Non référencé
+                    </small>
+                </td>
+
+                <td>
+                    <span class="text-muted">
+                        Aucun dépôt
+                    </span>
+                </td>
+
+                <td>
+                    <div class="d-flex align-items-center gap-2">
+                        <input
+                            type="number"
+                            name="items[${currentIndex}][price]"
+                            id="price_${currentIndex}"
+                            class="form-control custom-price"
+                            min="0"
+                            step="0.01"
+                            value="${escapeHtml(oldItem?.price ?? '')}"
+                            placeholder="Prix"
+                            required
+                        >
+                        <span class="text-nowrap">
+                            FDJ
+                        </span>
+                    </div>
+                </td>
+
+                <td>
+                    <input
+                        type="number"
+                        name="items[${currentIndex}][quantity]"
+                        id="qty_${currentIndex}"
+                        class="form-control custom-quantity"
+                        min="0.01"
+                        step="0.01"
+                        value="${escapeHtml(oldItem?.quantity ?? 1)}"
+                        required
+                    >
+                </td>
+
+                <td class="text-end fw-bold">
+                    <span
+                        id="total_${currentIndex}"
+                        class="line-total"
+                    >
+                        0.00
+                    </span>
+                    FDJ
+                </td>
+
+                <td class="text-center">
+                    <button
+                        type="button"
+                        class="btn btn-danger btn-sm remove-row"
+                        title="Supprimer"
+                    >
+                        <i class="bx bx-trash"></i>
+                    </button>
+                </td>
+            `;
+
+            itemsTableBody.appendChild(row);
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | ÉLÉMENTS DE LA LIGNE
+            |--------------------------------------------------------------------------
+            */
+
+            const priceInput =
+                row.querySelector(
+                    '.custom-price'
+                );
+
+            const quantityInput =
+                row.querySelector(
+                    '.custom-quantity'
+                );
+
+            const removeButton =
+                row.querySelector(
+                    '.remove-row'
+                );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | CALCUL DU TOTAL DE LA LIGNE
+            |--------------------------------------------------------------------------
+            |
+            | Contrairement à calculateRow(), cette fonction ne vérifie
+            | volontairement aucun stock.
+            |
+            */
+
+            function calculateCustomRow() {
+
+                const price =
+                    parseFloat(
+                        priceInput.value || 0
+                    ) || 0;
+
+                const quantity =
+                    parseFloat(
+                        quantityInput.value || 0
+                    ) || 0;
+
+                const totalElement =
+                    document.getElementById(
+                        `total_${currentIndex}`
+                    );
+
+                if (totalElement) {
+                    totalElement.textContent =
+                        (
+                            price
+                            *
+                            quantity
+                        ).toFixed(2);
+                }
+
+                calculateGrandTotal();
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | ÉVÉNEMENTS
+            |--------------------------------------------------------------------------
+            */
+
+            priceInput.addEventListener(
+                'input',
+                calculateCustomRow
+            );
+
+            quantityInput.addEventListener(
+                'input',
+                calculateCustomRow
+            );
+
+            removeButton.addEventListener(
+                'click',
+                function () {
+
+                    row.remove();
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | TOUJOURS CONSERVER AU MOINS UNE LIGNE
+                    |--------------------------------------------------------------------------
+                    */
+
+                    if (
+                        itemsTableBody.querySelectorAll('tr').length
+                        ===
+                        0
+                    ) {
+                        addRow();
+                    }
+
+                    calculateGrandTotal();
+                }
+            );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | PREMIER CALCUL
+            |--------------------------------------------------------------------------
+            */
+
+            calculateCustomRow();
+
+            rowIndex++;
+
+            return row;
+        }
+
 
         function calculateRow(
 
@@ -3013,6 +3315,25 @@ document.addEventListener(
 
         );
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | AJOUTER UN PRODUIT HORS CATALOGUE
+        |--------------------------------------------------------------------------
+        */
+
+        addCustomProductButton.addEventListener(
+
+            'click',
+
+            function () {
+
+                addCustomRow();
+
+            }
+
+        );
+
         discountInput.addEventListener(
 
             'input',
@@ -3039,10 +3360,30 @@ document.addEventListener(
 
                 function (item) {
 
-                    addRow(
+                    /*
+                    |--------------------------------------------------------------------------
+                    | PRODUIT DU CATALOGUE
+                    |--------------------------------------------------------------------------
+                    */
 
+                    if (item.product_id) {
+
+                        addRow(
+                            item
+                        );
+
+                        return;
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | PRODUIT HORS CATALOGUE
+                    |--------------------------------------------------------------------------
+                    */
+
+                    addCustomRow(
                         item
-
                     );
 
                 }
@@ -3137,90 +3478,145 @@ document.addEventListener(
 
                     false;
 
+                let missingCustomDesignation =
+                    false;
+
+                let invalidCustomPrice =
+                    false;
+
                 rows.forEach(
 
                     function (row) {
 
+                        /*
+                        |--------------------------------------------------------------------------
+                        | PRODUIT HORS CATALOGUE
+                        |--------------------------------------------------------------------------
+                        */
+
+                        if (
+                            row.dataset.itemType
+                            ===
+                            'custom'
+                        ) {
+
+                            validLine =
+                                true;
+
+                            const designationInput =
+                                row.querySelector(
+                                    '.custom-designation'
+                                );
+
+                            const priceInput =
+                                row.querySelector(
+                                    '.custom-price'
+                                );
+
+                            const quantityInput =
+                                row.querySelector(
+                                    'input[name$="[quantity]"]'
+                                );
+
+                            if (
+                                !designationInput
+                                ||
+                                !designationInput.value.trim()
+                            ) {
+                                missingCustomDesignation =
+                                    true;
+                            }
+
+                            if (
+                                !priceInput
+                                ||
+                                priceInput.value === ''
+                                ||
+                                Number.isNaN(
+                                    parseFloat(
+                                        priceInput.value
+                                    )
+                                )
+                                ||
+                                parseFloat(
+                                    priceInput.value
+                                )
+                                <
+                                0
+                            ) {
+                                invalidCustomPrice =
+                                    true;
+                            }
+
+                            if (
+                                !quantityInput
+                                ||
+                                parseFloat(
+                                    quantityInput.value
+                                )
+                                <=
+                                0
+                            ) {
+                                invalidQuantity =
+                                    true;
+                            }
+
+                            return;
+                        }
+
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | PRODUIT DU CATALOGUE
+                        |--------------------------------------------------------------------------
+                        */
+
                         const productSelect =
-
                             row.querySelector(
-
                                 '.product-select'
-
                             );
 
                         if (
-
                             !productSelect
-
                             ||
-
                             !productSelect.value
-
                         ) {
-
                             return;
-
                         }
 
                         validLine =
-
                             true;
 
                         const depotSelect =
-
                             row.querySelector(
-
                                 '.depot-select'
-
                             );
 
                         if (
-
                             !depotSelect
-
                             ||
-
                             !depotSelect.value
-
                         ) {
-
                             missingDepot =
-
                                 true;
-
                         }
 
                         const quantityInput =
-
                             row.querySelector(
-
                                 'input[name$="[quantity]"]'
-
                             );
 
                         if (
-
                             !quantityInput
-
                             ||
-
                             parseFloat(
-
                                 quantityInput.value
-
                             )
-
                             <=
-
                             0
-
                         ) {
-
                             invalidQuantity =
-
                                 true;
-
                         }
 
                     }
@@ -3242,6 +3638,45 @@ document.addEventListener(
                     return;
 
                 }
+
+                /*
+                |--------------------------------------------------------------------------
+                | VALIDATION PRODUIT HORS CATALOGUE
+                |--------------------------------------------------------------------------
+                */
+
+                if (missingCustomDesignation) {
+
+                    event.preventDefault();
+
+                    showWarning(
+
+                        'Désignation obligatoire',
+
+                        'Veuillez saisir la désignation de chaque produit hors catalogue.'
+
+                    );
+
+                    return;
+
+                }
+
+                if (invalidCustomPrice) {
+
+                    event.preventDefault();
+
+                    showWarning(
+
+                        'Prix invalide',
+
+                        'Veuillez saisir un prix valide pour chaque produit hors catalogue.'
+
+                    );
+
+                    return;
+
+                }
+
 
                 if (missingDepot) {
 

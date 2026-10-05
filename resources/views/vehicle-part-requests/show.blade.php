@@ -101,17 +101,35 @@
 
                                     <div class="text-muted">
 
-                                        Véhicule
+                                        Destination
 
                                     </div>
 
+
                                     @if($vehiclePartRequest->vehicle)
+
+                                        {{-- ================================================== --}}
+                                        {{-- DESTINATION : VÉHICULE --}}
+                                        {{-- ================================================== --}}
 
                                         <div class="fw-bold text-primary mt-1">
 
-                                            {{ $vehiclePartRequest->vehicle->plate_number ?? '-' }}
+                                            <i class="bx bx-car me-1"></i>
+
+                                            {{
+                                                $vehiclePartRequest
+                                                    ->vehicle
+                                                    ->plate_number
+                                                ??
+                                                $vehiclePartRequest
+                                                    ->vehicle
+                                                    ->vin
+                                                ??
+                                                '-'
+                                            }}
 
                                         </div>
+
 
                                         @if($vehiclePartRequest->vehicle->customer)
 
@@ -119,29 +137,105 @@
 
                                                 Client :
 
-                                                {{ $vehiclePartRequest->vehicle->customer->name }}
+                                                {{
+                                                    $vehiclePartRequest
+                                                        ->vehicle
+                                                        ->customer
+                                                        ->name
+                                                }}
 
                                             </div>
 
                                         @endif
 
-                                        @if($vehiclePartRequest->vehicle->brand || $vehiclePartRequest->vehicle->model)
+
+                                        @if(
+                                            $vehiclePartRequest->vehicle->brand
+                                            ||
+                                            $vehiclePartRequest->vehicle->model
+                                        )
 
                                             <div class="text-muted">
 
-                                                {{ $vehiclePartRequest->vehicle->brand ?? '' }}
+                                                {{
+                                                    $vehiclePartRequest
+                                                        ->vehicle
+                                                        ->brand
+                                                    ?? ''
+                                                }}
 
-                                                {{ $vehiclePartRequest->vehicle->model ?? '' }}
+                                                {{
+                                                    $vehiclePartRequest
+                                                        ->vehicle
+                                                        ->model
+                                                    ?? ''
+                                                }}
 
                                             </div>
 
                                         @endif
 
+
+                                    @elseif($vehiclePartRequest->depot)
+
+                                        {{-- ================================================== --}}
+                                        {{-- DESTINATION : DÉPÔT --}}
+                                        {{-- ================================================== --}}
+
+                                        <div class="fw-bold text-primary mt-1">
+
+                                            <i class="bx bx-building me-1"></i>
+
+                                            {{
+                                                $vehiclePartRequest
+                                                    ->depot
+                                                    ->name
+                                            }}
+
+                                        </div>
+
+
+                                        @if($vehiclePartRequest->depot->code)
+
+                                            <div class="text-muted">
+
+                                                Code :
+
+                                                {{
+                                                    $vehiclePartRequest
+                                                        ->depot
+                                                        ->code
+                                                }}
+
+                                            </div>
+
+                                        @endif
+
+
+                                        @if($vehiclePartRequest->depot->address)
+
+                                            <div class="text-muted">
+
+                                                {{
+                                                    $vehiclePartRequest
+                                                        ->depot
+                                                        ->address
+                                                }}
+
+                                            </div>
+
+                                        @endif
+
+
                                     @else
+
+                                        {{-- ================================================== --}}
+                                        {{-- AUCUNE DESTINATION --}}
+                                        {{-- ================================================== --}}
 
                                         <div class="text-danger">
 
-                                            Véhicule introuvable
+                                            Destination introuvable
 
                                         </div>
 
@@ -1040,62 +1134,224 @@
 
                                     @method('PATCH')
 
-                                    {{-- Dépôt de réception --}}
+                                    {{-- ====================================================== --}}
+                                    {{-- DÉPÔT DE RÉCEPTION --}}
+                                    {{-- ====================================================== --}}
+                                    {{--
+                                        Règle métier :
+
+                                        1. Demande destinée à un dépôt :
+                                           le dépôt de réception est imposé.
+
+                                        2. Demande destinée à un véhicule :
+                                           l'utilisateur choisit le dépôt dans lequel
+                                           la pièce entre physiquement en stock.
+                                    --}}
+
                                     <div class="mb-3">
 
-                                        <label for="depot_id" class="form-label">
+                                        <label
+                                            for="depot_id"
+                                            class="form-label"
+                                        >
 
                                             Dépôt de réception
-
                                             <span class="text-danger">*</span>
 
                                         </label>
 
-                                        <select
 
-                                            name="depot_id"
+                                        @if(
+                                            $vehiclePartRequest->depot_id
+                                            &&
+                                            $vehiclePartRequest->depot
+                                        )
 
-                                            id="depot_id"
+                                            {{-- ============================================= --}}
+                                            {{-- COMMANDE DESTINÉE À UN DÉPÔT --}}
+                                            {{-- ============================================= --}}
 
-                                            class="form-select @error('depot_id') is-invalid @enderror"
+                                            <input
+                                                type="hidden"
+                                                name="depot_id"
+                                                value="{{ $vehiclePartRequest->depot_id }}"
+                                            >
 
-                                            required
 
-                                        >
+                                            <div
+                                                class="
+                                                    form-control
+                                                    bg-light
+                                                    d-flex
+                                                    align-items-center
+                                                    justify-content-between
+                                                "
+                                            >
 
-                                            <option value="">-- Sélectionner le dépôt --</option>
+                                                <div>
 
-                                            @foreach($depots as $depot)
+                                                    <i
+                                                        class="
+                                                            bx
+                                                            bx-building
+                                                            me-1
+                                                        "
+                                                    ></i>
 
-                                                <option
+                                                    <strong>
+                                                        {{
+                                                            $vehiclePartRequest
+                                                                ->depot
+                                                                ->name
+                                                        }}
+                                                    </strong>
 
-                                                    value="{{ $depot->id }}"
 
-                                                    @selected((string) old('depot_id') === (string) $depot->id)
+                                                    @if(
+                                                        $vehiclePartRequest
+                                                            ->depot
+                                                            ->code
+                                                    )
 
+                                                        <span class="text-muted">
+
+                                                            -
+                                                            {{
+                                                                $vehiclePartRequest
+                                                                    ->depot
+                                                                    ->code
+                                                            }}
+
+                                                        </span>
+
+                                                    @endif
+
+                                                </div>
+
+
+                                                <span
+                                                    class="
+                                                        badge
+                                                        bg-label-success
+                                                    "
                                                 >
 
-                                                    {{ $depot->name }}
+                                                    Destination imposée
+
+                                                </span>
+
+                                            </div>
+
+
+                                            <div class="form-text">
+
+                                                Cette commande est destinée au dépôt
+                                                <strong>
+                                                    {{
+                                                        $vehiclePartRequest
+                                                            ->depot
+                                                            ->name
+                                                    }}
+                                                </strong>.
+
+                                                La réception sera automatiquement
+                                                enregistrée dans ce dépôt.
+
+                                            </div>
+
+
+                                            @error('depot_id')
+
+                                                <div
+                                                    class="
+                                                        invalid-feedback
+                                                        d-block
+                                                    "
+                                                >
+
+                                                    {{ $message }}
+
+                                                </div>
+
+                                            @enderror
+
+
+                                        @else
+
+                                            {{-- ============================================= --}}
+                                            {{-- COMMANDE DESTINÉE À UN VÉHICULE --}}
+                                            {{-- ============================================= --}}
+
+                                            <select
+                                                name="depot_id"
+                                                id="depot_id"
+                                                class="
+                                                    form-select
+                                                    @error('depot_id')
+                                                        is-invalid
+                                                    @enderror
+                                                "
+                                                required
+                                            >
+
+                                                <option value="">
+
+                                                    -- Sélectionner le dépôt --
 
                                                 </option>
 
-                                            @endforeach
 
-                                        </select>
+                                                @foreach($depots as $depot)
 
-                                        @error('depot_id')
+                                                    <option
+                                                        value="{{ $depot->id }}"
+                                                        @selected(
+                                                            (string)
+                                                            old('depot_id')
+                                                            ===
+                                                            (string)
+                                                            $depot->id
+                                                        )
+                                                    >
 
-                                            <div class="invalid-feedback">{{ $message }}</div>
+                                                        {{ $depot->name }}
 
-                                        @enderror
+                                                        @if($depot->code)
 
-                                        <div class="form-text">
+                                                            - {{ $depot->code }}
 
-                                            Sélectionnez le dépôt dans lequel cette livraison entre physiquement en stock.
+                                                        @endif
 
-                                        </div>
+                                                    </option>
+
+                                                @endforeach
+
+                                            </select>
+
+
+                                            @error('depot_id')
+
+                                                <div class="invalid-feedback">
+
+                                                    {{ $message }}
+
+                                                </div>
+
+                                            @enderror
+
+
+                                            <div class="form-text">
+
+                                                Sélectionnez le dépôt dans lequel
+                                                cette livraison entre physiquement
+                                                en stock.
+
+                                            </div>
+
+                                        @endif
 
                                     </div>
+
 
                                     {{-- Quantité reçue dans cette livraison --}}
                                     <div class="mb-3">

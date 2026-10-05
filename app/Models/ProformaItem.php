@@ -28,6 +28,20 @@ class ProformaItem extends Model
         'proforma_id',
         'product_id',
         'depot_id',
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRODUIT HORS CATALOGUE
+        |--------------------------------------------------------------------------
+        |
+        | Ces champs sont utilisés uniquement lorsque product_id est NULL.
+        |
+        */
+
+        'reference_libre',
+        'designation_libre',
+        'description_libre',
+
         'quantity',
         'price',
         'total',

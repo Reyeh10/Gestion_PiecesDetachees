@@ -627,7 +627,7 @@
                                                 )
                                             >
 
-                                                {{ $vehicle->registration_number ?? $vehicle->registration ?? 'Sans immatriculation' }}
+                                                {{ $vehicle->plate_number ?? 'Sans immatriculation' }}
 
                                                 @if(!empty($vehicle->vin))
                                                     - VIN :

@@ -40,6 +40,19 @@ class VehiclePartRequestController extends Controller
       $query = VehiclePartRequest::query()
             ->with([
                 'vehicle.customer',
+
+                /*
+                |--------------------------------------------------------------------------
+                | DÉPÔT DESTINATAIRE
+                |--------------------------------------------------------------------------
+                |
+                | Une demande peut maintenant être destinée soit à un véhicule,
+                | soit directement à un dépôt.
+                |
+                */
+
+                'depot',
+
                 'product',
                 'supplier',
                 'creator',
@@ -117,6 +130,23 @@ class VehiclePartRequestController extends Controller
                                         "%{$search}%"
                                     );
                             }
+                        )
+                        ->orWhereHas(
+                            'depot',
+                            function ($depotQuery) use ($search) {
+
+                                $depotQuery
+                                    ->where(
+                                        'name',
+                                        'like',
+                                        "%{$search}%"
+                                    )
+                                    ->orWhere(
+                                        'code',
+                                        'like',
+                                        "%{$search}%"
+                                    );
+                            }
                         );
                 }
             );
@@ -144,11 +174,58 @@ class VehiclePartRequestController extends Controller
         |--------------------------------------------------------------------------
         */
 
+        /*
+        |--------------------------------------------------------------------------
+        | TYPE DE DESTINATION
+        |--------------------------------------------------------------------------
+        */
+
+        if ($request->filled('destination_type')) {
+
+            if (
+                $request->destination_type
+                ===
+                'vehicle'
+            ) {
+
+                $query->whereNotNull(
+                    'vehicle_id'
+                );
+            }
+
+            elseif (
+                $request->destination_type
+                ===
+                'depot'
+            ) {
+
+                $query->whereNotNull(
+                    'depot_id'
+                );
+            }
+        }
+
+
         if ($request->filled('vehicle_id')) {
 
             $query->where(
                 'vehicle_id',
                 $request->vehicle_id
+            );
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | DÉPÔT
+        |--------------------------------------------------------------------------
+        */
+
+        if ($request->filled('depot_id')) {
+
+            $query->where(
+                'depot_id',
+                $request->depot_id
             );
         }
 
@@ -177,6 +254,19 @@ class VehiclePartRequestController extends Controller
                 ->get();
 
 
+        /*
+        |--------------------------------------------------------------------------
+        | DÉPÔTS
+        |--------------------------------------------------------------------------
+        */
+
+        $depots =
+            Depot::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get();
+
+
         $statuses =
             VehiclePartRequest::statuses();
 
@@ -186,6 +276,7 @@ class VehiclePartRequestController extends Controller
             compact(
                 'partRequests',
                 'vehicles',
+                'depots',
                 'statuses'
             )
         );
@@ -209,6 +300,15 @@ class VehiclePartRequestController extends Controller
             VehiclePartRequest::query()
                ->with([
                     'vehicle.customer',
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | DÉPÔT DESTINATAIRE
+                    |--------------------------------------------------------------------------
+                    */
+
+                    'depot',
+
                     'product',
                     'supplier',
                     'creator',
@@ -274,6 +374,38 @@ class VehiclePartRequestController extends Controller
         }
 
 
+        /*
+        |--------------------------------------------------------------------------
+        | TYPE DE DESTINATION
+        |--------------------------------------------------------------------------
+        */
+
+        if ($request->filled('destination_type')) {
+
+            if (
+                $request->input('destination_type')
+                ===
+                'vehicle'
+            ) {
+
+                $query->whereNotNull(
+                    'vehicle_id'
+                );
+            }
+
+            elseif (
+                $request->input('destination_type')
+                ===
+                'depot'
+            ) {
+
+                $query->whereNotNull(
+                    'depot_id'
+                );
+            }
+        }
+
+
         if ($request->filled('vehicle_id')) {
 
             $query->where(
@@ -281,6 +413,21 @@ class VehiclePartRequestController extends Controller
                 $request->input('vehicle_id')
             );
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | DÉPÔT
+        |--------------------------------------------------------------------------
+        */
+
+        if ($request->filled('depot_id')) {
+
+            $query->where(
+                'depot_id',
+                $request->input('depot_id')
+            );
+        }
+
 
 
         $partRequests =
@@ -299,6 +446,19 @@ class VehiclePartRequestController extends Controller
             Vehicle::query()
                 ->orderBy('brand')
                 ->orderBy('model')
+                ->get();
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | DÉPÔTS
+        |--------------------------------------------------------------------------
+        */
+
+        $depots =
+            Depot::query()
+                ->where('is_active', true)
+                ->orderBy('name')
                 ->get();
 
 
@@ -323,6 +483,7 @@ class VehiclePartRequestController extends Controller
             compact(
                 'partRequests',
                 'vehicles',
+                'depots',
                 'statuses',
                 'pageTitle',
                 'pageDescription',
@@ -436,6 +597,23 @@ class VehiclePartRequestController extends Controller
                 ->get();
 
 
+        /*
+        |--------------------------------------------------------------------------
+        | DÉPÔTS
+        |--------------------------------------------------------------------------
+        |
+        | La vue index.blade.php utilise la liste des dépôts pour
+        | permettre le filtrage des demandes destinées à un dépôt.
+        |
+        */
+
+        $depots =
+            Depot::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get();
+
+
         $statuses =
             VehiclePartRequest::statuses();
 
@@ -457,6 +635,7 @@ class VehiclePartRequestController extends Controller
             compact(
                 'partRequests',
                 'vehicles',
+                'depots',
                 'statuses',
                 'pageTitle',
                 'pageDescription',
@@ -567,6 +746,23 @@ class VehiclePartRequestController extends Controller
                 ->get();
 
 
+        /*
+        |--------------------------------------------------------------------------
+        | DÉPÔTS
+        |--------------------------------------------------------------------------
+        |
+        | La vue index.blade.php utilise la liste des dépôts pour
+        | permettre le filtrage des demandes destinées à un dépôt.
+        |
+        */
+
+        $depots =
+            Depot::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get();
+
+
         $statuses =
             VehiclePartRequest::statuses();
 
@@ -588,6 +784,7 @@ class VehiclePartRequestController extends Controller
             compact(
                 'partRequests',
                 'vehicles',
+                'depots',
                 'statuses',
                 'pageTitle',
                 'pageDescription',
@@ -603,41 +800,98 @@ class VehiclePartRequestController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    public function create(Request $request): View
-    {
-        $vehicles =
-            Vehicle::query()
-                ->orderBy('brand')
-                ->orderBy('model')
-                ->get();
+   /*
+|--------------------------------------------------------------------------
+| CREATE
+|--------------------------------------------------------------------------
+*/
+
+public function create(Request $request): View
+{
+    /*
+    |--------------------------------------------------------------------------
+    | VÉHICULES
+    |--------------------------------------------------------------------------
+    */
+
+    $vehicles =
+        Vehicle::query()
+            ->orderBy('brand')
+            ->orderBy('model')
+            ->get();
 
 
-        $products =
-            Product::query()
-                ->orderBy('designation')
-                ->get();
+    /*
+    |--------------------------------------------------------------------------
+    | DÉPÔTS
+    |--------------------------------------------------------------------------
+    |
+    | Seuls les dépôts actifs sont proposés comme destination.
+    |
+    */
+
+    $depots =
+        Depot::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
 
 
-        $suppliers =
-            Supplier::query()
-                ->orderBy('name')
-                ->get();
+    /*
+    |--------------------------------------------------------------------------
+    | PRODUITS
+    |--------------------------------------------------------------------------
+    */
+
+    $products =
+        Product::query()
+            ->orderBy('designation')
+            ->get();
 
 
-        $selectedVehicleId =
-            $request->vehicle_id;
+    /*
+    |--------------------------------------------------------------------------
+    | FOURNISSEURS
+    |--------------------------------------------------------------------------
+    */
+
+    $suppliers =
+        Supplier::query()
+            ->orderBy('name')
+            ->get();
 
 
-        return view(
-            'vehicle-part-requests.create',
-            compact(
-                'vehicles',
-                'products',
-                'suppliers',
-                'selectedVehicleId'
-            )
-        );
-    }
+    /*
+    |--------------------------------------------------------------------------
+    | DESTINATION PRÉSÉLECTIONNÉE
+    |--------------------------------------------------------------------------
+    */
+
+    $selectedVehicleId =
+        $request->vehicle_id;
+
+    $selectedDepotId =
+        $request->depot_id;
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | VUE
+    |--------------------------------------------------------------------------
+    */
+
+    return view(
+        'vehicle-part-requests.create',
+        compact(
+            'vehicles',
+            'depots',
+            'products',
+            'suppliers',
+            'selectedVehicleId',
+            'selectedDepotId'
+        )
+    );
+}
 
 
     /*
@@ -656,8 +910,32 @@ class VehiclePartRequestController extends Controller
                 $partRequest =
                     VehiclePartRequest::create([
 
+                       /*
+                        |--------------------------------------------------------------------------
+                        | DESTINATION
+                        |--------------------------------------------------------------------------
+                        |
+                        | Une seule destination peut être enregistrée.
+                        |
+                        | Véhicule :
+                        | vehicle_id renseigné
+                        | depot_id   NULL
+                        |
+                        | Dépôt :
+                        | vehicle_id NULL
+                        | depot_id   renseigné
+                        |
+                        */
+
                         'vehicle_id' =>
-                            $request->vehicle_id,
+                            $request->filled('vehicle_id')
+                                ? $request->vehicle_id
+                                : null,
+
+                        'depot_id' =>
+                            $request->filled('depot_id')
+                                ? $request->depot_id
+                                : null,
 
                         'product_id' =>
                             $request->product_id,
@@ -795,6 +1073,7 @@ class VehiclePartRequestController extends Controller
 
     $vehiclePartRequest->load([
         'vehicle.customer',
+        'depot',
         'product',
         'supplier',
         'creator',
@@ -901,11 +1180,29 @@ class VehiclePartRequestController extends Controller
                 ->get();
 
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | DÉPÔTS
+        |--------------------------------------------------------------------------
+        |
+        | Les dépôts actifs sont proposés comme destination lors
+        | de la modification d'une demande de pièce.
+        |
+        */
+
+        $depots =
+            Depot::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get();
+
         return view(
             'vehicle-part-requests.edit',
             compact(
                 'vehiclePartRequest',
                 'vehicles',
+                'depots',
                 'products',
                 'suppliers'
             )
@@ -2073,44 +2370,108 @@ class VehiclePartRequestController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    $validated = $request->validate(
-        [
-            'vehicle_id' => [
-                'required',
-                'integer',
-                'exists:vehicles,id',
-            ],
+   $validated = $request->validate(
+    [
+        /*
+        |--------------------------------------------------------------------------
+        | DESTINATION : VÉHICULE
+        |--------------------------------------------------------------------------
+        |
+        | Le véhicule est obligatoire uniquement lorsqu'aucun dépôt
+        | n'a été sélectionné.
+        |
+        */
 
-            'excel_file' => [
-                'required',
-                'file',
-                'mimes:xlsx,xls,csv',
-                'max:10240',
-            ],
+        'vehicle_id' => [
+            'nullable',
+            'required_without:depot_id',
+            'prohibited_unless:depot_id,null',
+            'integer',
+            'exists:vehicles,id',
         ],
-        [
-            'vehicle_id.required' =>
-                'Veuillez sélectionner un véhicule.',
 
-            'vehicle_id.integer' =>
-                'Le véhicule sélectionné est invalide.',
+        /*
+        |--------------------------------------------------------------------------
+        | DESTINATION : DÉPÔT
+        |--------------------------------------------------------------------------
+        |
+        | Le dépôt est obligatoire uniquement lorsqu'aucun véhicule
+        | n'a été sélectionné.
+        |
+        */
 
-            'vehicle_id.exists' =>
-                'Le véhicule sélectionné est invalide.',
+        'depot_id' => [
+            'nullable',
+            'required_without:vehicle_id',
+            'prohibited_unless:vehicle_id,null',
+            'integer',
+            'exists:depots,id',
+        ],
 
-            'excel_file.required' =>
-                'Veuillez sélectionner un fichier Excel.',
+        /*
+        |--------------------------------------------------------------------------
+        | FICHIER EXCEL
+        |--------------------------------------------------------------------------
+        */
 
-            'excel_file.file' =>
-                'Le fichier sélectionné est invalide.',
+        'excel_file' => [
+            'required',
+            'file',
+            'mimes:xlsx,xls,csv',
+            'max:10240',
+        ],
+    ],
+    [
+        /*
+        |--------------------------------------------------------------------------
+        | DESTINATION
+        |--------------------------------------------------------------------------
+        */
 
-            'excel_file.mimes' =>
-                'Le fichier doit être au format XLSX, XLS ou CSV.',
+        'vehicle_id.required_without' =>
+            'Veuillez sélectionner un véhicule ou un dépôt.',
 
-            'excel_file.max' =>
-                'Le fichier ne doit pas dépasser 10 Mo.',
-        ]
-    );
+        'vehicle_id.prohibited_unless' =>
+            'Vous ne pouvez pas sélectionner un véhicule et un dépôt en même temps.',
+
+        'vehicle_id.integer' =>
+            'Le véhicule sélectionné est invalide.',
+
+        'vehicle_id.exists' =>
+            'Le véhicule sélectionné est invalide.',
+
+
+        'depot_id.required_without' =>
+            'Veuillez sélectionner un véhicule ou un dépôt.',
+
+        'depot_id.prohibited_unless' =>
+            'Vous ne pouvez pas sélectionner un véhicule et un dépôt en même temps.',
+
+        'depot_id.integer' =>
+            'Le dépôt sélectionné est invalide.',
+
+        'depot_id.exists' =>
+            'Le dépôt sélectionné est invalide.',
+
+        /*
+        |--------------------------------------------------------------------------
+        | FICHIER EXCEL
+        |--------------------------------------------------------------------------
+        */
+
+        'excel_file.required' =>
+            'Veuillez sélectionner un fichier Excel.',
+
+        'excel_file.file' =>
+            'Le fichier sélectionné est invalide.',
+
+        'excel_file.mimes' =>
+            'Le fichier doit être au format XLSX, XLS ou CSV.',
+
+        'excel_file.max' =>
+            'Le fichier ne doit pas dépasser 10 Mo.',
+    ]
+);
 
 
     /*
@@ -2119,10 +2480,41 @@ class VehiclePartRequestController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    $import =
-        new VehiclePartRequestsImport(
-            (int) $validated['vehicle_id']
-        );
+   /*
+|--------------------------------------------------------------------------
+| PRÉPARER LA DESTINATION
+|--------------------------------------------------------------------------
+|
+| Une seule destination a été autorisée par la validation :
+|
+| - véhicule ;
+| - ou dépôt.
+|
+*/
+
+$vehicleId =
+    !empty($validated['vehicle_id'])
+        ? (int) $validated['vehicle_id']
+        : null;
+
+
+$depotId =
+    !empty($validated['depot_id'])
+        ? (int) $validated['depot_id']
+        : null;
+
+
+/*
+|--------------------------------------------------------------------------
+| PRÉPARER L'IMPORT
+|--------------------------------------------------------------------------
+*/
+
+$import =
+    new VehiclePartRequestsImport(
+        vehicleId: $vehicleId,
+        depotId: $depotId
+    );
 
 
     /*

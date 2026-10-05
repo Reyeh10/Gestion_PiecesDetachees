@@ -1175,7 +1175,7 @@
                         "
                     >
                         <span>
-                            Véhicules
+                            Véhicules/Dépot
                         </span>
 
                         <span
@@ -1543,6 +1543,60 @@
 
         @endif
 
+         {{-- ===================================================== --}}
+
+        {{-- BONS DE COMMANDE FOURNISSEURS --}}
+
+        {{-- ===================================================== --}}
+
+        @if($user && in_array($user->role, [
+
+            'admin',
+
+            'chef_magasinier',
+
+            'magasinier',
+
+            'vendeur'
+
+        ]))
+
+            <li class="menu-item
+
+                {{
+
+                    request()->routeIs('supplier-orders.*')
+
+                        ? 'active'
+
+                        : ''
+
+                }}
+
+            ">
+
+                <a
+
+                    href="{{ route('supplier-orders.index') }}"
+
+                    class="menu-link"
+
+                >
+
+                    <i class="menu-icon tf-icons bx bx-file"></i>
+
+                    <div class="flex-grow-1 text-truncate">
+
+                        Bons de commande
+
+                    </div>
+
+                </a>
+
+            </li>
+
+        @endif
+
         {{-- ===================================================== --}}
 
         {{-- GESTION DU STOCK --}}
@@ -1600,6 +1654,8 @@
         </li>
 
         @endif
+
+
 
         {{-- ===================================================== --}}
 
@@ -1841,59 +1897,7 @@
 
                                @endif
 
-        {{-- ===================================================== --}}
-
-        {{-- BONS DE COMMANDE FOURNISSEURS --}}
-
-        {{-- ===================================================== --}}
-
-        @if($user && in_array($user->role, [
-
-            'admin',
-
-            'chef_magasinier',
-
-            'magasinier',
-
-            'vendeur'
-
-        ]))
-
-            <li class="menu-item
-
-                {{
-
-                    request()->routeIs('supplier-orders.*')
-
-                        ? 'active'
-
-                        : ''
-
-                }}
-
-            ">
-
-                <a
-
-                    href="{{ route('supplier-orders.index') }}"
-
-                    class="menu-link"
-
-                >
-
-                    <i class="menu-icon tf-icons bx bx-file"></i>
-
-                    <div class="flex-grow-1 text-truncate">
-
-                        Bons de commande
-
-                    </div>
-
-                </a>
-
-            </li>
-
-        @endif
+       
 
         {{-- ===================================================== --}}
 

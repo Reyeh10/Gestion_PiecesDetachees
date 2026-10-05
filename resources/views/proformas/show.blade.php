@@ -771,9 +771,54 @@
                                         2
                                     );
 
+                            /*
+                            |--------------------------------------------------------------------------
+                            | INFORMATIONS À AFFICHER POUR LA LIGNE
+                            |--------------------------------------------------------------------------
+                            |
+                            | Une ligne peut représenter :
+                            |
+                            | 1. un produit existant dans le catalogue ;
+                            | 2. un produit hors catalogue saisi manuellement ;
+                            | 3. un ancien produit réellement supprimé.
+                            |
+                            */
+
+                            $isCustomProduct =
+                                is_null($item->product_id)
+                                && filled($item->designation_libre);
+
                             $unit =
                                 $item->product?->unit_label
                                 ?? 'Pièce';
+
+                            if ($item->product) {
+
+                                $displayReference =
+                                    $item->product->reference
+                                    ?? '-';
+
+                                $displayDesignation =
+                                    $item->product->designation
+                                    ?? '-';
+
+                            } elseif ($isCustomProduct) {
+
+                                $displayReference =
+                                    $item->reference_libre
+                                    ?: '-';
+
+                                $displayDesignation =
+                                    $item->designation_libre;
+
+                            } else {
+
+                                $displayReference =
+                                    '-';
+
+                                $displayDesignation =
+                                    'Produit supprimé';
+                            }
 
                         @endphp
 
@@ -789,20 +834,34 @@
 
                             <td>
 
-                                {{
-                                    $item->product?->reference
-                                    ?? '-'
-                                }}
+                                {{ $displayReference }}
 
                             </td>
 
 
                             <td>
 
-                                {{
-                                    $item->product?->designation
-                                    ?? 'Produit supprimé'
-                                }}
+                                {{ $displayDesignation }}
+
+                                @if($isCustomProduct)
+
+                                    <br>
+
+                                    <small style="color:#6366f1; font-weight:600;">
+                                        Hors catalogue
+                                    </small>
+
+                                    @if(filled($item->description_libre))
+
+                                        <br>
+
+                                        <small style="color:#64748b;">
+                                            {{ $item->description_libre }}
+                                        </small>
+
+                                    @endif
+
+                                @endif
 
                                 <br>
 
@@ -1154,7 +1213,7 @@
                         @csrf
 
 
-                        <button
+                        <!--button
                             type="submit"
                             class="btn btn-success"
                             id="convertProformaButton"
@@ -1164,7 +1223,7 @@
 
                             Convertir en vente
 
-                        </button>
+                        </button-->
 
                     </form>
 

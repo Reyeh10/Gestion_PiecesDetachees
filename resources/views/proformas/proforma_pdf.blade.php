@@ -465,9 +465,54 @@
         @forelse($proforma->items as $item)
 
             @php
+                /*
+                |--------------------------------------------------------------------------
+                | INFORMATIONS À AFFICHER POUR LA LIGNE
+                |--------------------------------------------------------------------------
+                |
+                | Le PDF gère :
+                |
+                | 1. les produits du catalogue ;
+                | 2. les produits hors catalogue ;
+                | 3. les anciens produits réellement supprimés.
+                |
+                */
+
+                $isCustomProduct =
+                    is_null($item->product_id)
+                    && filled($item->designation_libre);
+
                 $unitLabel =
                     optional($item->product)->unit_label
                     ?? 'Pièce';
+
+                if ($item->product) {
+
+                    $displayReference =
+                        $item->product->reference
+                        ?? '-';
+
+                    $displayDesignation =
+                        $item->product->designation
+                        ?? '-';
+
+                } elseif ($isCustomProduct) {
+
+                    $displayReference =
+                        $item->reference_libre
+                        ?: '-';
+
+                    $displayDesignation =
+                        $item->designation_libre;
+
+                } else {
+
+                    $displayReference =
+                        '-';
+
+                    $displayDesignation =
+                        'Produit supprimé';
+                }
 
                 $lineTotal =
                     (float) $item->quantity
@@ -482,18 +527,32 @@
                 </td>
 
                 <td>
-                    {{
-                        optional($item->product)->reference
-                        ?? '-'
-                    }}
+                    {{ $displayReference }}
                 </td>
 
                 <td>
 
-                    {{
-                        optional($item->product)->designation
-                        ?? '-'
-                    }}
+                    {{ $displayDesignation }}
+
+                    @if($isCustomProduct)
+
+                        <br>
+
+                        <span class="unit-label">
+                            Hors catalogue
+                        </span>
+
+                        @if(filled($item->description_libre))
+
+                            <br>
+
+                            <span class="unit-label">
+                                {{ $item->description_libre }}
+                            </span>
+
+                        @endif
+
+                    @endif
 
                     <br>
 

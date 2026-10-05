@@ -421,335 +421,691 @@ class ProformaController extends Controller
     */
 
     public function store(
-        Request $request
-    ): RedirectResponse {
-        $validated = $request->validate(
-            [
-                'customer_id' => [
-                    'required',
-                    'integer',
-                    'exists:customers,id',
-                ],
+    Request $request
+): RedirectResponse {
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATION GÉNÉRALE
+    |--------------------------------------------------------------------------
+    |
+    | Une ligne peut maintenant représenter :
+    |
+    | 1. un produit du catalogue ;
+    | 2. un produit hors catalogue.
+    |
+    | Les règles métier spécifiques à chacun de ces deux cas sont contrôlées
+    | juste après cette première validation.
+    |
+    */
 
-                'vehicle_id' => [
-                    'required',
-                    'integer',
-                    Rule::exists(
-                        'vehicles',
-                        'id'
-                    )->where(
-                        fn ($query) =>
-                            $query->where(
-                                'customer_id',
-                                $request->input('customer_id')
-                            )
-                    ),
-                ],
-
-                'discount' => [
-                    'nullable',
-                    'numeric',
-                    'min:0',
-                    'max:100',
-                ],
-
-                'items' => [
-                    'required',
-                    'array',
-                    'min:1',
-                ],
-
-                'items.*.product_id' => [
-                    'required',
-                    'integer',
-                    'exists:products,id',
-                ],
-
-                'items.*.depot_id' => [
-                    'required',
-                    'integer',
-                    'exists:depots,id',
-                ],
-
-                'items.*.quantity' => [
-                    'required',
-                    'numeric',
-                    'min:0.01',
-                ],
+    $validated = $request->validate(
+        [
+            'customer_id' => [
+                'required',
+                'integer',
+                'exists:customers,id',
             ],
-            [
-                'customer_id.required' =>
-                    'Veuillez sélectionner un client.',
 
-                'vehicle_id.required' =>
-                    'Veuillez sélectionner le véhicule associé au client.',
+            'vehicle_id' => [
+                'required',
+                'integer',
+                Rule::exists(
+                    'vehicles',
+                    'id'
+                )->where(
+                    fn ($query) =>
+                        $query->where(
+                            'customer_id',
+                            $request->input('customer_id')
+                        )
+                ),
+            ],
 
-                'vehicle_id.exists' =>
-                    'Le véhicule sélectionné n’appartient pas au client choisi.',
+            'discount' => [
+                'nullable',
+                'numeric',
+                'min:0',
+                'max:100',
+            ],
 
-                'items.required' =>
-                    'Vous devez ajouter au moins un produit.',
+            'items' => [
+                'required',
+                'array',
+                'min:1',
+            ],
 
-                'items.min' =>
-                    'Vous devez ajouter au moins un produit.',
+            /*
+            |--------------------------------------------------------------------------
+            | PRODUIT CATALOGUE
+            |--------------------------------------------------------------------------
+            |
+            | product_id peut être NULL uniquement pour un produit hors catalogue.
+            |
+            */
 
-                'items.*.product_id.required' =>
-                    'Veuillez sélectionner un produit.',
+            'items.*.product_id' => [
+                'nullable',
+                'integer',
+                'exists:products,id',
+            ],
 
-                'items.*.product_id.exists' =>
-                    'Le produit sélectionné est invalide.',
+            /*
+            |--------------------------------------------------------------------------
+            | DÉPÔT
+            |--------------------------------------------------------------------------
+            |
+            | Le dépôt sera exigé côté serveur lorsqu'un product_id est présent.
+            |
+            */
 
-                'items.*.depot_id.required' =>
-                    'Veuillez sélectionner le dépôt à prélever pour chaque produit.',
+            'items.*.depot_id' => [
+                'nullable',
+                'integer',
+                'exists:depots,id',
+            ],
 
-                'items.*.depot_id.exists' =>
-                    'Le dépôt sélectionné est invalide.',
+            /*
+            |--------------------------------------------------------------------------
+            | INFORMATIONS DU PRODUIT HORS CATALOGUE
+            |--------------------------------------------------------------------------
+            */
 
-                'items.*.quantity.required' =>
-                    'La quantité est obligatoire.',
+            'items.*.reference_libre' => [
+                'nullable',
+                'string',
+                'max:150',
+            ],
 
-                'items.*.quantity.numeric' =>
-                    'La quantité doit être numérique.',
+            'items.*.designation_libre' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
 
-                'items.*.quantity.min' =>
-                    'La quantité doit être supérieure à zéro.',
-            ]
+            'items.*.description_libre' => [
+                'nullable',
+                'string',
+            ],
+
+            /*
+            |--------------------------------------------------------------------------
+            | QUANTITÉ
+            |--------------------------------------------------------------------------
+            */
+
+            'items.*.quantity' => [
+                'required',
+                'numeric',
+                'min:0.01',
+            ],
+
+            /*
+            |--------------------------------------------------------------------------
+            | PRIX ENVOYÉ PAR LE FORMULAIRE
+            |--------------------------------------------------------------------------
+            |
+            | Ce prix n'est utilisé que pour les produits hors catalogue.
+            |
+            | Pour un produit du catalogue, le prix sera toujours repris depuis
+            | products.sale_price afin qu'un utilisateur ne puisse pas modifier
+            | artificiellement le prix depuis le navigateur.
+            |
+            */
+
+            'items.*.price' => [
+                'nullable',
+                'numeric',
+                'min:0',
+            ],
+        ],
+        [
+            'customer_id.required' =>
+                'Veuillez sélectionner un client.',
+
+            'vehicle_id.required' =>
+                'Veuillez sélectionner le véhicule associé au client.',
+
+            'vehicle_id.exists' =>
+                'Le véhicule sélectionné n’appartient pas au client choisi.',
+
+            'items.required' =>
+                'Vous devez ajouter au moins un produit.',
+
+            'items.min' =>
+                'Vous devez ajouter au moins un produit.',
+
+            'items.*.product_id.exists' =>
+                'Le produit sélectionné est invalide.',
+
+            'items.*.depot_id.exists' =>
+                'Le dépôt sélectionné est invalide.',
+
+            'items.*.reference_libre.max' =>
+                'La référence du produit hors catalogue est trop longue.',
+
+            'items.*.designation_libre.max' =>
+                'La désignation du produit hors catalogue est trop longue.',
+
+            'items.*.quantity.required' =>
+                'La quantité est obligatoire.',
+
+            'items.*.quantity.numeric' =>
+                'La quantité doit être numérique.',
+
+            'items.*.quantity.min' =>
+                'La quantité doit être supérieure à zéro.',
+
+            'items.*.price.numeric' =>
+                'Le prix doit être numérique.',
+
+            'items.*.price.min' =>
+                'Le prix ne peut pas être négatif.',
+        ]
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATION MÉTIER DES LIGNES
+    |--------------------------------------------------------------------------
+    |
+    | PRODUIT CATALOGUE :
+    | - product_id obligatoire
+    | - depot_id obligatoire
+    |
+    | PRODUIT HORS CATALOGUE :
+    | - product_id NULL
+    | - depot_id NULL
+    | - designation_libre obligatoire
+    | - price obligatoire
+    |
+    */
+
+    foreach ($validated['items'] as $index => $itemData) {
+        $lineNumber = $index + 1;
+
+        $productId = $itemData['product_id'] ?? null;
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRODUIT DU CATALOGUE
+        |--------------------------------------------------------------------------
+        */
+
+        if (!empty($productId)) {
+            if (empty($itemData['depot_id'])) {
+                return back()
+                    ->withInput()
+                    ->withErrors([
+                        "items.$index.depot_id" =>
+                            "Veuillez sélectionner le dépôt pour la ligne {$lineNumber}.",
+                    ]);
+            }
+
+            continue;
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRODUIT HORS CATALOGUE
+        |--------------------------------------------------------------------------
+        */
+
+        $designationLibre = trim(
+            (string) ($itemData['designation_libre'] ?? '')
         );
 
-        DB::beginTransaction();
+        if ($designationLibre === '') {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    "items.$index.designation_libre" =>
+                        "La désignation du produit hors catalogue est obligatoire pour la ligne {$lineNumber}.",
+                ]);
+        }
 
-        try {
-            $vehicle = Vehicle::query()
-                ->whereKey($validated['vehicle_id'])
-                ->where('customer_id', $validated['customer_id'])
+        if (
+            !array_key_exists('price', $itemData)
+            || $itemData['price'] === null
+            || $itemData['price'] === ''
+        ) {
+            return back()
+                ->withInput()
+                ->withErrors([
+                    "items.$index.price" =>
+                        "Le prix du produit hors catalogue est obligatoire pour la ligne {$lineNumber}.",
+                ]);
+        }
+    }
+
+
+    DB::beginTransaction();
+
+    try {
+        $vehicle = Vehicle::query()
+            ->whereKey($validated['vehicle_id'])
+            ->where('customer_id', $validated['customer_id'])
+            ->lockForUpdate()
+            ->firstOrFail();
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | AGRÉGER UNIQUEMENT LES PRODUITS CATALOGUE
+        |--------------------------------------------------------------------------
+        |
+        | Les produits hors catalogue n'existent pas encore dans le stock.
+        | Ils ne doivent donc participer à aucun contrôle de stock.
+        |
+        */
+
+        $requestedByProductDepot = [];
+
+        foreach ($validated['items'] as $itemData) {
+            /*
+            |--------------------------------------------------------------------------
+            | IGNORER LES PRODUITS HORS CATALOGUE
+            |--------------------------------------------------------------------------
+            */
+
+            if (empty($itemData['product_id'])) {
+                continue;
+            }
+
+            $productId = (int) $itemData['product_id'];
+            $depotId = (int) $itemData['depot_id'];
+
+            $key = $productId . ':' . $depotId;
+
+            if (!isset($requestedByProductDepot[$key])) {
+                $requestedByProductDepot[$key] = [
+                    'product_id' => $productId,
+                    'depot_id' => $depotId,
+                    'quantity' => 0.00,
+                ];
+            }
+
+            $requestedByProductDepot[$key]['quantity'] +=
+                (float) $itemData['quantity'];
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | VÉRIFIER LE STOCK DES PRODUITS CATALOGUE
+        |--------------------------------------------------------------------------
+        */
+
+        foreach ($requestedByProductDepot as $requested) {
+            $product = Product::query()
+                ->whereKey($requested['product_id'])
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            /*
-            |--------------------------------------------------------------------------
-            | AGRÉGER LES QUANTITÉS PAR PRODUIT + DÉPÔT
-            |--------------------------------------------------------------------------
-            |
-            | Empêche de contourner le stock en ajoutant plusieurs fois le même
-            | produit avec le même dépôt dans le proforma.
-            |
-            */
-            $requestedByProductDepot = [];
+            $depotStock = ProductDepotStock::query()
+                ->with('depot')
+                ->where(
+                    'product_id',
+                    $requested['product_id']
+                )
+                ->where(
+                    'depot_id',
+                    $requested['depot_id']
+                )
+                ->lockForUpdate()
+                ->first();
 
-            foreach ($validated['items'] as $itemData) {
-                $productId = (int) $itemData['product_id'];
-                $depotId = (int) $itemData['depot_id'];
-                $key = $productId . ':' . $depotId;
+            $availableQuantity = round(
+                (float) ($depotStock->quantity ?? 0),
+                2
+            );
 
-                if (!isset($requestedByProductDepot[$key])) {
-                    $requestedByProductDepot[$key] = [
-                        'product_id' => $productId,
-                        'depot_id' => $depotId,
-                        'quantity' => 0.00,
-                    ];
-                }
+            $requestedQuantity = round(
+                (float) $requested['quantity'],
+                2
+            );
 
-                $requestedByProductDepot[$key]['quantity'] +=
-                    (float) $itemData['quantity'];
+            if (
+                !$depotStock
+                || $requestedQuantity > $availableQuantity
+            ) {
+                $depotName =
+                    $depotStock?->depot?->name
+                    ?? ('Dépôt #' . $requested['depot_id']);
+
+                throw new \RuntimeException(
+                    'Stock insuffisant pour : '
+                    . $product->reference
+                    . ' - '
+                    . $product->designation
+                    . ' dans le dépôt '
+                    . $depotName
+                    . '. Disponible : '
+                    . number_format(
+                        $availableQuantity,
+                        2,
+                        ',',
+                        ' '
+                    )
+                    . ' '
+                    . ($product->unit_label ?? 'Pièce')
+                );
             }
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | CALCUL DES LIGNES
+        |--------------------------------------------------------------------------
+        */
+
+        $subtotal = 0.00;
+        $validatedItems = [];
+
+        foreach ($validated['items'] as $itemData) {
+            $quantity = round(
+                (float) $itemData['quantity'],
+                2
+            );
+
 
             /*
             |--------------------------------------------------------------------------
-            | VÉRIFIER LE STOCK DANS LE DÉPÔT CHOISI
+            | PRODUIT DU CATALOGUE
             |--------------------------------------------------------------------------
             */
-            foreach ($requestedByProductDepot as $requested) {
+
+            if (!empty($itemData['product_id'])) {
                 $product = Product::query()
-                    ->whereKey($requested['product_id'])
-                    ->lockForUpdate()
-                    ->firstOrFail();
-
-                $depotStock = ProductDepotStock::query()
-                    ->with('depot')
-                    ->where('product_id', $requested['product_id'])
-                    ->where('depot_id', $requested['depot_id'])
-                    ->lockForUpdate()
-                    ->first();
-
-                $availableQuantity = round(
-                    (float) ($depotStock->quantity ?? 0),
-                    2
-                );
-
-                $requestedQuantity = round(
-                    (float) $requested['quantity'],
-                    2
-                );
-
-                if (!$depotStock || $requestedQuantity > $availableQuantity) {
-                    $depotName = $depotStock?->depot?->name
-                        ?? ('Dépôt #' . $requested['depot_id']);
-
-                    throw new \RuntimeException(
-                        'Stock insuffisant pour : '
-                        . $product->reference
-                        . ' - '
-                        . $product->designation
-                        . ' dans le dépôt '
-                        . $depotName
-                        . '. Disponible : '
-                        . number_format($availableQuantity, 2, ',', ' ')
-                        . ' '
-                        . ($product->unit_label ?? 'Pièce')
+                    ->findOrFail(
+                        $itemData['product_id']
                     );
-                }
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | CALCUL DES LIGNES
-            |--------------------------------------------------------------------------
-            */
-            $subtotal = 0.00;
-            $validatedItems = [];
-
-            foreach ($validated['items'] as $itemData) {
-                $product = Product::query()
-                    ->findOrFail($itemData['product_id']);
-
-                $quantity = round(
-                    (float) $itemData['quantity'],
-                    2
-                );
 
                 /*
                 |--------------------------------------------------------------------------
                 | LE PRIX VIENT TOUJOURS DE LA BASE
                 |--------------------------------------------------------------------------
                 */
+
                 $price = round(
                     (float) $product->sale_price,
                     2
                 );
 
-                $lineTotal = round($quantity * $price, 2);
+                $lineTotal = round(
+                    $quantity * $price,
+                    2
+                );
+
                 $subtotal += $lineTotal;
 
                 $validatedItems[] = [
                     'product_id' => $product->id,
-                    'depot_id' => (int) $itemData['depot_id'],
+                    'depot_id' =>
+                        (int) $itemData['depot_id'],
+
+                    'reference_libre' => null,
+                    'designation_libre' => null,
+                    'description_libre' => null,
+
                     'quantity' => $quantity,
                     'price' => $price,
                     'total' => $lineTotal,
                 ];
+
+                continue;
             }
 
-            $subtotal = round($subtotal, 2);
 
-            $discountPercent = round(
-                (float) ($validated['discount'] ?? 0),
+            /*
+            |--------------------------------------------------------------------------
+            | PRODUIT HORS CATALOGUE
+            |--------------------------------------------------------------------------
+            |
+            | Aucun produit ni dépôt n'est associé à cette ligne.
+            | Le prix est celui saisi par l'utilisateur.
+            |
+            */
+
+            $price = round(
+                (float) $itemData['price'],
                 2
             );
 
-            $discountAmount = round(
-                ($subtotal * $discountPercent) / 100,
+            $lineTotal = round(
+                $quantity * $price,
                 2
             );
 
-            $taxable = max(
-                0,
-                round($subtotal - $discountAmount, 2)
-            );
+            $subtotal += $lineTotal;
 
-            $tva = round($taxable * 0.10, 2);
-            $total = round($taxable + $tva, 2);
+            $validatedItems[] = [
+                'product_id' => null,
+                'depot_id' => null,
 
-            /*
-            |--------------------------------------------------------------------------
-            | NUMÉRO DU PROFORMA
-            |--------------------------------------------------------------------------
-            */
-            $nextId = ((int) Proforma::max('id')) + 1;
+                'reference_libre' =>
+                    filled($itemData['reference_libre'] ?? null)
+                        ? trim(
+                            (string) $itemData['reference_libre']
+                        )
+                        : null,
 
-            $proformaNumber =
-                'PROFORMA-'
-                . str_pad(
-                    (string) $nextId,
-                    6,
-                    '0',
-                    STR_PAD_LEFT
-                );
+                'designation_libre' =>
+                    trim(
+                        (string) $itemData['designation_libre']
+                    ),
 
-            /*
-            |--------------------------------------------------------------------------
-            | CRÉER LE PROFORMA
-            |--------------------------------------------------------------------------
-            |
-            | Aucun mode de paiement n'est demandé ici.
-            |
-            */
-            $proforma = Proforma::create([
-                'proforma_number' => $proformaNumber,
-                'customer_id' => $validated['customer_id'],
-                'vehicle_id' => $vehicle->id,
-                'created_by' => auth()->id(),
-                'payment_type' => null,
-                'subtotal' => $subtotal,
-                'discount' => $discountPercent,
-                'discount_amount' => $discountAmount,
-                'tva' => $tva,
-                'total' => $total,
-                'status' => Proforma::STATUS_VALIDATED,
-            ]);
+                'description_libre' =>
+                    filled($itemData['description_libre'] ?? null)
+                        ? trim(
+                            (string) $itemData['description_libre']
+                        )
+                        : null,
 
-            /*
-            |--------------------------------------------------------------------------
-            | ENREGISTRER LES PRODUITS + LE DÉPÔT CHOISI
-            |--------------------------------------------------------------------------
-            |
-            | Le proforma ne réserve pas et ne diminue pas le stock.
-            |
-            */
-            foreach ($validatedItems as $item) {
-                ProformaItem::create([
-                    'proforma_id' => $proforma->id,
-                    'product_id' => $item['product_id'],
-                    'depot_id' => $item['depot_id'],
-                    'quantity' => $item['quantity'],
-                    'price' => $item['price'],
-                    'total' => $item['total'],
-                ]);
-            }
-
-            DB::commit();
-
-            return redirect()
-                ->route('proformas.show', $proforma)
-                ->with(
-                    'success',
-                    'Le proforma a été créé avec succès.'
-                );
-
-        } catch (Throwable $e) {
-            DB::rollBack();
-
-            Log::error(
-                'Création proforma impossible.',
-                [
-                    'message' => $e->getMessage(),
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine(),
-                    'user_id' => auth()->id(),
-                    'customer_id' => $validated['customer_id'] ?? null,
-                    'vehicle_id' => $validated['vehicle_id'] ?? null,
-                ]
-            );
-
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    app()->environment('local')
-                        ? 'ERREUR : ' . $e->getMessage()
-                        : 'La création du proforma a échoué.'
-                );
+                'quantity' => $quantity,
+                'price' => $price,
+                'total' => $lineTotal,
+            ];
         }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | TOTAUX DU PROFORMA
+        |--------------------------------------------------------------------------
+        */
+
+        $subtotal = round($subtotal, 2);
+
+        $discountPercent = round(
+            (float) ($validated['discount'] ?? 0),
+            2
+        );
+
+        $discountAmount = round(
+            ($subtotal * $discountPercent) / 100,
+            2
+        );
+
+        $taxable = max(
+            0,
+            round(
+                $subtotal - $discountAmount,
+                2
+            )
+        );
+
+        $tva = round(
+            $taxable * 0.10,
+            2
+        );
+
+        $total = round(
+            $taxable + $tva,
+            2
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | NUMÉRO DU PROFORMA
+        |--------------------------------------------------------------------------
+        */
+
+        $nextId =
+            ((int) Proforma::max('id')) + 1;
+
+        $proformaNumber =
+            'PROFORMA-'
+            . str_pad(
+                (string) $nextId,
+                6,
+                '0',
+                STR_PAD_LEFT
+            );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | CRÉER LE PROFORMA
+        |--------------------------------------------------------------------------
+        |
+        | Aucun mode de paiement n'est demandé ici.
+        |
+        */
+
+        $proforma = Proforma::create([
+            'proforma_number' =>
+                $proformaNumber,
+
+            'customer_id' =>
+                $validated['customer_id'],
+
+            'vehicle_id' =>
+                $vehicle->id,
+
+            'created_by' =>
+                auth()->id(),
+
+            'payment_type' =>
+                null,
+
+            'subtotal' =>
+                $subtotal,
+
+            'discount' =>
+                $discountPercent,
+
+            'discount_amount' =>
+                $discountAmount,
+
+            'tva' =>
+                $tva,
+
+            'total' =>
+                $total,
+
+            'status' =>
+                Proforma::STATUS_VALIDATED,
+        ]);
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | ENREGISTRER LES PRODUITS
+        |--------------------------------------------------------------------------
+        |
+        | Une ligne peut maintenant être :
+        |
+        | - un produit du catalogue ;
+        | - un produit hors catalogue.
+        |
+        | Le proforma ne réserve pas et ne diminue pas le stock.
+        |
+        */
+
+        foreach ($validatedItems as $item) {
+            ProformaItem::create([
+                'proforma_id' =>
+                    $proforma->id,
+
+                'product_id' =>
+                    $item['product_id'],
+
+                'depot_id' =>
+                    $item['depot_id'],
+
+                'reference_libre' =>
+                    $item['reference_libre'],
+
+                'designation_libre' =>
+                    $item['designation_libre'],
+
+                'description_libre' =>
+                    $item['description_libre'],
+
+                'quantity' =>
+                    $item['quantity'],
+
+                'price' =>
+                    $item['price'],
+
+                'total' =>
+                    $item['total'],
+            ]);
+        }
+
+
+        DB::commit();
+
+        return redirect()
+            ->route(
+                'proformas.show',
+                $proforma
+            )
+            ->with(
+                'success',
+                'Le proforma a été créé avec succès.'
+            );
+
+    } catch (Throwable $e) {
+        DB::rollBack();
+
+        Log::error(
+            'Création proforma impossible.',
+            [
+                'message' =>
+                    $e->getMessage(),
+
+                'file' =>
+                    $e->getFile(),
+
+                'line' =>
+                    $e->getLine(),
+
+                'user_id' =>
+                    auth()->id(),
+
+                'customer_id' =>
+                    $validated['customer_id'] ?? null,
+
+                'vehicle_id' =>
+                    $validated['vehicle_id'] ?? null,
+            ]
+        );
+
+        return back()
+            ->withInput()
+            ->with(
+                'error',
+                app()->environment('local')
+                    ? 'ERREUR : ' . $e->getMessage()
+                    : 'La création du proforma a échoué.'
+            );
     }
+}
 
     /*
     |--------------------------------------------------------------------------

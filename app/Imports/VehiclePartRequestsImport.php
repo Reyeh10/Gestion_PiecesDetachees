@@ -22,13 +22,23 @@ class VehiclePartRequestsImport implements
     WithHeadingRow,
     SkipsEmptyRows
 {
-    /*
-    |--------------------------------------------------------------------------
-    | VÉHICULE
-    |--------------------------------------------------------------------------
-    */
+   /*
+|--------------------------------------------------------------------------
+| DESTINATION DE LA DEMANDE
+|--------------------------------------------------------------------------
+|
+| Une importation Excel peut être destinée :
+|
+| - soit à un véhicule ;
+| - soit à un dépôt.
+|
+| Une seule des deux valeurs doit être renseignée.
+|
+*/
 
-    protected int $vehicleId;
+protected ?int $vehicleId = null;
+
+protected ?int $depotId = null;
 
 
     /*
@@ -61,10 +71,48 @@ class VehiclePartRequestsImport implements
     |--------------------------------------------------------------------------
     */
 
-    public function __construct(int $vehicleId)
-    {
-        $this->vehicleId = $vehicleId;
+  /*
+|--------------------------------------------------------------------------
+| CONSTRUCTEUR
+|--------------------------------------------------------------------------
+|
+| Une seule destination est autorisée :
+|
+| Véhicule :
+| vehicleId = ID
+| depotId   = NULL
+|
+| Dépôt :
+| vehicleId = NULL
+| depotId   = ID
+|
+*/
+
+public function __construct(
+    ?int $vehicleId = null,
+    ?int $depotId = null
+) {
+    /*
+    |--------------------------------------------------------------------------
+    | SÉCURITÉ : EXACTEMENT UNE DESTINATION
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        ($vehicleId === null && $depotId === null)
+        ||
+        ($vehicleId !== null && $depotId !== null)
+    ) {
+        throw new RuntimeException(
+            'L’import doit être destiné soit à un véhicule, soit à un dépôt.'
+        );
     }
+
+
+    $this->vehicleId = $vehicleId;
+
+    $this->depotId = $depotId;
+}
 
 
     /*
@@ -628,8 +676,20 @@ class VehiclePartRequestsImport implements
                 $partRequest =
                     VehiclePartRequest::create([
 
+                        /*
+                        |--------------------------------------------------------------------------
+                        | DESTINATION
+                        |--------------------------------------------------------------------------
+                        |
+                        | La destination a déjà été validée par le constructeur.
+                        |
+                        */
+
                         'vehicle_id' =>
                             $this->vehicleId,
+
+                        'depot_id' =>
+                            $this->depotId,
 
                         'product_id' =>
                             $productId,

@@ -51,6 +51,8 @@ class VehiclePartRequest extends Model
     protected $fillable = [
 
         'vehicle_id',
+        'depot_id',
+
         'product_id',
         'supplier_id',
         'created_by',
@@ -464,5 +466,26 @@ public function latestSupplierOrderItem()
         SupplierOrderItem::class,
         'vehicle_part_request_id'
     )->latestOfMany();
+}
+
+/*
+|--------------------------------------------------------------------------
+| DÉPÔT DESTINATAIRE
+|--------------------------------------------------------------------------
+|
+| Une demande de pièce peut être destinée directement à un dépôt.
+|
+| Dans ce cas :
+|
+| vehicle_id = NULL
+| depot_id   = ID du dépôt
+|
+*/
+
+public function depot()
+{
+    return $this->belongsTo(
+        Depot::class
+    );
 }
 }

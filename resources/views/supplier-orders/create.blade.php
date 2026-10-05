@@ -402,30 +402,125 @@
 
                 <div class="bc-info-grid">
 
+                    {{-- ==================================================== --}}
+                    {{-- DESTINATION DE LA DEMANDE --}}
+                    {{-- ==================================================== --}}
+
                     <div class="bc-info">
+
                         <span class="bc-info-label">
-                            Véhicule
+                            Destination
                         </span>
 
-                        <div class="bc-info-value">
-                            {{ $vehicle?->registration_number
-                                ?? $vehicle?->immatriculation
-                                ?? $vehicle?->vin
-                                ?? ('Véhicule #' . ($vehicle?->id ?? '-')) }}
-                        </div>
+
+                        @if($vehiclePartRequest->depot)
+
+                            {{-- ================================================ --}}
+                            {{-- DESTINATION : DÉPÔT --}}
+                            {{-- ================================================ --}}
+
+                            <div class="bc-info-value">
+
+                                <i class="bx bx-building me-1"></i>
+
+                                {{
+                                    $vehiclePartRequest
+                                        ->depot
+                                        ->name
+                                }}
+
+                            </div>
+
+                        @elseif($vehicle)
+
+                            {{-- ================================================ --}}
+                            {{-- DESTINATION : VÉHICULE --}}
+                            {{-- ================================================ --}}
+
+                            <div class="bc-info-value">
+
+                                <i class="bx bx-car me-1"></i>
+
+                                {{
+                                    $vehicle->plate_number
+                                    ??
+                                    $vehicle->vin
+                                    ??
+                                    ('Véhicule #' . $vehicle->id)
+                                }}
+
+                            </div>
+
+                        @else
+
+                            <div class="bc-info-value">
+                                -
+                            </div>
+
+                        @endif
+
                     </div>
 
 
-                    <div class="bc-info">
-                        <span class="bc-info-label">
-                            Client
-                        </span>
+                    {{-- ==================================================== --}}
+                    {{-- INFORMATIONS DE LA DESTINATION --}}
+                    {{-- ==================================================== --}}
 
-                        <div class="bc-info-value">
-                            {{ $customer?->name
-                                ?? $customer?->nom
-                                ?? '-' }}
-                        </div>
+                    <div class="bc-info">
+
+                        @if($vehiclePartRequest->depot)
+
+                            <span class="bc-info-label">
+                                Dépôt
+                            </span>
+
+                            <div class="bc-info-value">
+
+                                @if($vehiclePartRequest->depot->code)
+
+                                    Code :
+                                    {{
+                                        $vehiclePartRequest
+                                            ->depot
+                                            ->code
+                                    }}
+
+                                @endif
+
+                                @if($vehiclePartRequest->depot->address)
+
+                                    <div>
+                                        {{
+                                            $vehiclePartRequest
+                                                ->depot
+                                                ->address
+                                        }}
+                                    </div>
+
+                                @endif
+
+                            </div>
+
+                        @else
+
+                            <span class="bc-info-label">
+                                Client
+                            </span>
+
+                            <div class="bc-info-value">
+
+                                {{
+                                    $customer?->name
+                                    ??
+                                    $customer?->nom
+                                    ??
+                                    '-'
+                                }}
+
+                            </div>
+
+                        @endif
+
                     </div>
 
 
@@ -542,40 +637,116 @@
                                 <span class="bc-required">*</span>
                             </label>
 
-                            <select
-                                name="depot_id"
-                                class="bc-control"
-                                required
-                            >
 
-                                <option value="">
-                                    Sélectionner le dépôt
-                                </option>
+                            @if($vehiclePartRequest->depot_id)
 
-                                @foreach($depots as $depot)
+                                {{-- ============================================ --}}
+                                {{-- DEMANDE DESTINÉE DIRECTEMENT À UN DÉPÔT --}}
+                                {{-- ============================================ --}}
+                                {{-- Le dépôt est imposé par la demande.          --}}
+                                {{-- Il ne peut pas être changé dans le BC.       --}}
+                                {{-- ============================================ --}}
 
-                                    <option
-                                        value="{{ $depot->id }}"
-                                        @selected(
-                                            old('depot_id')
-                                            == $depot->id
-                                        )
-                                    >
-                                        {{ $depot->code
-                                            ? $depot->code . ' - '
-                                            : '' }}
+                                <select
+                                    class="bc-control"
+                                    disabled
+                                >
 
-                                        {{ $depot->name }}
+                                    <option selected>
+
+                                        {{
+                                            $vehiclePartRequest
+                                                ->depot
+                                                ?->code
+                                            ? $vehiclePartRequest
+                                                ->depot
+                                                ->code . ' - '
+                                            : ''
+                                        }}
+
+                                        {{
+                                            $vehiclePartRequest
+                                                ->depot
+                                                ?->name
+                                            ?? 'Dépôt'
+                                        }}
+
                                     </option>
 
-                                @endforeach
+                                </select>
 
-                            </select>
+
+                                <input
+                                    type="hidden"
+                                    name="depot_id"
+                                    value="{{
+                                        $vehiclePartRequest
+                                            ->depot_id
+                                    }}"
+                                >
+
+
+                                <div class="text-muted mt-1">
+
+                                    <i class="bx bx-lock-alt me-1"></i>
+
+                                    Dépôt imposé par la demande de pièce.
+
+                                </div>
+
+                            @else
+
+                                {{-- ============================================ --}}
+                                {{-- DEMANDE DESTINÉE À UN VÉHICULE --}}
+                                {{-- ============================================ --}}
+                                {{-- Le dépôt de réception reste sélectionnable. --}}
+                                {{-- ============================================ --}}
+
+                                <select
+                                    name="depot_id"
+                                    class="bc-control"
+                                    required
+                                >
+
+                                    <option value="">
+                                        Sélectionner le dépôt
+                                    </option>
+
+
+                                    @foreach($depots as $depot)
+
+                                        <option
+                                            value="{{ $depot->id }}"
+                                            @selected(
+                                                old('depot_id')
+                                                ==
+                                                $depot->id
+                                            )
+                                        >
+
+                                            {{
+                                                $depot->code
+                                                ? $depot->code . ' - '
+                                                : ''
+                                            }}
+
+                                            {{ $depot->name }}
+
+                                        </option>
+
+                                    @endforeach
+
+                                </select>
+
+                            @endif
+
 
                             @error('depot_id')
+
                                 <div class="bc-invalid">
                                     {{ $message }}
                                 </div>
+
                             @enderror
 
                         </div>

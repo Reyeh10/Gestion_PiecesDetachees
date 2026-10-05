@@ -394,6 +394,18 @@ class FournisseurBonCommandeController extends Controller
             ]);
 
             /*
+             * BC déjà transféré (BT) puis modifié côté Atelier : on le repasse
+             * en « non vu » pour que le vendeur le voie et mette le BT à jour.
+             */
+            if ($bc->bon_transfert_id) {
+                $bc->load('bonTransfert.lignes');
+
+                if (! $bc->bonTransfertAJour()) {
+                    $bc->update(['vu_at' => null]);
+                }
+            }
+
+            /*
             |--------------------------------------------------------------------------
             | LOG
             |--------------------------------------------------------------------------

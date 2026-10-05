@@ -20,15 +20,14 @@ use App\Http\Controllers\StockMovementController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\ProformaController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\DepotTransferController;
 use App\Http\Controllers\VehiclePartRequestController;
 use App\Http\Controllers\SupplierOrderController;
 use App\Http\Controllers\VehicleHistoryController;
 use App\Http\Controllers\VehicleController;
+use App\Http\Controllers\BonTransfertController;
 use App\Http\Controllers\FournisseurCommandeController;
-
-use App\Http\Controllers\PurchaseController;
-use App\Http\Controllers\NotificationController;
 
 
 //use Illuminate\Http\Request;
@@ -128,7 +127,6 @@ Route::middleware(['auth'])->group(function () {
         ->name('notifications.open');
 
 });
-
 /*
 |--------------------------------------------------------------------------
 | DASHBOARD
@@ -222,8 +220,6 @@ Route::middleware([
 
 });
 
-
-
 /*
 |--------------------------------------------------------------------------
 | PRODUITS
@@ -269,18 +265,19 @@ Route::middleware([
         '/products/sold',
         [ProductController::class, 'sold']
     )->name('products.sold');
-
-
     /*
-|--------------------------------------------------------------------------
-| EXPORT EXCEL DES PRODUITS VENDUS
-|--------------------------------------------------------------------------
-*/
+    |--------------------------------------------------------------------------
+    | EXPORT EXCEL DES PRODUITS VENDUS
+    |--------------------------------------------------------------------------
+    */
 
-Route::get(
-    '/products/sold/export',
-    [ProductController::class, 'exportSoldExcel']
-)->name('products.sold.export');
+    Route::get(
+        '/products/sold/export',
+        [ProductController::class, 'exportSoldExcel']
+    )->name('products.sold.export');
+
+
+
     /*
     |--------------------------------------------------------------------------
     | PRODUITS NON DISPONIBLES
@@ -607,102 +604,6 @@ Route::middleware([
 
 });
 
-/*
-|--------------------------------------------------------------------------
-| ACHATS FOURNISSEURS
-|--------------------------------------------------------------------------
-*/
-
-Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier'
-])->group(function () {
-
-    /*
-    |--------------------------------------------------------------------------
-    | LISTE
-    |--------------------------------------------------------------------------
-    */
-
-    Route::get(
-        '/purchases',
-        [PurchaseController::class, 'index']
-    )->name('purchases.index');
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | PRODUITS DU FOURNISSEUR - AJAX
-    |--------------------------------------------------------------------------
-    |
-    | IMPORTANT :
-    | Cette route doit rester avant /purchases/{purchase}.
-    |
-    */
-
-    Route::get(
-        '/purchases/supplier-products/{supplier}',
-        [
-            PurchaseController::class,
-            'getSupplierProducts',
-        ]
-    )->name(
-        'purchases.supplier-products'
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | CRÉER
-    |--------------------------------------------------------------------------
-    */
-
-    Route::get(
-        '/purchases/create',
-        [PurchaseController::class, 'create']
-    )->name('purchases.create');
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | ENREGISTRER
-    |--------------------------------------------------------------------------
-    */
-
-    Route::post(
-        '/purchases',
-        [PurchaseController::class, 'store']
-    )->name('purchases.store');
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | AFFICHER
-    |--------------------------------------------------------------------------
-    */
-
-    Route::get(
-        '/purchases/{purchase}',
-        [PurchaseController::class, 'show']
-    )
-    ->whereNumber('purchase')
-    ->name('purchases.show');
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | ANNULER / SUPPRIMER
-    |--------------------------------------------------------------------------
-    */
-
-    Route::delete(
-        '/purchases/{purchase}',
-        [PurchaseController::class, 'destroy']
-    )
-    ->whereNumber('purchase')
-    ->name('purchases.destroy');
-
-});
 /*
 |--------------------------------------------------------------------------
 | CLIENTS
@@ -1367,45 +1268,15 @@ Route::middleware(['auth'])->group(function () {
     );
 
 
-        /*
+    /*
     |--------------------------------------------------------------------------
-    | IMPORT EXCEL DES DEMANDES DE PIÈCES
-    |--------------------------------------------------------------------------
-    |
-    | Importe une liste de pièces depuis un fichier Excel.
-    | Cette route doit rester AVANT Route::resource().
-    |
-    */
-
-    Route::post(
-        '/vehicle-part-requests/import-excel',
-        [
-            VehiclePartRequestController::class,
-            'importExcel'
-        ]
-    )->name(
-        'vehicle-part-requests.import-excel'
-    );
-
-        /*
-    |--------------------------------------------------------------------------
-    | TÉLÉCHARGER LE MODÈLE EXCEL
+    | Autres routes CRUD
     |--------------------------------------------------------------------------
     |
-    | Permet de télécharger le fichier modèle utilisé pour l'import
-    | des demandes de pièces.
+    | On exclut index parce que nous l'avons déclaré manuellement plus haut.
     |
     */
 
-    Route::get(
-        '/vehicle-part-requests/import-template',
-        [
-            VehiclePartRequestController::class,
-            'downloadImportTemplate'
-        ]
-    )->name(
-        'vehicle-part-requests.import-template'
-    );
        /*
     |--------------------------------------------------------------------------
     | BONS DE COMMANDE FOURNISSEUR
@@ -1600,22 +1471,52 @@ Route::get(
     )
         ->whereNumber('supplierOrder')
         ->name('supplier-orders.show');
+    /*
+    |--------------------------------------------------------------------------
+    | IMPORT EXCEL DES DEMANDES DE PIÈCES
+    |--------------------------------------------------------------------------
+    |
+    | Importe une liste de pièces depuis un fichier Excel.
+    | Cette route doit rester AVANT Route::resource().
+    |
+    */
+
+    Route::post(
+        '/vehicle-part-requests/import-excel',
+        [
+            VehiclePartRequestController::class,
+            'importExcel'
+        ]
+    )->name(
+        'vehicle-part-requests.import-excel'
+    );
 
 
     /*
     |--------------------------------------------------------------------------
-    | AUTRES ROUTES CRUD DES DEMANDES DE PIÈCES
+    | TÉLÉCHARGER LE MODÈLE EXCEL
     |--------------------------------------------------------------------------
     |
-    | L'index est déjà déclaré manuellement plus haut.
+    | Permet de télécharger le fichier modèle utilisé pour l'import
+    | des demandes de pièces.
     |
     */
+
+    Route::get(
+        '/vehicle-part-requests/import-template',
+        [
+            VehiclePartRequestController::class,
+            'downloadImportTemplate'
+        ]
+    )->name(
+        'vehicle-part-requests.import-template'
+    );
+
+
     Route::resource(
         'vehicle-part-requests',
         VehiclePartRequestController::class
-    )->except([
-        'index',
-    ]);
+    )->except(['index']);
 
 });
 /*
@@ -1962,7 +1863,7 @@ Route::middleware([
 | - index        : liste des bons reçus
 | - show         : détail d'un bon
 | - updateLigne  : identification / disponibilité d'une ligne
-| - creerVente   : conversion du bon en vente
+| - creerBonTransfert : création du bon de transfert (BT)
 |
 */
 
@@ -2021,16 +1922,56 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | CONVERTIR LE BON DE COMMANDE EN VENTE
+    | CRÉER LE BON DE TRANSFERT (BT) DU BON DE COMMANDE
     |--------------------------------------------------------------------------
     */
 
     Route::post(
-        '/fournisseur-commandes/{fournisseurCommande}/creer-vente',
-        [FournisseurCommandeController::class, 'creerVente']
+        '/fournisseur-commandes/{fournisseurCommande}/creer-bon-transfert',
+        [FournisseurCommandeController::class, 'creerBonTransfert']
     )
     ->whereNumber('fournisseurCommande')
-    ->name('fournisseur-commandes.creer-vente');
+    ->name('fournisseur-commandes.creer-bon-transfert');
+
+    Route::post(
+        '/fournisseur-commandes/{fournisseurCommande}/mettre-a-jour-bon-transfert',
+        [FournisseurCommandeController::class, 'mettreAJourBonTransfert']
+    )
+    ->whereNumber('fournisseurCommande')
+    ->name('fournisseur-commandes.mettre-a-jour-bon-transfert');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | BONS DE TRANSFERT (BT)
+    |--------------------------------------------------------------------------
+    */
+
+    Route::get(
+        '/bons-transfert',
+        [BonTransfertController::class, 'index']
+    )->name('bons-transfert.index');
+
+    Route::get(
+        '/bons-transfert/{bonTransfert}',
+        [BonTransfertController::class, 'show']
+    )
+    ->whereNumber('bonTransfert')
+    ->name('bons-transfert.show');
+
+    Route::get(
+        '/bons-transfert/{bonTransfert}/pdf',
+        [BonTransfertController::class, 'pdf']
+    )
+    ->whereNumber('bonTransfert')
+    ->name('bons-transfert.pdf');
+
+    Route::post(
+        '/bons-transfert/{bonTransfert}/envoyer',
+        [BonTransfertController::class, 'envoyer']
+    )
+    ->whereNumber('bonTransfert')
+    ->name('bons-transfert.envoyer');
 
 });
 

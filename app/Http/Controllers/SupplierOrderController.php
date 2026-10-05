@@ -146,6 +146,19 @@ class SupplierOrderController extends Controller
 
         $vehiclePartRequest->load([
             'vehicle.customer',
+
+            /*
+            |--------------------------------------------------------------------------
+            | DESTINATION DÉPÔT
+            |--------------------------------------------------------------------------
+            |
+            | Une demande de pièce peut maintenant être destinée soit
+            | à un véhicule, soit directement à un dépôt.
+            |
+            */
+
+            'depot',
+
             'product',
             'supplier',
             'latestSupplierOrderItem.supplierOrder',
@@ -1027,6 +1040,129 @@ public function createFromPartRequests(Request $request): View|RedirectResponse
 
                     /*
                     |--------------------------------------------------------------------------
+                    | SÉCURISER LE DÉPÔT DE DESTINATION
+                    |--------------------------------------------------------------------------
+                    |
+                    | Une demande de pièce peut être destinée :
+                    |
+                    | 1. directement à un DÉPÔT ;
+                    | 2. à un VÉHICULE.
+                    |
+                    | Pour une demande destinée directement à un dépôt,
+                    | le dépôt enregistré dans vehicle_part_requests.depot_id
+                    | est prioritaire et ne peut jamais être remplacé par
+                    | une valeur envoyée manuellement depuis le formulaire.
+                    |
+                    | Pour un BC contenant plusieurs pièces destinées à des dépôts,
+                    | toutes les demandes doivent appartenir au même dépôt.
+                    |
+                    |--------------------------------------------------------------------------
+                    */
+
+                    $forcedDepotIds =
+                        $partRequests
+                            ->pluck('depot_id')
+                            ->filter(
+                                fn ($depotId) =>
+                                    !is_null($depotId)
+                            )
+                            ->map(
+                                fn ($depotId) =>
+                                    (int) $depotId
+                            )
+                            ->unique()
+                            ->values();
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | PLUSIEURS DÉPÔTS DIFFÉRENTS = BC INTERDIT
+                    |--------------------------------------------------------------------------
+                    */
+
+                    if ($forcedDepotIds->count() > 1) {
+
+                        throw ValidationException::withMessages([
+                            'depot_id' =>
+                                'Les pièces sélectionnées sont destinées à plusieurs dépôts différents. '
+                                . 'Elles ne peuvent pas être regroupées dans le même bon de commande.',
+                        ]);
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | DÉTERMINER LE DÉPÔT FINAL DU BC
+                    |--------------------------------------------------------------------------
+                    */
+
+                    if ($forcedDepotIds->count() === 1) {
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | DESTINATION IMPOSÉE PAR LA DEMANDE
+                        |--------------------------------------------------------------------------
+                        |
+                        | Au moins une demande possède depot_id.
+                        | Le serveur impose donc ce dépôt.
+                        |
+                        */
+
+                        $supplierOrderDepotId =
+                            (int) $forcedDepotIds->first();
+
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | EMPÊCHER LE MÉLANGE DÉPÔT / VÉHICULE
+                        |--------------------------------------------------------------------------
+                        |
+                        | Si le BC contient plusieurs lignes et qu'une demande est
+                        | destinée à un dépôt alors que l'autre est destinée à un
+                        | véhicule, nous refusons le regroupement.
+                        |
+                        */
+
+                        $containsVehicleDestination =
+                            $partRequests->contains(
+                                function ($partRequest) {
+                                    return
+                                        is_null($partRequest->depot_id)
+                                        &&
+                                        !is_null($partRequest->vehicle_id);
+                                }
+                            );
+
+                        if ($containsVehicleDestination) {
+
+                            throw ValidationException::withMessages([
+                                'depot_id' =>
+                                    'Un même bon de commande ne peut pas mélanger '
+                                    . 'des pièces destinées directement à un dépôt '
+                                    . 'et des pièces destinées à des véhicules.',
+                            ]);
+                        }
+
+                    } else {
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | DEMANDES DESTINÉES AUX VÉHICULES
+                        |--------------------------------------------------------------------------
+                        |
+                        | Aucun dépôt n'est imposé par les demandes.
+                        | Nous conservons donc le dépôt de réception sélectionné
+                        | dans le formulaire.
+                        |
+                        */
+
+                        $supplierOrderDepotId =
+                            (int) $validated['depot_id'];
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
                     | PRÉPARER LES LIGNES DU BC
                     |--------------------------------------------------------------------------
                     */
@@ -1326,8 +1462,19 @@ public function createFromPartRequests(Request $request): View|RedirectResponse
                             'supplier_id' =>
                                 $validated['supplier_id'],
 
+                            /*
+                            |--------------------------------------------------------------------------
+                            | DÉPÔT SÉCURISÉ
+                            |--------------------------------------------------------------------------
+                            |
+                            | Ne jamais utiliser directement depot_id provenant
+                            | du formulaire lorsqu'une demande impose déjà
+                            | son propre dépôt.
+                            |
+                            */
+
                             'depot_id' =>
-                                $validated['depot_id'],
+                                $supplierOrderDepotId,
 
                             'created_by' =>
                                 auth()->id(),

@@ -17,6 +17,37 @@
             ?? null
     );
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | DÉPÔT SÉLECTIONNÉ
+    |--------------------------------------------------------------------------
+    */
+
+    $selectedDepot = old(
+        'depot_id',
+        $vehiclePartRequest->depot_id
+            ?? $selectedDepotId
+            ?? null
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | TYPE DE DESTINATION
+    |--------------------------------------------------------------------------
+    |
+    | Si un dépôt est sélectionné, on ouvre le mode dépôt.
+    | Sinon, le mode véhicule reste le mode par défaut.
+    |
+    */
+
+    $destinationType =
+        $selectedDepot
+            ? 'depot'
+            : 'vehicle';
+
+
     $selectedProduct = old(
         'product_id',
         $vehiclePartRequest->product_id
@@ -317,6 +348,132 @@
 
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | CHOIX DE LA DESTINATION
+    |--------------------------------------------------------------------------
+    */
+
+    .vpr-destination-wrapper {
+        margin-bottom: 18px;
+    }
+
+    .vpr-destination-label {
+        display: block;
+        margin-bottom: 8px;
+
+        font-size: 12px;
+        font-weight: 800;
+
+        color: #52657b;
+
+        text-transform: uppercase;
+        letter-spacing: .03em;
+    }
+
+    .vpr-destination-options {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .vpr-destination-option {
+        position: relative;
+
+        display: flex;
+        align-items: center;
+
+        gap: 10px;
+
+        min-height: 54px;
+        padding: 10px 14px;
+
+        background: #ffffff;
+
+        border: 1px solid #d8dee8;
+        border-radius: 10px;
+
+        cursor: pointer;
+
+        transition:
+            border-color .18s ease,
+            box-shadow .18s ease,
+            background .18s ease;
+    }
+
+    .vpr-destination-option:hover {
+        border-color: #696cff;
+    }
+
+    .vpr-destination-option.active {
+        background: rgba(105, 108, 255, .06);
+        border-color: #696cff;
+        box-shadow: 0 0 0 2px rgba(105, 108, 255, .08);
+    }
+
+    .vpr-destination-option input {
+        position: absolute;
+
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .vpr-destination-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        width: 34px;
+        height: 34px;
+
+        flex: 0 0 34px;
+
+        border-radius: 8px;
+
+        background: #f3f4f6;
+
+        font-size: 19px;
+        color: #696cff;
+    }
+
+    .vpr-destination-option.active .vpr-destination-icon {
+        background: #696cff;
+        color: #ffffff;
+    }
+
+    .vpr-destination-text strong {
+        display: block;
+
+        margin-bottom: 2px;
+
+        font-size: 13px;
+        color: #334155;
+    }
+
+    .vpr-destination-text small {
+        display: block;
+
+        font-size: 11px;
+        color: #8492a6;
+    }
+
+    .vpr-destination-panel {
+        display: none;
+    }
+
+    .vpr-destination-panel.active {
+        display: block;
+    }
+
+    @media (max-width: 575.98px) {
+
+        .vpr-destination-options {
+            grid-template-columns: 1fr;
+        }
+    }
+
+
 </style>
 
 
@@ -339,10 +496,124 @@
 
 
         {{-- ===================================================== --}}
-        {{-- VÉHICULE --}}
+        {{-- DESTINATION DE LA PIÈCE --}}
         {{-- ===================================================== --}}
 
-        <div class="col-md-6">
+        <div class="col-12">
+
+            <div class="vpr-destination-wrapper">
+
+                <span class="vpr-destination-label">
+
+                    Destination de la pièce
+
+                    <span class="text-danger">*</span>
+
+                </span>
+
+
+                <div class="vpr-destination-options">
+
+                    {{-- ========================================= --}}
+                    {{-- DESTINATION : VÉHICULE --}}
+                    {{-- ========================================= --}}
+
+                    <label
+                        class="
+                            vpr-destination-option
+                            {{ $destinationType === 'vehicle' ? 'active' : '' }}
+                        "
+                        id="destination_vehicle_option"
+                    >
+
+                        <input
+                            type="radio"
+                            name="destination_type"
+                            value="vehicle"
+                            id="destination_vehicle"
+                            @checked($destinationType === 'vehicle')
+                        >
+
+                        <span class="vpr-destination-icon">
+
+                            <i class="bx bx-car"></i>
+
+                        </span>
+
+                        <span class="vpr-destination-text">
+
+                            <strong>
+                                Véhicule
+                            </strong>
+
+                            <small>
+                                Pièce commandée pour un véhicule
+                            </small>
+
+                        </span>
+
+                    </label>
+
+
+                    {{-- ========================================= --}}
+                    {{-- DESTINATION : DÉPÔT --}}
+                    {{-- ========================================= --}}
+
+                    <label
+                        class="
+                            vpr-destination-option
+                            {{ $destinationType === 'depot' ? 'active' : '' }}
+                        "
+                        id="destination_depot_option"
+                    >
+
+                        <input
+                            type="radio"
+                            name="destination_type"
+                            value="depot"
+                            id="destination_depot"
+                            @checked($destinationType === 'depot')
+                        >
+
+                        <span class="vpr-destination-icon">
+
+                            <i class="bx bx-building-house"></i>
+
+                        </span>
+
+                        <span class="vpr-destination-text">
+
+                            <strong>
+                                Dépôt
+                            </strong>
+
+                            <small>
+                                Pièce commandée pour le stock d'un dépôt
+                            </small>
+
+                        </span>
+
+                    </label>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        {{-- ===================================================== --}}
+        {{-- PANNEAU VÉHICULE --}}
+        {{-- ===================================================== --}}
+
+        <div
+            class="
+                col-md-6
+                vpr-destination-panel
+                {{ $destinationType === 'vehicle' ? 'active' : '' }}
+            "
+            id="vehicle_destination_panel"
+        >
 
             <label
                 for="vehicle_id"
@@ -357,6 +628,7 @@
 
 
             {{-- BARRE RECHERCHE VÉHICULE --}}
+
             <div class="vpr-search-wrapper">
 
                 <i
@@ -393,6 +665,7 @@
 
 
             {{-- COMPTEUR --}}
+
             <div
                 id="vehicle_search_result"
                 class="vpr-search-result"
@@ -400,6 +673,7 @@
 
 
             {{-- LISTE DES VÉHICULES --}}
+
             <select
                 name="vehicle_id"
                 id="vehicle_id"
@@ -409,13 +683,10 @@
                         is-invalid
                     @enderror
                 "
-                required
             >
 
                 <option value="">
-
                     Sélectionner un véhicule
-
                 </option>
 
 
@@ -487,6 +758,93 @@
 
                 Recherche par VIN, immatriculation,
                 marque, modèle ou nom du client.
+
+            </div>
+
+        </div>
+
+
+        {{-- ===================================================== --}}
+        {{-- PANNEAU DÉPÔT --}}
+        {{-- ===================================================== --}}
+
+        <div
+            class="
+                col-md-6
+                vpr-destination-panel
+                {{ $destinationType === 'depot' ? 'active' : '' }}
+            "
+            id="depot_destination_panel"
+        >
+
+            <label
+                for="depot_id"
+                class="form-label"
+            >
+
+                Dépôt
+
+                <span class="text-danger">*</span>
+
+            </label>
+
+
+            <select
+                name="depot_id"
+                id="depot_id"
+                class="
+                    form-select
+                    @error('depot_id')
+                        is-invalid
+                    @enderror
+                "
+            >
+
+                <option value="">
+                    Sélectionner un dépôt
+                </option>
+
+
+                @foreach($depots as $depot)
+
+                    <option
+                        value="{{ $depot->id }}"
+                        @selected(
+                            (string) $selectedDepot
+                            ===
+                            (string) $depot->id
+                        )
+                    >
+
+                        {{ $depot->name }}
+
+                        @if(!empty($depot->code))
+
+                            - {{ $depot->code }}
+
+                        @endif
+
+                    </option>
+
+                @endforeach
+
+            </select>
+
+
+            @error('depot_id')
+
+                <div class="invalid-feedback">
+
+                    {{ $message }}
+
+                </div>
+
+            @enderror
+
+
+            <div class="vpr-form-help">
+
+                Sélectionnez le dépôt qui recevra la pièce.
 
             </div>
 
@@ -1295,6 +1653,48 @@ document.addEventListener(
 
         /*
         |--------------------------------------------------------------------------
+        | DESTINATION DE LA PIÈCE
+        |--------------------------------------------------------------------------
+        */
+
+        const destinationVehicle =
+            document.getElementById(
+                'destination_vehicle'
+            );
+
+        const destinationDepot =
+            document.getElementById(
+                'destination_depot'
+            );
+
+        const destinationVehicleOption =
+            document.getElementById(
+                'destination_vehicle_option'
+            );
+
+        const destinationDepotOption =
+            document.getElementById(
+                'destination_depot_option'
+            );
+
+        const vehicleDestinationPanel =
+            document.getElementById(
+                'vehicle_destination_panel'
+            );
+
+        const depotDestinationPanel =
+            document.getElementById(
+                'depot_destination_panel'
+            );
+
+        const depotSelect =
+            document.getElementById(
+                'depot_id'
+            );
+
+
+        /*
+        |--------------------------------------------------------------------------
         | ÉLÉMENTS VÉHICULE
         |--------------------------------------------------------------------------
         */
@@ -1372,6 +1772,146 @@ document.addEventListener(
             document.getElementById(
                 'selected_product_info'
             );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | AFFICHER LA BONNE DESTINATION
+        |--------------------------------------------------------------------------
+        |
+        | Véhicule :
+        | - affiche la recherche véhicule ;
+        | - vide depot_id.
+        |
+        | Dépôt :
+        | - affiche la liste des dépôts ;
+        | - vide vehicle_id.
+        |
+        */
+
+        function updateDestination(type) {
+
+            const isVehicle =
+                type === 'vehicle';
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | BOUTONS
+            |--------------------------------------------------------------------------
+            */
+
+            if (destinationVehicleOption) {
+
+                destinationVehicleOption.classList.toggle(
+                    'active',
+                    isVehicle
+                );
+            }
+
+            if (destinationDepotOption) {
+
+                destinationDepotOption.classList.toggle(
+                    'active',
+                    !isVehicle
+                );
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | PANNEAUX
+            |--------------------------------------------------------------------------
+            */
+
+            if (vehicleDestinationPanel) {
+
+                vehicleDestinationPanel.classList.toggle(
+                    'active',
+                    isVehicle
+                );
+            }
+
+            if (depotDestinationPanel) {
+
+                depotDestinationPanel.classList.toggle(
+                    'active',
+                    !isVehicle
+                );
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | VIDER LA DESTINATION OPPOSÉE
+            |--------------------------------------------------------------------------
+            */
+
+            if (isVehicle) {
+
+                if (depotSelect) {
+
+                    depotSelect.value = '';
+                }
+
+            } else {
+
+                if (vehicleSelect) {
+
+                    vehicleSelect.value = '';
+                }
+
+                if (vehicleSearch) {
+
+                    vehicleSearch.value = '';
+                }
+
+                if (vehicleSearchResult) {
+
+                    vehicleSearchResult.textContent = '';
+                }
+            }
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | ÉVÉNEMENTS DESTINATION
+        |--------------------------------------------------------------------------
+        */
+
+        if (destinationVehicle) {
+
+            destinationVehicle.addEventListener(
+                'change',
+                function () {
+
+                    if (this.checked) {
+
+                        updateDestination(
+                            'vehicle'
+                        );
+                    }
+                }
+            );
+        }
+
+
+        if (destinationDepot) {
+
+            destinationDepot.addEventListener(
+                'change',
+                function () {
+
+                    if (this.checked) {
+
+                        updateDestination(
+                            'depot'
+                        );
+                    }
+                }
+            );
+        }
 
 
         /*

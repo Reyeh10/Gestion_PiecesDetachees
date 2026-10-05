@@ -1585,166 +1585,280 @@
 
 
                         {{-- ===================================== --}}
-                        {{-- RECHERCHE VÉHICULE --}}
+                        {{-- TYPE DE DESTINATION --}}
                         {{-- ===================================== --}}
 
                         <div class="col-xl-3 col-md-6">
 
                             <label
-                                for="vehicle_search"
+                                for="destination_type"
                                 class="form-label"
                             >
 
-                                Recherche véhicule
+                                Type de destination
 
                             </label>
 
 
-                            <div
-                                class="
-                                    vehicle-search-group
-                                "
+                            <select
+                                name="destination_type"
+                                id="destination_type"
+                                class="form-select"
                             >
 
-                                <div class="input-group">
+                                <option
+                                    value=""
+                                    @selected(
+                                        request('destination_type')
+                                        ===
+                                        null
+                                        ||
+                                        request('destination_type')
+                                        ===
+                                        ''
+                                    )
+                                >
 
-                                    <span
-                                        class="input-group-text"
-                                    >
+                                    Toutes les destinations
 
-                                        <i
-                                            class="
-                                                bx
-                                                bx-search
-                                            "
-                                        ></i>
-
-                                    </span>
-
-                                    <input
-                                        type="text"
-                                        id="vehicle_search"
-                                        class="form-control"
-                                        placeholder="VIN, immatriculation, marque, modèle..."
-                                        autocomplete="off"
-                                    >
-
-                                </div>
-
-                            </div>
+                                </option>
 
 
-                            <div
-                                id="vehicle_search_info"
-                                class="
-                                    vehicle-search-info
-                                "
-                            ></div>
+                                <option
+                                    value="vehicle"
+                                    @selected(
+                                        request('destination_type')
+                                        ===
+                                        'vehicle'
+                                    )
+                                >
+
+                                    Véhicule
+
+                                </option>
+
+
+                                <option
+                                    value="depot"
+                                    @selected(
+                                        request('destination_type')
+                                        ===
+                                        'depot'
+                                    )
+                                >
+
+                                    Dépôt
+
+                                </option>
+
+                            </select>
 
                         </div>
 
 
                         {{-- ===================================== --}}
-                        {{-- VÉHICULE --}}
+                        {{-- DESTINATION --}}
                         {{-- ===================================== --}}
 
                         <div class="col-xl-3 col-md-6">
 
                             <label
                                 for="vehicle_id"
+                                id="destination_filter_label"
                                 class="form-label"
                             >
 
-                                Véhicule
+                                Destination
 
                             </label>
 
-                            <select
-                                name="vehicle_id"
-                                id="vehicle_id"
-                                class="form-select"
+
+                            {{-- ================================= --}}
+                            {{-- VÉHICULE --}}
+                            {{-- ================================= --}}
+
+                            <div
+                                id="vehicle_filter_container"
                             >
 
-                                <option value="">
+                                <div
+                                    id="vehicle_search_container"
+                                    class="mb-2"
+                                    style="display: none;"
+                                >
 
-                                    Tous les véhicules
+                                    <div class="input-group">
 
-                                </option>
+                                        <span
+                                            class="input-group-text"
+                                        >
+
+                                            <i
+                                                class="
+                                                    bx
+                                                    bx-search
+                                                "
+                                            ></i>
+
+                                        </span>
+
+                                        <input
+                                            type="text"
+                                            id="vehicle_search"
+                                            class="form-control"
+                                            placeholder="Rechercher un véhicule..."
+                                            autocomplete="off"
+                                        >
+
+                                    </div>
 
 
-                                @foreach($vehicles as $vehicle)
+                                    <div
+                                        id="vehicle_search_info"
+                                        class="vehicle-search-info"
+                                    ></div>
 
-                                    <option
-                                        value="{{ $vehicle->id }}"
+                                </div>
 
-                                        data-vin="{{
-                                            $vehicle->vin
-                                            ?? ''
-                                        }}"
 
-                                        data-plate="{{
-                                            $vehicle->plate_number
-                                            ?? ''
-                                        }}"
+                                <select
+                                    name="vehicle_id"
+                                    id="vehicle_id"
+                                    class="form-select"
+                                >
 
-                                        data-brand="{{
-                                            $vehicle->brand
-                                            ?? ''
-                                        }}"
+                                    <option value="">
 
-                                        data-model="{{
-                                            $vehicle->model
-                                            ?? ''
-                                        }}"
-
-                                        data-customer="{{
-                                            $vehicle->customer->name
-                                            ?? ''
-                                        }}"
-
-                                        @selected(
-                                            (string)
-                                            request(
-                                                'vehicle_id'
-                                            )
-                                            ===
-                                            (string)
-                                            $vehicle->id
-                                        )
-                                    >
-
-                                        {{
-                                            $vehicle->plate_number
-                                            ??
-                                            $vehicle->vin
-                                            ??
-                                            '-'
-                                        }}
-
-                                        @if(
-                                            $vehicle->brand
-                                            ||
-                                            $vehicle->model
-                                        )
-
-                                            -
-                                            {{
-                                                $vehicle->brand
-                                                ?? ''
-                                            }}
-
-                                            {{
-                                                $vehicle->model
-                                                ?? ''
-                                            }}
-
-                                        @endif
+                                        Tous les véhicules
 
                                     </option>
 
-                                @endforeach
 
-                            </select>
+                                    @foreach($vehicles as $vehicle)
+
+                                        <option
+                                            value="{{ $vehicle->id }}"
+
+                                            data-vin="{{
+                                                $vehicle->vin
+                                                ?? ''
+                                            }}"
+
+                                            data-plate="{{
+                                                $vehicle->plate_number
+                                                ?? ''
+                                            }}"
+
+                                            data-brand="{{
+                                                $vehicle->brand
+                                                ?? ''
+                                            }}"
+
+                                            data-model="{{
+                                                $vehicle->model
+                                                ?? ''
+                                            }}"
+
+                                            data-customer="{{
+                                                $vehicle->customer->name
+                                                ?? ''
+                                            }}"
+
+                                            @selected(
+                                                (string)
+                                                request('vehicle_id')
+                                                ===
+                                                (string)
+                                                $vehicle->id
+                                            )
+                                        >
+
+                                            {{
+                                                $vehicle->plate_number
+                                                ??
+                                                $vehicle->vin
+                                                ??
+                                                '-'
+                                            }}
+
+                                            @if(
+                                                $vehicle->brand
+                                                ||
+                                                $vehicle->model
+                                            )
+
+                                                -
+                                                {{
+                                                    $vehicle->brand
+                                                    ?? ''
+                                                }}
+
+                                                {{
+                                                    $vehicle->model
+                                                    ?? ''
+                                                }}
+
+                                            @endif
+
+                                        </option>
+
+                                    @endforeach
+
+                                </select>
+
+                            </div>
+
+
+                            {{-- ================================= --}}
+                            {{-- DÉPÔT --}}
+                            {{-- ================================= --}}
+
+                            <div
+                                id="depot_filter_container"
+                                style="display: none;"
+                            >
+
+                                <select
+                                    name="depot_id"
+                                    id="depot_id"
+                                    class="form-select"
+                                >
+
+                                    <option value="">
+
+                                        Tous les dépôts
+
+                                    </option>
+
+
+                                    @foreach($depots as $depot)
+
+                                        <option
+                                            value="{{ $depot->id }}"
+                                            @selected(
+                                                (string)
+                                                request('depot_id')
+                                                ===
+                                                (string)
+                                                $depot->id
+                                            )
+                                        >
+
+                                            {{ $depot->name }}
+
+                                            @if($depot->code)
+
+                                                - {{ $depot->code }}
+
+                                            @endif
+
+                                        </option>
+
+                                    @endforeach
+
+                                </select>
+
+                            </div>
 
                         </div>
 
@@ -1953,7 +2067,7 @@
                                 @endif
 
                                 <th>
-                                    Véhicule
+                                    Destination
                                 </th>
 
                                 <th>
@@ -2090,20 +2204,30 @@
 
                                     @endif
                                     {{-- ========================= --}}
-                                    {{-- VÉHICULE --}}
+                                    {{-- DESTINATION --}}
                                     {{-- ========================= --}}
 
                                     <td>
 
+                                        {{-- ========================= --}}
+                                        {{-- DESTINATION : VÉHICULE --}}
+                                        {{-- ========================= --}}
+
                                         @if(
+                                            $partRequest->vehicle_id
+                                            &&
                                             $partRequest->vehicle
                                         )
 
-                                            <div
-                                                class="
-                                                    vehicle-number
-                                                "
-                                            >
+                                            <div class="vehicle-number">
+
+                                                <i
+                                                    class="
+                                                        bx
+                                                        bx-car
+                                                        me-1
+                                                    "
+                                                ></i>
 
                                                 {{
                                                     $partRequest
@@ -2186,15 +2310,125 @@
 
                                             @endif
 
-                                        @else
 
-                                            <span
-                                                class="
-                                                    text-danger
-                                                "
-                                            >
+                                        {{-- ========================= --}}
+                                        {{-- DESTINATION : DÉPÔT --}}
+                                        {{-- ========================= --}}
+
+                                        @elseif(
+                                            $partRequest->depot_id
+                                            &&
+                                            $partRequest->depot
+                                        )
+
+                                            <div class="vehicle-number">
+
+                                                <i
+                                                    class="
+                                                        bx
+                                                        bx-building-house
+                                                        me-1
+                                                    "
+                                                ></i>
+
+                                                {{
+                                                    $partRequest
+                                                        ->depot
+                                                        ->name
+                                                }}
+
+                                            </div>
+
+
+                                            @if(
+                                                $partRequest
+                                                    ->depot
+                                                    ->code
+                                            )
+
+                                                <small
+                                                    class="
+                                                        text-muted
+                                                        d-block
+                                                    "
+                                                >
+
+                                                    Code :
+
+                                                    {{
+                                                        $partRequest
+                                                            ->depot
+                                                            ->code
+                                                    }}
+
+                                                </small>
+
+                                            @endif
+
+
+                                            @if(
+                                                $partRequest
+                                                    ->depot
+                                                    ->address
+                                            )
+
+                                                <small
+                                                    class="
+                                                        text-muted
+                                                        d-block
+                                                    "
+                                                >
+
+                                                    {{
+                                                        $partRequest
+                                                            ->depot
+                                                            ->address
+                                                    }}
+
+                                                </small>
+
+                                            @endif
+
+
+                                        {{-- ========================= --}}
+                                        {{-- VÉHICULE RÉFÉRENCÉ ABSENT --}}
+                                        {{-- ========================= --}}
+
+                                        @elseif(
+                                            $partRequest->vehicle_id
+                                        )
+
+                                            <span class="text-danger">
 
                                                 Véhicule supprimé
+
+                                            </span>
+
+
+                                        {{-- ========================= --}}
+                                        {{-- DÉPÔT RÉFÉRENCÉ ABSENT --}}
+                                        {{-- ========================= --}}
+
+                                        @elseif(
+                                            $partRequest->depot_id
+                                        )
+
+                                            <span class="text-danger">
+
+                                                Dépôt supprimé
+
+                                            </span>
+
+
+                                        {{-- ========================= --}}
+                                        {{-- ANCIENNE DONNÉE --}}
+                                        {{-- ========================= --}}
+
+                                        @else
+
+                                            <span class="text-muted">
+
+                                                Aucune destination
 
                                             </span>
 
@@ -2719,6 +2953,38 @@ document.addEventListener(
                 'vehicle_search_info'
             );
 
+        /*
+        |--------------------------------------------------------------------------
+        | FILTRE TYPE DE DESTINATION
+        |--------------------------------------------------------------------------
+        */
+
+        const destinationType =
+            document.getElementById(
+                'destination_type'
+            );
+
+        const vehicleFilterContainer =
+            document.getElementById(
+                'vehicle_filter_container'
+            );
+
+        const vehicleSearchContainer =
+            document.getElementById(
+                'vehicle_search_container'
+            );
+
+        const depotFilterContainer =
+            document.getElementById(
+                'depot_filter_container'
+            );
+
+        const depotSelect =
+            document.getElementById(
+                'depot_id'
+            );
+
+
 
         /*
         |--------------------------------------------------------------------------
@@ -2742,6 +3008,133 @@ document.addEventListener(
                         }
                     )
                 : [];
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | AFFICHER LE BON FILTRE DE DESTINATION
+        |--------------------------------------------------------------------------
+        */
+
+        function updateDestinationFilter() {
+
+            if (!destinationType) {
+                return;
+            }
+
+            const type =
+                destinationType.value;
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | VÉHICULE
+            |--------------------------------------------------------------------------
+            */
+
+            if (type === 'vehicle') {
+
+                if (vehicleFilterContainer) {
+                    vehicleFilterContainer.style.display = '';
+                }
+
+                if (vehicleSearchContainer) {
+                    vehicleSearchContainer.style.display = '';
+                }
+
+                if (depotFilterContainer) {
+                    depotFilterContainer.style.display = 'none';
+                }
+
+                if (depotSelect) {
+                    depotSelect.value = '';
+                }
+
+                return;
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | DÉPÔT
+            |--------------------------------------------------------------------------
+            */
+
+            if (type === 'depot') {
+
+                if (vehicleFilterContainer) {
+                    vehicleFilterContainer.style.display = 'none';
+                }
+
+                if (depotFilterContainer) {
+                    depotFilterContainer.style.display = '';
+                }
+
+                if (vehicleSelect) {
+                    vehicleSelect.value = '';
+                }
+
+                if (vehicleSearch) {
+                    vehicleSearch.value = '';
+                }
+
+                return;
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | TOUTES LES DESTINATIONS
+            |--------------------------------------------------------------------------
+            |
+            | Aucun filtre précis n'est nécessaire.
+            | On masque les sélecteurs spécifiques.
+            |
+            */
+
+            if (vehicleFilterContainer) {
+                vehicleFilterContainer.style.display = 'none';
+            }
+
+            if (depotFilterContainer) {
+                depotFilterContainer.style.display = 'none';
+            }
+
+            if (vehicleSelect) {
+                vehicleSelect.value = '';
+            }
+
+            if (depotSelect) {
+                depotSelect.value = '';
+            }
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | CHANGEMENT DU TYPE
+        |--------------------------------------------------------------------------
+        */
+
+        if (destinationType) {
+
+            destinationType.addEventListener(
+                'change',
+                updateDestinationFilter
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | INITIALISATION
+            |--------------------------------------------------------------------------
+            |
+            | Important après une recherche :
+            | Laravel conserve destination_type dans l'URL.
+            |
+            */
+
+            updateDestinationFilter();
+        }
 
 
         /*

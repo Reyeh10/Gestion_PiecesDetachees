@@ -2,14 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Customer;
 use App\Models\ExternalBonCommande;
 use App\Models\ExternalBonCommandeLigne;
 use App\Models\Product;
 use App\Models\ProductDepotStock;
-use App\Models\Sale;
-use App\Models\Vehicle;
 use App\Services\AppAtelierApiService;
+use App\Services\BonTransfertService;
 
 use Illuminate\Http\Request;
 
@@ -30,7 +28,7 @@ class FournisseurCommandeController extends Controller
         $dispo = $request->get('dispo', '');
 
         $commandes = ExternalBonCommande::withCount('lignes')
-            ->with(['lignes' => fn ($q) => $q->orderBy('position')])
+            ->with(['lignes' => fn ($q) => $q->orderBy('position'), 'bonTransfert.lignes'])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('numero', 'like', "%{$search}%")
@@ -54,20 +52,6 @@ class FournisseurCommandeController extends Controller
             'search'    => $search,
             'dispo'     => $dispo,
         ]);
-    }
-
-    /**
-     * Génère le prochain code client séquentiel au format ClXXX (ex: Cl003),
-     * en suivant la même convention que la création manuelle de client.
-     */
-    private function prochainCodeClient(): string
-    {
-        $dernier = Customer::where('code', 'like', 'Cl%')
-            ->get()
-            ->map(fn (Customer $c) => (int) preg_replace('/\D/', '', $c->code))
-            ->max();
-
-        return 'Cl' . str_pad((string) (($dernier ?? 0) + 1), 3, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -97,6 +81,7 @@ class FournisseurCommandeController extends Controller
             'lignes.product.depotStocks' => fn ($q) => $q->where('quantity', '>', 0)->orderByDesc('quantity'),
             'lignes.product.depotStocks.depot',
             'lignes.depot',
+            'bonTransfert.lignes',
         ]);
 
         $products = Product::with([
@@ -118,17 +103,16 @@ class FournisseurCommandeController extends Controller
      * Le vendeur associe une ligne sans référence à une pièce trouvée dans
      * le stock (ou la marque manuellement indisponible s'il n'a rien trouvé).
      *
-     * Tant que la vente n'est pas créée, une ligne reste entièrement
-     * modifiable : le vendeur peut re-sélectionner une autre pièce ou un
-     * autre dépôt et re-valider. Dès que la vente existe, toute modification
-     * est refusée (le stock a déjà été déduit).
+     * Une ligne reste modifiable (autre pièce, autre dépôt), même après la
+     * création du bon de transfert : le BT est alors signalé « à mettre à
+     * jour ». Seuls les anciens BC facturés (vente) sont verrouillés.
      */
     public function updateLigne(Request $request, ExternalBonCommande $fournisseurCommande, ExternalBonCommandeLigne $ligne)
     {
         abort_unless($ligne->external_bon_commande_id === $fournisseurCommande->id, 404);
 
-        if ($fournisseurCommande->vente_id) {
-            return back()->with('error', 'La vente a déjà été créée à partir de ce bon : les lignes ne sont plus modifiables.');
+        if ($fournisseurCommande->estFacture()) {
+            return back()->with('error', 'Ce bon a déjà été facturé (ancienne vente) : les lignes ne sont plus modifiables.');
         }
 
         $data = $request->validate([
@@ -151,8 +135,8 @@ class FournisseurCommandeController extends Controller
      */
     public function updateLignes(Request $request, ExternalBonCommande $fournisseurCommande)
     {
-        if ($fournisseurCommande->vente_id) {
-            return back()->with('error', 'La vente a déjà été créée à partir de ce bon : les lignes ne sont plus modifiables.');
+        if ($fournisseurCommande->estFacture()) {
+            return back()->with('error', 'Ce bon a déjà été facturé (ancienne vente) : les lignes ne sont plus modifiables.');
         }
 
         $request->validate([
@@ -293,18 +277,26 @@ class FournisseurCommandeController extends Controller
     }
 
     /**
-     * Convertit le bon de commande en vente réelle, une fois toutes les
-     * pièces disponibles : crée/retrouve le client et le véhicule, puis
-     * délègue à SaleController::store() pour la facture, la déduction de
-     * stock et les mouvements de stock (même logique qu'une vente normale).
+     * Crée le bon de transfert (BT) du bon de commande, une fois toutes les
+     * pièces identifiées, rattachées à un dépôt et disponibles : les pièces
+     * sortent du stock du magasin (sans TVA ni paiement), puis le BT est
+     * envoyé au garage (app Atelier). Les anciens BC déjà convertis en
+     * vente/facture restent tels quels.
      */
-    public function creerVente(ExternalBonCommande $fournisseurCommande, SaleController $saleController)
-    {
-        $fournisseurCommande->load('lignes.product');
+    public function creerBonTransfert(
+        ExternalBonCommande $fournisseurCommande,
+        BonTransfertService $service,
+        AppAtelierApiService $atelier
+    ) {
+        if ($fournisseurCommande->bon_transfert_id) {
+            return redirect()->route('bons-transfert.show', $fournisseurCommande->bon_transfert_id);
+        }
 
         if ($fournisseurCommande->vente_id) {
             return redirect()->route('sales.show', $fournisseurCommande->vente_id);
         }
+
+        $fournisseurCommande->load('lignes');
 
         $sansDepot = $fournisseurCommande->lignes
             ->filter(fn (ExternalBonCommandeLigne $ligne) => $ligne->product_id && ! $ligne->depot_id);
@@ -319,63 +311,69 @@ class FournisseurCommandeController extends Controller
             return back()->with('error', "Impossible : toutes les pièces ne sont pas encore identifiées et disponibles pour {$fournisseurCommande->numero}.");
         }
 
-        $telephone = trim((string) $fournisseurCommande->client_telephone);
-
-        $customer = $telephone !== ''
-            ? Customer::firstOrCreate(
-                ['phone' => $telephone],
-                ['code' => $this->prochainCodeClient(), 'name' => $fournisseurCommande->client_nom ?: 'Client app-atelier']
-            )
-            : Customer::create(['code' => $this->prochainCodeClient(), 'name' => $fournisseurCommande->client_nom ?: 'Client app-atelier']);
-
-        $plaque = trim((string) $fournisseurCommande->vehicule_immatriculation);
-
-        $vehicle = $plaque !== ''
-            ? Vehicle::firstOrNew(['plate_number' => $plaque])
-            : new Vehicle();
-
-        $vehicle->customer_id = $customer->id;
-        $vehicle->brand = $vehicle->brand ?: $fournisseurCommande->vehicule_marque;
-        $vehicle->model = $vehicle->model ?: $fournisseurCommande->vehicule_modele;
-        $vehicle->vin = $vehicle->vin ?: $fournisseurCommande->vehicule_vin;
-        if ($plaque === '') {
-            $vehicle->plate_number = 'INCONNU-' . $fournisseurCommande->numero;
-        }
-        $vehicle->save();
-
-        $items = $fournisseurCommande->lignes->map(fn (ExternalBonCommandeLigne $ligne) => [
-            'product_id' => $ligne->product_id,
-            'depot_id'   => $ligne->depot_id,
-            'quantity'   => (float) $ligne->quantite_demandee,
-        ])->values()->all();
-
-        $saleRequest = Request::create('', 'POST', [
-            'customer_id'  => $customer->id,
-            'vehicle_id'   => $vehicle->id,
-            'payment_type' => 'bon_commande',
-            'items'        => $items,
-        ]);
-        $saleRequest->setUserResolver(fn () => auth()->user());
-        $saleRequest->setLaravelSession(request()->session());
-
-        $avantId = (int) Sale::max('id');
-
-        $response = $saleController->store($saleRequest);
-
-        $sale = Sale::where('id', '>', $avantId)
-            ->where('customer_id', $customer->id)
-            ->latest('id')
-            ->first();
-
-        if (! $sale) {
-            // La création a échoué (ex: stock insuffisant détecté à la dernière minute) :
-            // on relaie le message d'erreur renvoyé par SaleController::store().
-            return $response;
+        try {
+            $bt = $service->creer($fournisseurCommande);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
         }
 
-        $fournisseurCommande->update(['vente_id' => $sale->id]);
+        // Envoi au garage après la création (hors transaction) : si l'Atelier
+        // est injoignable, le BT reste créé et pourra être renvoyé depuis sa page.
+        $erreurEnvoi = $atelier->envoyerBonTransfert($bt);
 
-        return redirect()->route('sales.show', $sale)
-            ->with('success', "Vente créée à partir de {$fournisseurCommande->numero}.");
+        $redirection = redirect()->route('bons-transfert.show', $bt);
+
+        if ($erreurEnvoi) {
+            return $redirection
+                ->with('success', "Bon de transfert {$bt->numero} créé à partir de {$fournisseurCommande->numero}.")
+                ->with('error', "Mais l'envoi au garage a échoué : {$erreurEnvoi} Utilisez « Renvoyer au garage ».");
+        }
+
+        return $redirection
+            ->with('success', "Bon de transfert {$bt->numero} créé à partir de {$fournisseurCommande->numero} et envoyé au garage.");
+    }
+
+    /**
+     * Met le bon de transfert à jour après une modification du BC (devis
+     * modifié côté Atelier, pièce ou dépôt changé ici) : même numéro, stock
+     * corrigé de la différence, puis renvoi au garage.
+     */
+    public function mettreAJourBonTransfert(
+        ExternalBonCommande $fournisseurCommande,
+        BonTransfertService $service,
+        AppAtelierApiService $atelier
+    ) {
+        if (! $fournisseurCommande->bon_transfert_id) {
+            return back()->with('error', "Aucun bon de transfert à mettre à jour pour {$fournisseurCommande->numero}.");
+        }
+
+        $fournisseurCommande->load(['lignes', 'bonTransfert.lignes']);
+
+        if ($fournisseurCommande->bonTransfertAJour()) {
+            return redirect()->route('bons-transfert.show', $fournisseurCommande->bon_transfert_id)
+                ->with('success', 'Le bon de transfert est déjà à jour.');
+        }
+
+        if (! $fournisseurCommande->toutesPiecesDisponibles()) {
+            return back()->with('error', "Impossible : toutes les pièces ne sont pas encore identifiées et disponibles pour {$fournisseurCommande->numero}.");
+        }
+
+        try {
+            $bt = $service->mettreAJour($fournisseurCommande);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $erreurEnvoi = $atelier->envoyerBonTransfert($bt);
+
+        $redirection = redirect()->route('bons-transfert.show', $bt);
+
+        if ($erreurEnvoi) {
+            return $redirection
+                ->with('success', "Bon de transfert {$bt->numero} mis à jour.")
+                ->with('error', "Mais l'envoi au garage a échoué : {$erreurEnvoi} Utilisez « Renvoyer au garage ».");
+        }
+
+        return $redirection->with('success', "Bon de transfert {$bt->numero} mis à jour et renvoyé au garage.");
     }
 }
