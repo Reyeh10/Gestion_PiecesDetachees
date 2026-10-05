@@ -1895,6 +1895,19 @@
 
                     </li>
 
+
+                    {{-- ===================================================== --}}
+                    {{-- BONS DE TRANSFERT --}}
+                    {{-- ===================================================== --}}
+                    <li class="menu-item {{ request()->routeIs('bons-transfert.*') ? 'active' : '' }}">
+                        <a href="{{ route('bons-transfert.index') }}" class="menu-link">
+                            <i class="menu-icon tf-icons bx bx-transfer"></i>
+                            <div class="flex-grow-1 text-truncate">
+                                Bons de transfert
+                            </div>
+                        </a>
+                    </li>
+
                                @endif
 
        

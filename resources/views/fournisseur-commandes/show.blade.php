@@ -219,18 +219,62 @@
         </div>
 
         <div class="d-flex gap-2">
+
+            {{-- Anciennes commandes déjà converties en vente --}}
             @if($commande->vente_id)
+
                 <a href="{{ route('sales.show', $commande->vente_id) }}" class="btn btn-success">
                     <i class="bx bx-receipt"></i> Voir la facture
                 </a>
+
+            {{-- Nouveau workflow : bon de transfert déjà créé --}}
+            @elseif($commande->bon_transfert_id)
+
+                <a href="{{ route('bons-transfert.show', $commande->bon_transfert_id) }}" class="btn btn-success">
+                    <i class="bx bx-transfer"></i> Voir le bon de transfert
+                </a>
+
+                @if(!$commande->bonTransfertAJour())
+                    <form
+                        method="POST"
+                        action="{{ route('fournisseur-commandes.mettre-a-jour-bon-transfert', $commande) }}"
+                        class="m-0"
+                    >
+                        @csrf
+
+                        <button
+                            type="submit"
+                            class="btn btn-warning"
+                            onclick="return confirm('Voulez-vous mettre à jour le bon de transfert et le renvoyer au garage ?')"
+                        >
+                            <i class="bx bx-refresh"></i>
+                            Mettre à jour le BT
+                        </button>
+                    </form>
+                @endif
+
+            {{-- Nouveau workflow : création du bon de transfert --}}
             @elseif($commande->toutesPiecesDisponibles())
-                <form method="POST" action="{{ route('fournisseur-commandes.creer-vente', $commande) }}">
+
+                <form
+                    method="POST"
+                    action="{{ route('fournisseur-commandes.creer-bon-transfert', $commande) }}"
+                    class="m-0"
+                >
                     @csrf
-                    <button type="submit" class="btn btn-success">
-                        <i class="bx bx-cart-add"></i> Créer la vente
+
+                    <button
+                        type="submit"
+                        class="btn btn-success"
+                        onclick="return confirm('Voulez-vous créer le bon de transfert et envoyer les pièces au garage ?')"
+                    >
+                        <i class="bx bx-transfer"></i>
+                        Créer le bon de transfert
                     </button>
                 </form>
+
             @endif
+
 
             <a href="{{ route('fournisseur-commandes.index') }}" class="fc-btn-back">
                 <i class="bx bx-arrow-back"></i>
