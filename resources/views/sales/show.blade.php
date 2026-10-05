@@ -717,8 +717,48 @@
                             @foreach($sale->items as $index => $item)
 
                                 @php
-                                    $lineTotal = $item->quantity * $item->price;
-                                    $vat = $lineTotal * 0.10;
+                                    $lineTotal =
+                                        $item->quantity
+                                        *
+                                        $item->price;
+
+                                    $vat =
+                                        $lineTotal
+                                        *
+                                        0.10;
+
+                                    /*
+                                    |----------------------------------------------------------
+                                    | AFFICHAGE PRODUIT
+                                    |----------------------------------------------------------
+                                    */
+
+                                    $isCustomProduct =
+                                        empty($item->product_id)
+                                        && filled($item->designation_libre);
+
+                                    $reference =
+                                        $isCustomProduct
+                                            ? (
+                                                $item->reference_libre
+                                                ?: '-'
+                                            )
+                                            : (
+                                                $item->product?->reference
+                                                ?? '-'
+                                            );
+
+                                    $designation =
+                                        $isCustomProduct
+                                            ? $item->designation_libre
+                                            : (
+                                                $item->product?->designation
+                                                ?? 'Produit supprimé'
+                                            );
+
+                                    $unitLabel =
+                                        $item->product?->unit_label
+                                        ?? 'Pièce';
                                 @endphp
 
                                 <tr>
@@ -728,22 +768,37 @@
                                     </td>
 
                                     <td class="text-center">
-                                        {{ $item->product->reference ?? '-' }}
+                                        {{ $reference }}
                                     </td>
 
                                     <td>
-                                        {{ $item->product->designation ?? '-' }}
+                                        {{ $designation }}
+
+                                        @if($isCustomProduct)
+
+                                            <br>
+
+                                            <small
+                                                style="
+                                                    color:#6366f1;
+                                                    font-weight:600;
+                                                "
+                                            >
+                                                Hors catalogue
+                                            </small>
+
+                                        @endif
                                     </td>
                                    <td class="text-center">
 
                                         {{ $item->quantity }}
-                                        {{ $item->product->unit_label ?? 'Pièce' }}
+                                        {{ $unitLabel }}
 
                                     </td>
 
                                    <td class="text-end">
                                        {{ number_format(round($item->price), 0, ',', ' ') }} FDJ
-                                        / {{ $item->product->unit_label ?? 'Pièce' }}
+                                        / {{ $unitLabel }}
                                     </td>
 
                                     <td class="text-end">

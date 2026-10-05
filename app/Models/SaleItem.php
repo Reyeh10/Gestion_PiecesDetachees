@@ -14,12 +14,42 @@ class SaleItem extends Model
     |--------------------------------------------------------------------------
     | MASS ASSIGNMENT
     |--------------------------------------------------------------------------
+    |
+    | Une ligne de vente peut maintenant représenter :
+    |
+    | 1. Un produit existant dans le catalogue :
+    |    - product_id renseigné
+    |    - depot_id renseigné
+    |
+    | 2. Un produit hors catalogue :
+    |    - product_id = NULL
+    |    - depot_id = NULL
+    |    - référence / désignation / description saisies manuellement
+    |
     */
+
     protected $fillable = [
         'sale_id',
         'product_id',
         'vehicle_id',
         'depot_id',
+
+        /*
+        |--------------------------------------------------------------------------
+        | PRODUIT HORS CATALOGUE
+        |--------------------------------------------------------------------------
+        |
+        | Ces champs sont utilisés lorsque product_id est NULL.
+        |
+        | Le produit hors catalogue n'est pas automatiquement créé
+        | dans la table products et ne génère aucun mouvement de stock.
+        |
+        */
+
+        'reference_libre',
+        'designation_libre',
+        'description_libre',
+
         'quantity',
         'price',
         'total',
@@ -30,6 +60,7 @@ class SaleItem extends Model
     | CASTS
     |--------------------------------------------------------------------------
     */
+
     protected $casts = [
         'sale_id' => 'integer',
         'product_id' => 'integer',
@@ -45,6 +76,7 @@ class SaleItem extends Model
     | RELATION : VENTE
     |--------------------------------------------------------------------------
     */
+
     public function sale(): BelongsTo
     {
         return $this->belongsTo(
@@ -57,7 +89,12 @@ class SaleItem extends Model
     |--------------------------------------------------------------------------
     | RELATION : PRODUIT
     |--------------------------------------------------------------------------
+    |
+    | Pour un produit hors catalogue, product_id est NULL.
+    | Dans ce cas, cette relation retourne naturellement NULL.
+    |
     */
+
     public function product(): BelongsTo
     {
         return $this->belongsTo(
@@ -71,6 +108,7 @@ class SaleItem extends Model
     | RELATION : VÉHICULE
     |--------------------------------------------------------------------------
     */
+
     public function vehicle(): BelongsTo
     {
         return $this->belongsTo(
@@ -85,10 +123,16 @@ class SaleItem extends Model
     |--------------------------------------------------------------------------
     |
     | Dépôt dans lequel le stock a été prélevé au moment de la vente.
-    | Cette information permet de remettre le stock dans le bon dépôt
-    | lors d'une annulation ou suppression de vente.
+    |
+    | Pour un produit du catalogue, cette information permet notamment
+    | de remettre le stock dans le bon dépôt lors d'une annulation
+    | ou suppression de vente.
+    |
+    | Pour un produit hors catalogue, depot_id reste NULL puisqu'aucun
+    | stock n'est prélevé.
     |
     */
+
     public function depot(): BelongsTo
     {
         return $this->belongsTo(
@@ -102,6 +146,7 @@ class SaleItem extends Model
     | TOTAL DE LA LIGNE
     |--------------------------------------------------------------------------
     */
+
     public function getLineTotalAttribute(): float
     {
         return round(

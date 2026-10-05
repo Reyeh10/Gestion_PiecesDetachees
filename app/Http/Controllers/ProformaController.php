@@ -1242,23 +1242,81 @@ class ProformaController extends Controller
                     $allocations = [];
 
                     foreach ($locked->items as $item) {
-                        $product = Product::query()
-                            ->whereKey($item->product_id)
-                            ->lockForUpdate()
-                            ->firstOrFail();
-
                         $requestedQuantity = round(
                             (float) $item->quantity,
                             2
                         );
 
+                        /*
+                        |--------------------------------------------------------------------------
+                        | QUANTITÉ OBLIGATOIRE POUR TOUTES LES LIGNES
+                        |--------------------------------------------------------------------------
+                        */
+
                         if ($requestedQuantity <= 0) {
                             throw new \RuntimeException(
-                                'Quantité invalide pour le produit '
-                                . $product->reference
+                                'Quantité invalide pour la ligne '
+                                . (
+                                    $item->product_id
+                                        ? ('produit #' . $item->product_id)
+                                        : ($item->designation_libre ?? 'hors catalogue')
+                                )
                                 . '.'
                             );
                         }
+
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | PRODUIT HORS CATALOGUE
+                        |--------------------------------------------------------------------------
+                        |
+                        | Une ligne hors catalogue n'est reliée à aucun Product.
+                        |
+                        | Elle ne possède donc :
+                        |
+                        | - aucun product_id ;
+                        | - aucun depot_id ;
+                        | - aucun stock à contrôler ;
+                        | - aucun stock à diminuer.
+                        |
+                        */
+
+                        if (empty($item->product_id)) {
+                            if (blank($item->designation_libre)) {
+                                throw new \RuntimeException(
+                                    'Une ligne hors catalogue ne possède aucune désignation.'
+                                );
+                            }
+
+                            $allocations[] = [
+                                'type' => 'custom',
+                                'proforma_item' => $item,
+                                'product' => null,
+                                'depot_stock' => null,
+                                'depot' => null,
+                                'quantity' => $requestedQuantity,
+                                'price' => round((float) $item->price, 2),
+                            ];
+
+                            continue;
+                        }
+
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | PRODUIT DU CATALOGUE
+                        |--------------------------------------------------------------------------
+                        |
+                        | Pour un produit existant, nous conservons exactement
+                        | le contrôle du dépôt et du stock.
+                        |
+                        */
+
+                        $product = Product::query()
+                            ->whereKey($item->product_id)
+                            ->lockForUpdate()
+                            ->firstOrFail();
 
                         if (empty($item->depot_id)) {
                             throw new \RuntimeException(
@@ -1280,8 +1338,13 @@ class ProformaController extends Controller
                             2
                         );
 
-                        if (!$depotStock || $requestedQuantity > $availableQuantity) {
-                            $depotName = $depotStock?->depot?->name
+                        if (
+                            !$depotStock
+                            ||
+                            $requestedQuantity > $availableQuantity
+                        ) {
+                            $depotName =
+                                $depotStock?->depot?->name
                                 ?? $item->depot?->name
                                 ?? ('Dépôt #' . $item->depot_id);
 
@@ -1305,6 +1368,7 @@ class ProformaController extends Controller
                         }
 
                         $allocations[] = [
+                            'type' => 'catalogue',
                             'proforma_item' => $item,
                             'product' => $product,
                             'depot_stock' => $depotStock,
@@ -1384,14 +1448,72 @@ class ProformaController extends Controller
 
                         /*
                         |--------------------------------------------------------------------------
-                        | LIGNE DE VENTE
+                        | LIGNE DE VENTE HORS CATALOGUE
+                        |--------------------------------------------------------------------------
+                        |
+                        | Ces lignes sont conservées directement dans sale_items.
+                        |
+                        | Elles ne correspondent à aucun produit du catalogue
+                        | et ne doivent provoquer aucun mouvement de stock.
+                        |
+                        */
+
+                        if (($allocation['type'] ?? 'catalogue') === 'custom') {
+                            $proformaItem = $allocation['proforma_item'];
+
+                            SaleItem::create([
+                                'sale_id' => $sale->id,
+                                'product_id' => null,
+                                'vehicle_id' => $locked->vehicle_id,
+                                'depot_id' => null,
+
+                                'reference_libre' =>
+                                    $proformaItem->reference_libre,
+
+                                'designation_libre' =>
+                                    $proformaItem->designation_libre,
+
+                                'description_libre' =>
+                                    $proformaItem->description_libre,
+
+                                'quantity' => $quantity,
+                                'price' => $price,
+                                'total' => $lineTotal,
+                            ]);
+
+                            /*
+                            |--------------------------------------------------------------------------
+                            | AUCUN MOUVEMENT DE STOCK
+                            |--------------------------------------------------------------------------
+                            |
+                            | Le continue est volontaire.
+                            |
+                            | Tout le code de diminution du dépôt, recalcul du stock
+                            | produit et création de StockMovement situé ci-dessous
+                            | est ignoré pour cette ligne hors catalogue.
+                            |
+                            */
+
+                            continue;
+                        }
+
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | LIGNE DE VENTE - PRODUIT DU CATALOGUE
                         |--------------------------------------------------------------------------
                         */
+
                         SaleItem::create([
                             'sale_id' => $sale->id,
                             'product_id' => $product->id,
                             'vehicle_id' => $locked->vehicle_id,
                             'depot_id' => $depotStock->depot_id,
+
+                            'reference_libre' => null,
+                            'designation_libre' => null,
+                            'description_libre' => null,
+
                             'quantity' => $quantity,
                             'price' => $price,
                             'total' => $lineTotal,

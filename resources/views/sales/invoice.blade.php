@@ -1041,7 +1041,46 @@
                                 $quantity * (float) ($item->price ?? 0)
                             );
 
-                            $unit = $item->product->unit_label ?? 'Pièce';
+                            /*
+                            |--------------------------------------------------------------
+                            | AFFICHAGE PRODUIT
+                            |--------------------------------------------------------------
+                            |
+                            | Produit catalogue :
+                            | les informations viennent de la table products.
+                            |
+                            | Produit hors catalogue :
+                            | les informations sont conservées directement
+                            | dans sale_items.
+                            |
+                            */
+
+                            $isCustomProduct =
+                                empty($item->product_id)
+                                && filled($item->designation_libre);
+
+                            $unit =
+                                $item->product?->unit_label
+                                ?? 'Pièce';
+
+                            $reference =
+                                $isCustomProduct
+                                    ? (
+                                        $item->reference_libre
+                                        ?: '-'
+                                    )
+                                    : (
+                                        $item->product?->reference
+                                        ?? '-'
+                                    );
+
+                            $designation =
+                                $isCustomProduct
+                                    ? $item->designation_libre
+                                    : (
+                                        $item->product?->designation
+                                        ?? 'Produit supprimé'
+                                    );
                         @endphp
 
                         <tr>
@@ -1051,11 +1090,26 @@
                             </td>
 
                             <td>
-                                {{ $item->product->reference ?? '-' }}
+                                {{ $reference }}
                             </td>
 
                             <td>
-                                {{ $item->product->designation ?? 'Produit supprimé' }}
+                                {{ $designation }}
+
+                                @if($isCustomProduct)
+
+                                    <br>
+
+                                    <small
+                                        style="
+                                            color:#6366f1;
+                                            font-weight:600;
+                                        "
+                                    >
+                                        Hors catalogue
+                                    </small>
+
+                                @endif
                             </td>
 
                             <td class="text-end">

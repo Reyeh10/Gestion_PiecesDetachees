@@ -432,7 +432,43 @@
             @foreach($sale->items as $index => $item)
 
                 @php
-                    $lineTotal = $item->quantity * $item->price;
+                    $lineTotal =
+                        $item->quantity
+                        *
+                        $item->price;
+
+                    /*
+                    |--------------------------------------------------------------
+                    | AFFICHAGE PRODUIT
+                    |--------------------------------------------------------------
+                    */
+
+                    $isCustomProduct =
+                        empty($item->product_id)
+                        && filled($item->designation_libre);
+
+                    $reference =
+                        $isCustomProduct
+                            ? (
+                                $item->reference_libre
+                                ?: '-'
+                            )
+                            : (
+                                $item->product?->reference
+                                ?? '-'
+                            );
+
+                    $designation =
+                        $isCustomProduct
+                            ? $item->designation_libre
+                            : (
+                                $item->product?->designation
+                                ?? 'Produit supprimé'
+                            );
+
+                    $unitLabel =
+                        $item->product?->unit_label
+                        ?? 'Pièce';
                 @endphp
 
                 <tr>
@@ -442,11 +478,21 @@
                     </td>
 
                     <td class="text-center">
-                        {{ $item->product->reference ?? '-' }}
+                        {{ $reference }}
                     </td>
 
                     <td>
-                        {{ $item->product->designation ?? '-' }}
+                        {{ $designation }}
+
+                        @if($isCustomProduct)
+
+                            <br>
+
+                            <span class="unit-label">
+                                Hors catalogue
+                            </span>
+
+                        @endif
                     </td>
 
                    <!--td class="text-center fw-bold">
@@ -457,13 +503,13 @@
 
                         {{ $item->quantity }}
 
-                        {{ $item->product->unit_label ?? 'Pièce' }}
+                        {{ $unitLabel }}
 
                     </td>
 
                     <td class="text-end">
                       {{ number_format(round($item->price), 0, ',', ' ') }} FDJ
-                        / {{ $item->product->unit_label ?? 'Pièce' }}
+                        / {{ $unitLabel }}
                     </td>
 
                    <td class="text-end">

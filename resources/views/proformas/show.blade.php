@@ -1213,7 +1213,7 @@
                         @csrf
 
 
-                        <!--button
+                        <button
                             type="submit"
                             class="btn btn-success"
                             id="convertProformaButton"
@@ -1223,7 +1223,7 @@
 
                             Convertir en vente
 
-                        </button-->
+                        </button>
 
                     </form>
 
