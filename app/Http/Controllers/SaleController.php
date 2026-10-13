@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Avoir;
 use App\Models\Customer;
 use App\Models\Depot;
 use App\Models\Payment;
@@ -914,78 +915,21 @@ class SaleController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | DESTROY
+    | ANNULATION PAR AVOIR (comme l'app Atelier)
     |--------------------------------------------------------------------------
-    */
-    public function destroy(
-        Sale $sale
-    ): RedirectResponse {
-        if (
-            !in_array(
-                auth()->user()->role,
-                [
-                    'admin',
-                    'chef_magasinier',
-                ],
-                true
-            )
-        ) {
-            abort(403);
-        }
-
-        DB::beginTransaction();
-
-        try {
-            $sale->load([
-                'items.product',
-                'items.depot',
-            ]);
-
-            /*
-            |--------------------------------------------------------------------------
-            | NE PAS RESTAURER DEUX FOIS UNE VENTE DÉJÀ ANNULÉE
-            |--------------------------------------------------------------------------
-            */
-            if (!$this->isCancelled($sale)) {
-                foreach ($sale->items as $item) {
-                    $this->restoreSaleItemToDepot(
-                        $item,
-                        $sale,
-                        'Suppression vente'
-                    );
-                }
-            }
-
-            $sale->payments()->delete();
-            $sale->items()->delete();
-            $sale->delete();
-
-            DB::commit();
-
-            return redirect()
-                ->route('sales.index')
-                ->with(
-                    'success',
-                    'Vente supprimée avec succès.'
-                );
-        } catch (\Throwable $e) {
-            DB::rollBack();
-
-            report($e);
-
-            return back()->with(
-                'error',
-                $e->getMessage()
-            );
-        }
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | CANCEL SALE
-    |--------------------------------------------------------------------------
+    |
+    | Une facture n'est JAMAIS supprimée. Pour l'annuler, on émet un avoir
+    | (AV-AAAA-NNNN) qui la reprend en totalité : mêmes lignes, mêmes
+    | montants. Dans la même transaction :
+    |   - les pièces reviennent dans leur dépôt d'origine ;
+    |   - la facture passe au statut « annulée » ;
+    |   - le montant déjà encaissé est indiqué « à rembourser » sur l'avoir
+    |     (remboursement enregistré ensuite depuis l'avoir).
+    | Motif obligatoire.
+    |
     */
     public function cancel(
+        Request $request,
         Sale $sale
     ): RedirectResponse {
         if ($this->isCancelled($sale)) {
@@ -995,19 +939,72 @@ class SaleController extends Controller
             );
         }
 
+        $request->validate(
+            ['motif' => ['required', 'string', 'max:1000']],
+            ['motif.required' => "Indiquez le motif de l'annulation."]
+        );
+
         DB::beginTransaction();
 
         try {
+            $sale = Sale::query()
+                ->lockForUpdate()
+                ->findOrFail($sale->id);
+
+            if ($this->isCancelled($sale)) {
+                DB::rollBack();
+
+                return back()->with(
+                    'error',
+                    'Cette facture est déjà annulée.'
+                );
+            }
+
             $sale->load([
                 'items.product',
                 'items.depot',
+                'payments',
+            ]);
+
+            $dejaPaye = round(
+                (float) $sale->payments->sum('amount'),
+                2
+            );
+
+            [$annee, $sequence, $numero] = Avoir::prochainNumero();
+
+            $avoir = Avoir::create([
+                'numero'               => $numero,
+                'annee'                => $annee,
+                'sequence'             => $sequence,
+                'sale_id'              => $sale->id,
+                'customer_id'          => $sale->customer_id,
+                'motif'                => trim((string) $request->motif),
+                'subtotal'             => $sale->subtotal ?? 0,
+                'discount'             => $sale->discount ?? 0,
+                'discount_amount'      => $sale->discount_amount ?? 0,
+                'tva'                  => $sale->tva ?? 0,
+                'total'                => $sale->total ?? 0,
+                'montant_deja_paye'    => $dejaPaye,
+                'montant_a_rembourser' => $dejaPaye,
+                'cree_par'             => auth()->id(),
             ]);
 
             foreach ($sale->items as $item) {
+                $avoir->lignes()->create([
+                    'product_id'    => $item->product_id,
+                    'depot_id'      => $item->depot_id,
+                    'reference'     => $item->product->reference ?? $item->reference_libre,
+                    'designation'   => $item->product->designation ?? $item->designation_libre,
+                    'quantite'      => $item->quantity,
+                    'prix_unitaire' => $item->price,
+                    'total'         => round((float) $item->quantity * (float) $item->price, 2),
+                ]);
+
                 $this->restoreSaleItemToDepot(
                     $item,
                     $sale,
-                    'Annulation facture'
+                    'Avoir ' . $numero
                 );
             }
 
@@ -1018,14 +1015,23 @@ class SaleController extends Controller
 
             DB::commit();
 
+            $message = "Facture {$sale->invoice_number} annulée — avoir {$numero} émis. "
+                . 'Les pièces ont été remises dans leurs dépôts d’origine.';
+
+            if ($dejaPaye > 0) {
+                $message .= ' Montant déjà encaissé : '
+                    . number_format($dejaPaye, 0, ',', ' ')
+                    . ' FDJ, à rembourser au client (à enregistrer sur l’avoir).';
+            }
+
             return redirect()
                 ->route(
-                    'sales.invoice',
-                    $sale
+                    'avoirs.show',
+                    $avoir
                 )
                 ->with(
                     'success',
-                    'Facture annulée avec succès. Les stocks ont été remis dans leurs dépôts d’origine.'
+                    $message
                 );
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -1255,6 +1261,7 @@ class SaleController extends Controller
             'items.product.model',
             'items.depot',
             'payments',
+            'avoir',
         ]);
 
         $invoiceNumber =
@@ -1307,6 +1314,7 @@ class SaleController extends Controller
             'items.product.model',
             'items.depot',
             'payments',
+            'avoir',
         ]);
 
         $invoiceNumber =

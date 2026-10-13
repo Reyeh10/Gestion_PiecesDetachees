@@ -36,6 +36,10 @@ class Kernel extends HttpKernel
             \Illuminate\View\Middleware\ShareErrorsFromSession::class,
             \App\Http\Middleware\VerifyCsrfToken::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            // Déconnexion après 10 min sans utilisation, comme l'app Atelier
+            \App\Http\Middleware\SessionTimeout::class,
+            // Permissions par page (App\Services\PermissionService), comme l'app Atelier
+            \App\Http\Middleware\CheckRoutePermission::class,
         ],
 
         'api' => [

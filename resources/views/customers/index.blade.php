@@ -135,7 +135,7 @@
                             <td>
                                 {{ $customer->code }}
                             </td>
-                            
+
                             {{-- NOM --}}
                             <td>
                                 {{ $customer->name }}
@@ -161,7 +161,7 @@
                                     </a>
 
                                     {{-- ADMIN + CHEF MAGASINIER --}}
-                                    @if(in_array(auth()->user()->role, ['admin', 'chef_magasinier']))
+                                    @if(auth()->user()->hasPermission('modifier_clients'))
 
                                         {{-- EDIT --}}
                                         <a href="{{ route('customers.edit', $customer) }}"

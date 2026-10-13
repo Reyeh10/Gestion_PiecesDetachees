@@ -905,6 +905,23 @@
                 </button>
 
 
+                {{-- Modifier : tant que l'administrateur n'a pas approuvé --}}
+                @if(
+                    auth()->user()?->hasPermission('gerer_commandes_fournisseurs')
+                    &&
+                    \App\Http\Controllers\SupplierOrderController::estModifiable($supplierOrder)
+                )
+                    <a
+                        href="{{ route('supplier-orders.edit', $supplierOrder) }}"
+                        class="order-btn order-btn-light"
+                        title="Modifier le fournisseur, les informations et les pièces"
+                    >
+                        <i class="bx bx-edit"></i>
+                        Modifier
+                    </a>
+                @endif
+
+
                {{-- ============================================================
     APPROBATION DU BON DE COMMANDE
 
@@ -918,7 +935,7 @@
 @if(
     auth()->check()
     &&
-    auth()->user()->role === 'admin'
+    auth()->user()->hasPermission('approuver_commandes_fournisseurs')
     &&
     $supplierOrder->status === \App\Models\SupplierOrder::STATUS_DRAFT
 )
@@ -984,7 +1001,7 @@
 @if(
     auth()->check()
     &&
-    auth()->user()->role === 'admin'
+    auth()->user()->hasPermission('approuver_commandes_fournisseurs')
     &&
     $supplierOrder->status === \App\Models\SupplierOrder::STATUS_DRAFT
 )
@@ -1846,7 +1863,7 @@
 @if(
     auth()->check()
     &&
-    auth()->user()->role === 'admin'
+    auth()->user()->hasPermission('approuver_commandes_fournisseurs')
     &&
     $supplierOrder->status === \App\Models\SupplierOrder::STATUS_DRAFT
 )
@@ -2028,7 +2045,7 @@
 @if(
     auth()->check()
     &&
-    auth()->user()->role === 'admin'
+    auth()->user()->hasPermission('approuver_commandes_fournisseurs')
     &&
     $supplierOrder->status === \App\Models\SupplierOrder::STATUS_DRAFT
 )

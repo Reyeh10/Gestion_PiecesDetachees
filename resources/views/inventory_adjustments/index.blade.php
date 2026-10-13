@@ -17,37 +17,9 @@
     */
     $user = auth()->user();
 
-    $canCreateAdjustment = in_array(
+    $canCreateAdjustment = $user->hasPermission('gerer_ajustements');
 
-        $user->role,
-
-        [
-
-            'admin',
-
-            'chef_magasinier',
-
-        ],
-
-        true
-
-    );
-
-    $canImportAdjustment = in_array(
-
-        $user->role,
-
-        [
-
-            'admin',
-
-            'chef_magasinier',
-
-        ],
-
-        true
-
-    );
+    $canImportAdjustment = $user->hasPermission('gerer_ajustements');
 
 
     /*
@@ -62,11 +34,11 @@
     */
     $canEditAdjustment =
         $user
-        && $user->role === 'admin';
+        && $user->hasPermission('modifier_ajustements');
 
     $canDeleteAdjustment =
         $user
-        && $user->role === 'admin';
+        && $user->hasPermission('modifier_ajustements');
 
 @endphp
 

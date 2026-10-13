@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ExternalBonCommande;
+use App\Models\User;
+use App\Notifications\CommandeGarageNotification;
+use Illuminate\Support\Facades\Notification;
 use App\Models\Product;
 use App\Models\ProductDepotStock;
 use Illuminate\Http\JsonResponse;
@@ -325,9 +328,13 @@ class FournisseurBonCommandeController extends Controller
                     |--------------------------------------------------------------------------
                     */
 
-                    $product = Product::query()
-                        ->where('reference', $reference)
-                        ->first();
+                    // Pièce déjà identifiée (automatiquement ou par le vendeur, qui a
+                    // pu la remplacer par une autre) : on la garde. Sinon, recherche
+                    // automatique par la référence reçue.
+                    $product = $existante?->product
+                        ?? Product::query()
+                            ->where('reference', $reference)
+                            ->first();
 
                     if ($product) {
                         [$depotId, $quantiteDisponible, $disponible] =
@@ -403,6 +410,26 @@ class FournisseurBonCommandeController extends Controller
                 if (! $bc->bonTransfertAJour()) {
                     $bc->update(['vu_at' => null]);
                 }
+            }
+
+            /*
+             * Notification (cloche + son) à tous ceux qui voient les commandes
+             * du garage : nouveau BC, ou BC renvoyé modifié par le garage.
+             * Ne doit jamais faire échouer la réception du BC.
+             */
+            try {
+                $destinataires = User::query()
+                    ->where('is_active', true)
+                    ->with('userPermissions')
+                    ->get()
+                    ->filter(fn (User $u) => $u->hasPermission('voir_commandes_garage'));
+
+                Notification::send(
+                    $destinataires,
+                    new CommandeGarageNotification($bc, $bc->wasRecentlyCreated)
+                );
+            } catch (Throwable $e) {
+                Log::warning('Notification commande garage non envoyée : ' . $e->getMessage());
             }
 
             /*
@@ -556,11 +583,26 @@ class FournisseurBonCommandeController extends Controller
     {
         $norm = fn ($v) => mb_strtolower(trim((string) $v));
 
-        $candidates = $lignes
-            ->reject(fn ($l) => in_array($l->id, $dejaRapprochees, true))
-            ->filter(fn ($l) => $reference !== null
-                ? $norm($l->reference) === $norm($reference)
-                : ($l->reference === null && $norm($l->designation) === $norm($designation)));
+        $libres = $lignes->reject(fn ($l) => in_array($l->id, $dejaRapprochees, true));
+
+        $candidates = $libres->filter(fn ($l) => $reference !== null
+            ? $norm($l->reference) === $norm($reference)
+            : ($l->reference === null && $norm($l->designation) === $norm($designation)));
+
+        /*
+         * La ligne arrive AVEC une référence mais aucune ligne ne porte encore
+         * cette référence : c'est souvent une ligne que le vendeur avait
+         * identifiée à la main (sans référence). Après l'envoi du BT, l'Atelier
+         * recopie la référence de la pièce dans son devis : au renvoi du BC,
+         * on doit retrouver CETTE ligne (même pièce, ou même désignation)
+         * au lieu de la supprimer et d'en créer une nouvelle.
+         */
+        if ($candidates->isEmpty() && $reference !== null) {
+            $candidates = $libres->filter(fn ($l) => $l->reference === null && (
+                $norm($l->product?->reference) === $norm($reference)
+                || ($designation !== null && $norm($l->designation) === $norm($designation))
+            ));
+        }
 
         return $candidates->firstWhere('position', $position) ?? $candidates->first();
     }

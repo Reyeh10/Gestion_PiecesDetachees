@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\BonTransfert;
+use App\Models\User;
 use App\Services\AppAtelierApiService;
 use App\Services\BonTransfertService;
 use Illuminate\Http\Request;
@@ -54,6 +55,14 @@ class BonTransfertController extends Controller
         return $service->pdf($bt)->download($service->nomFichierPdf($bt));
     }
 
+    /** PDF affiché dans le navigateur (et non téléchargé), pour l'impression directe. */
+    public function imprimer(BonTransfert $bonTransfert, BonTransfertService $service)
+    {
+        $bt = $this->charger($bonTransfert);
+
+        return $service->pdf($bt)->stream($service->nomFichierPdf($bt));
+    }
+
     /** (Re)envoie le bon de transfert à l'app Atelier (garage). */
     public function envoyer(BonTransfert $bonTransfert, AppAtelierApiService $atelier)
     {
@@ -67,13 +76,49 @@ class BonTransfertController extends Controller
         );
     }
 
+    /**
+     * Suppression manuelle d'un BT — administrateur uniquement (par exemple
+     * devis supprimé côté garage). Case « pièces revenues au magasin » :
+     * les pièces sont remises dans leur dépôt.
+     */
+    public function destroy(Request $request, BonTransfert $bonTransfert, BonTransfertService $service)
+    {
+        /**
+ * Vérifier que l'utilisateur connecté est un administrateur.
+ *
+ * instanceof User permet à Intelephense de reconnaître
+ * correctement les méthodes personnalisées du modèle.
+ */
+$user = auth()->user();
+
+abort_unless(
+    $user instanceof User && $user->isAdmin(),
+    403,
+    'Seul un administrateur peut supprimer un bon de transfert.'
+);
+
+        $numero = $bonTransfert->numero;
+        $bcId = $bonTransfert->external_bon_commande_id;
+        $remettre = $request->boolean('remettre_en_stock');
+
+        $service->supprimer($bonTransfert, $remettre);
+
+        $message = "Bon de transfert {$numero} supprimé."
+            . ($remettre ? ' Les pièces ont été remises dans leurs dépôts.' : " Le stock n'a pas été modifié.");
+
+        return $bcId
+            ? redirect()->route('fournisseur-commandes.show', $bcId)->with('success', $message)
+            : redirect()->route('bons-transfert.index')->with('success', $message);
+    }
+
     private function charger(BonTransfert $bt): BonTransfert
     {
         return $bt->load([
             'bonCommande.lignes',
             'bonCommande.bonTransfert.lignes',
             'user',
-            'lignes.product',
+            'lignes.product.depotStocks.rayon',
+            'lignes.product.depotStocks.location',
             'lignes.depot',
         ]);
     }

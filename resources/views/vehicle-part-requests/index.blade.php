@@ -2709,17 +2709,7 @@
 
                                             {{-- MODIFIER --}}
 
-                                            @if(
-                                                in_array(
-                                                    auth()->user()->role,
-                                                    [
-                                                        'admin',
-                                                        'chef_magasinier',
-                                                        'magasinier'
-                                                    ],
-                                                    true
-                                                )
-                                            )
+                                            @if(auth()->user()->hasPermission('gerer_demandes_pieces'))
 
                                                 <a
                                                     href="{{
@@ -2816,11 +2806,7 @@
 
                                             {{-- SUPPRIMER --}}
 
-                                            @if(
-                                                auth()->user()->role
-                                                ===
-                                                'admin'
-                                            )
+                                            @if(auth()->user()->hasPermission('supprimer_demandes_pieces'))
 
                                                 <form
                                                     method="POST"

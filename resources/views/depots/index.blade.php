@@ -305,10 +305,7 @@
             </div>
 
 
-        @if(in_array(auth()->user()->role, [
-            'admin',
-            'chef_magasinier'
-            ]))
+        @if(auth()->user()->hasPermission('gerer_depots'))
 
             <a href="{{ route('depots.create') }}"
             class="btn btn-new-depot">
@@ -365,7 +362,7 @@
                         <tr>
 
                             {{-- CODE --}}
-                            
+
                             <td>
                                 {{ $depot->code }}
                             </td>
@@ -425,10 +422,7 @@
 
                                     </a>
 
-                                   @if(in_array(auth()->user()->role, [
-                                            'admin',
-                                            'chef_magasinier'
-                                        ]))
+                                   @if(auth()->user()->hasPermission('gerer_depots'))
 
                                         {{-- EDIT --}}
                                         <a href="{{ route('depots.edit', $depot) }}"

@@ -144,7 +144,7 @@ class BonTransfertService
     }
 
     /** Sort (écart > 0) ou remet (écart < 0) la différence dans le stock du dépôt. */
-    private function ajusterStock(BonTransfert $bt, int $productId, int $depotId, float $ecart): void
+    private function ajusterStock(BonTransfert $bt, int $productId, int $depotId, float $ecart, ?string $libelleRetour = null): void
     {
         $product = Product::query()->lockForUpdate()->findOrFail($productId);
         $depotNom = Depot::query()->whereKey($depotId)->value('name') ?? "dépôt #{$depotId}";
@@ -179,17 +179,53 @@ class BonTransfertService
             'product_id' => $productId,
             'type'       => $ecart > 0 ? 'out' : 'in',
             'quantity'   => abs($ecart),
-            'source'     => ($ecart > 0 ? 'Transfert garage (modification)' : 'Retour transfert garage (modification)')
+            'source'     => ($ecart > 0
+                    ? 'Transfert garage (modification)'
+                    : ($libelleRetour ? $libelleRetour.' '.$bt->numero : 'Retour transfert garage (modification)'))
                 .' | Dépôt: '.$depotNom,
             'reference'  => $bt->numero,
             'user_id'    => auth()->id(),
         ]);
     }
 
+    /**
+     * Suppression manuelle d'un BT (administrateur), par exemple quand le
+     * devis a été supprimé côté garage. Si les pièces sont revenues au
+     * magasin, elles sont remises dans leur dépôt (mouvement « Suppression
+     * BT … »). Le BC repasse « sans BT » : il peut être retraité ou supprimé.
+     */
+    public function supprimer(BonTransfert $bt, bool $remettreEnStock): void
+    {
+        DB::transaction(function () use ($bt, $remettreEnStock) {
+            $bt = BonTransfert::query()->lockForUpdate()->findOrFail($bt->id);
+            $bt->load('lignes');
+
+            if ($remettreEnStock) {
+                foreach ($bt->lignes as $ligne) {
+                    if ($ligne->product_id && $ligne->depot_id && (float) $ligne->quantite > 0) {
+                        $this->ajusterStock($bt, (int) $ligne->product_id, (int) $ligne->depot_id, -1 * (float) $ligne->quantite, 'Suppression BT');
+                    }
+                }
+            }
+
+            ExternalBonCommande::query()
+                ->where('bon_transfert_id', $bt->id)
+                ->update(['bon_transfert_id' => null]);
+
+            $bt->delete();
+        });
+    }
+
     /** PDF du bon de transfert (téléchargement et envoi au garage). */
     public function pdf(BonTransfert $bt): \Barryvdh\DomPDF\PDF
     {
-        $bt->loadMissing(['bonCommande', 'user', 'lignes.product', 'lignes.depot']);
+        $bt->loadMissing([
+            'bonCommande',
+            'user',
+            'lignes.product.depotStocks.rayon',
+            'lignes.product.depotStocks.location',
+            'lignes.depot',
+        ]);
 
         return Pdf::loadView('bons-transfert.pdf', ['bt' => $bt])->setPaper('a4', 'portrait');
     }

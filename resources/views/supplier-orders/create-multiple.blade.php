@@ -1,6 +1,6 @@
 @extends('layouts.layoutMaster')
 
-@section('title', 'Nouveau bon de commande')
+@section('title', isset($supplierOrder) ? 'Modifier le bon de commande' : 'Nouveau bon de commande')
 
 @section('content')
 
@@ -15,9 +15,26 @@
     |
     */
 
+    /*
+    | MODE ÉDITION : même formulaire pour modifier un BC pas encore
+    | approuvé (SupplierOrderController::edit / update).
+    */
+    $supplierOrder = $supplierOrder ?? null;
+    $modeEdition = $supplierOrder !== null;
+    $piecesAjoutables = $piecesAjoutables ?? collect();
+
     $commonSupplier =
         $supplier
         ?? $vehiclePartRequests->first()?->supplier;
+
+    // Lignes du tableau : [pièce, quantité, prix]
+    $lignesBc = $modeEdition
+        ? $lignes
+        : $vehiclePartRequests->values()->map(fn ($partRequest, $index) => [
+            'part'     => $partRequest,
+            'quantity' => old("items.$index.quantity_ordered", $partRequest->quantity ?? 1),
+            'price'    => old("items.$index.unit_price", $partRequest->purchase_price ?? $partRequest->estimated_price ?? 0),
+        ]);
 
     /*
     |--------------------------------------------------------------------------
@@ -28,7 +45,7 @@
     $defaultCurrency =
         old(
             'currency',
-            $commonSupplier?->currency ?? 'DJF'
+            $supplierOrder?->currency ?? $commonSupplier?->currency ?? 'DJF'
         );
 
     /*
@@ -323,6 +340,36 @@
         margin-top: 24px;
     }
 
+    .bc-remove-row {
+        width: 32px;
+        height: 32px;
+        color: #dc2626;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .bc-remove-row:hover { background: #fee2e2; }
+    .bc-remove-row:disabled { opacity: .35; cursor: not-allowed; }
+
+    .bc-add-piece {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 18px;
+        border-top: 1px solid #eef0f4;
+    }
+
+    .bc-add-piece .bc-control {
+        flex: 1 1 360px;
+        max-width: 640px;
+    }
+
+    .bc-add-hint { flex-basis: 100%; }
+
     .bc-btn {
         border: none;
         border-radius: 10px;
@@ -403,20 +450,25 @@
 
             <div>
                 <h1 class="bc-title">
-                    Nouveau bon de commande
+                    {{ $modeEdition ? 'Modifier le bon de commande ' . $supplierOrder->order_number : 'Nouveau bon de commande' }}
                 </h1>
 
                 <p class="bc-subtitle">
-                    Création d'un bon de commande fournisseur contenant
-                    plusieurs pièces commandées
+                    @if($modeEdition)
+                        Modifiable tant que l'administrateur ne l'a pas approuvé :
+                        fournisseur, informations, pièces (ajouter, retirer, quantités, prix).
+                    @else
+                        Création d'un bon de commande fournisseur contenant
+                        plusieurs pièces commandées
+                    @endif
                 </p>
             </div>
 
             <a
-                href="{{ route('vehicle-part-requests.ordered') }}"
+                href="{{ $modeEdition ? route('supplier-orders.show', $supplierOrder) : route('vehicle-part-requests.ordered') }}"
                 class="bc-back"
             >
-                ← Retour aux pièces commandées
+                {{ $modeEdition ? '← Retour au bon de commande' : '← Retour aux pièces commandées' }}
             </a>
 
         </div>
@@ -425,6 +477,20 @@
         {{-- ================================================================
              ERREURS
         ================================================================ --}}
+
+        @if(session('error'))
+            <div class="bc-alert bc-alert-danger">{{ session('error') }}</div>
+        @endif
+
+        @if($modeEdition && $supplierOrder->status === \App\Models\SupplierOrder::STATUS_REJECTED)
+            <div class="bc-alert bc-alert-danger">
+                <strong>Bon de commande rejeté</strong>
+                @if($supplierOrder->rejection_reason)
+                    — motif : {{ $supplierOrder->rejection_reason }}
+                @endif
+                <br>Après modification, il repassera en brouillon pour être approuvé.
+            </div>
+        @endif
 
         @if($errors->any())
 
@@ -455,8 +521,7 @@
                 <h5>Résumé de la commande</h5>
 
                 <span class="bc-count">
-                    {{ $vehiclePartRequests->count() }}
-                    pièce{{ $vehiclePartRequests->count() > 1 ? 's' : '' }}
+                    <span class="bcNbPieces">{{ $lignesBc->count() }}</span>&nbsp;pièce(s)
                 </span>
             </div>
 
@@ -483,18 +548,20 @@
                             Nombre de pièces
                         </span>
 
-                        <div class="bc-info-value">
-                            {{ $vehiclePartRequests->count() }}
+                        <div class="bc-info-value bcNbPieces">
+                            {{ $lignesBc->count() }}
                         </div>
                     </div>
 
                     <div class="bc-info">
                         <span class="bc-info-label">
-                            Statut requis
+                            {{ $modeEdition ? 'Statut du BC' : 'Statut requis' }}
                         </span>
 
                         <div class="bc-info-value">
-                            COMMANDÉE
+                            {{ $modeEdition
+                                ? ($supplierOrder->status === \App\Models\SupplierOrder::STATUS_REJECTED ? 'REJETÉ' : 'BROUILLON')
+                                : 'COMMANDÉE' }}
                         </div>
                     </div>
 
@@ -507,11 +574,15 @@
 
         <form
             method="POST"
-            action="{{ route('supplier-orders.store') }}"
+            action="{{ $modeEdition ? route('supplier-orders.update', $supplierOrder) : route('supplier-orders.store') }}"
             id="supplierOrderForm"
         >
 
             @csrf
+
+            @if($modeEdition)
+                @method('PUT')
+            @endif
 
             {{-- ============================================================
                  INFORMATIONS DU BC
@@ -598,7 +669,7 @@
                                     <option
                                         value="{{ $depot->id }}"
                                         @selected(
-                                            old('depot_id')
+                                            old('depot_id', $supplierOrder?->depot_id)
                                             == $depot->id
                                         )
                                     >
@@ -635,7 +706,7 @@
                                 class="bc-control"
                                 value="{{ old(
                                     'order_date',
-                                    now()->format('Y-m-d')
+                                    $supplierOrder?->order_date?->format('Y-m-d') ?? now()->format('Y-m-d')
                                 ) }}"
                                 required
                             >
@@ -660,7 +731,8 @@
                                 name="expected_delivery_date"
                                 class="bc-control"
                                 value="{{ old(
-                                    'expected_delivery_date'
+                                    'expected_delivery_date',
+                                    $supplierOrder?->expected_delivery_date?->format('Y-m-d')
                                 ) }}"
                             >
 
@@ -725,7 +797,7 @@
                                 type="text"
                                 name="payment_terms"
                                 class="bc-control"
-                                value="{{ old('payment_terms') }}"
+                                value="{{ old('payment_terms', $supplierOrder?->payment_terms) }}"
                                 placeholder="Ex. 30 jours"
                             >
 
@@ -742,7 +814,7 @@
                                 type="text"
                                 name="delivery_terms"
                                 class="bc-control"
-                                value="{{ old('delivery_terms') }}"
+                                value="{{ old('delivery_terms', $supplierOrder?->delivery_terms) }}"
                                 placeholder="Ex. Livraison au dépôt principal"
                             >
 
@@ -767,8 +839,8 @@
                         Pièces commandées
                     </h5>
 
-                    <span class="bc-count">
-                        {{ $vehiclePartRequests->count() }}
+                    <span class="bc-count bcNbPieces">
+                        {{ $lignesBc->count() }}
                     </span>
 
                 </div>
@@ -789,16 +861,20 @@
                                 <th style="width:170px;text-align:right;">
                                     Total
                                 </th>
+                                <th style="width:60px;"></th>
                             </tr>
                         </thead>
 
-                        <tbody>
+                        <tbody id="bcItemsBody">
 
                             @foreach(
-                                $vehiclePartRequests as $index => $partRequest
+                                $lignesBc as $index => $ligneBc
                             )
 
                                 @php
+                                    $partRequest =
+                                        $ligneBc['part'];
+
                                     $product =
                                         $partRequest->product;
 
@@ -824,18 +900,10 @@
                                         ?? 'Pièce';
 
                                     $quantity =
-                                        old(
-                                            "items.$index.quantity_ordered",
-                                            $partRequest->quantity ?? 1
-                                        );
+                                        $ligneBc['quantity'];
 
                                     $unitPrice =
-                                        old(
-                                            "items.$index.unit_price",
-                                            $partRequest->purchase_price
-                                                ?? $partRequest->estimated_price
-                                                ?? 0
-                                        );
+                                        $ligneBc['price'];
                                 @endphp
 
                                 <tr
@@ -843,7 +911,7 @@
                                     data-index="{{ $index }}"
                                 >
 
-                                    <td>
+                                    <td class="bc-row-number">
                                         {{ $loop->iteration }}
                                     </td>
 
@@ -952,6 +1020,14 @@
 
                                     </td>
 
+                                    <td>
+                                        <button
+                                            type="button"
+                                            class="bc-remove-row"
+                                            title="Retirer cette pièce du bon de commande"
+                                        >✕</button>
+                                    </td>
+
                                 </tr>
 
                             @endforeach
@@ -961,6 +1037,58 @@
                     </table>
 
                 </div>
+
+                @if($modeEdition)
+
+                    {{-- Ajouter une pièce COMMANDÉE qui n'est dans aucun BC actif --}}
+                    <div class="bc-add-piece">
+
+                        @if($piecesAjoutables->isEmpty())
+
+                            <span class="bc-secondary">
+                                Aucune autre pièce COMMANDÉE disponible à ajouter
+                                (toutes sont déjà dans un bon de commande).
+                            </span>
+
+                        @else
+
+                            <select id="bcAddSelect" class="bc-control">
+                                <option value="">— Ajouter une pièce commandée —</option>
+                                @foreach($piecesAjoutables as $piece)
+                                    @php
+                                        $vehiculeAjout = $piece->vehicle;
+                                    @endphp
+                                    <option
+                                        value="{{ $piece->id }}"
+                                        data-reference="{{ $piece->reference ?? $piece->product?->reference ?? '-' }}"
+                                        data-description="{{ $piece->part_name ?? $piece->product?->designation ?? 'Pièce' }}"
+                                        data-notes="{{ $piece->notes }}"
+                                        data-vehicle="{{ $vehiculeAjout?->registration_number ?? $vehiculeAjout?->immatriculation ?? $vehiculeAjout?->vin ?? '-' }}"
+                                        data-customer="{{ $vehiculeAjout?->customer?->name ?? $vehiculeAjout?->customer?->nom ?? '-' }}"
+                                        data-unit="{{ $piece->unit ?? $piece->product?->unit_label ?? 'Pièce' }}"
+                                        data-quantity="{{ $piece->quantity ?? 1 }}"
+                                        data-price="{{ $piece->purchase_price ?? $piece->estimated_price ?? 0 }}"
+                                    >
+                                        {{ $piece->reference ?? $piece->product?->reference ?? '-' }}
+                                        — {{ $piece->part_name ?? $piece->product?->designation ?? 'Pièce' }}
+                                        ({{ $piece->supplier?->name ?? 'sans fournisseur' }})
+                                    </option>
+                                @endforeach
+                            </select>
+
+                            <button type="button" id="bcAddButton" class="bc-btn bc-btn-secondary">
+                                + Ajouter
+                            </button>
+
+                            <span class="bc-secondary bc-add-hint">
+                                La pièce ajoutée passera au fournisseur de ce bon de commande.
+                            </span>
+
+                        @endif
+
+                    </div>
+
+                @endif
 
             </div>
 
@@ -989,7 +1117,7 @@
                                 name="notes"
                                 class="bc-control"
                                 placeholder="Observations concernant ce bon de commande..."
-                            >{{ old('notes') }}</textarea>
+                            >{{ old('notes', $supplierOrder?->notes) }}</textarea>
 
                         </div>
 
@@ -1012,7 +1140,7 @@
                                     max="100"
                                     value="{{ old(
                                         'discount_rate',
-                                        0
+                                        $supplierOrder?->discount_rate ?? 0
                                     ) }}"
                                 >
 
@@ -1054,7 +1182,7 @@
                                     min="0"
                                     value="{{ old(
                                         'shipping_cost',
-                                        0
+                                        $supplierOrder?->shipping_cost ?? 0
                                     ) }}"
                                 >
 
@@ -1077,7 +1205,7 @@
                                     max="100"
                                     value="{{ old(
                                         'tax_rate',
-                                        0
+                                        $supplierOrder?->tax_rate ?? 0
                                     ) }}"
                                 >
 
@@ -1216,9 +1344,9 @@
 
                         <a
                             href="{{
-                                route(
-                                    'vehicle-part-requests.ordered'
-                                )
+                                $modeEdition
+                                    ? route('supplier-orders.show', $supplierOrder)
+                                    : route('vehicle-part-requests.ordered')
                             }}"
                             class="bc-btn bc-btn-secondary"
                         >
@@ -1229,7 +1357,7 @@
                             type="submit"
                             class="bc-btn bc-btn-primary"
                         >
-                            ✓ Créer le bon de commande
+                            {{ $modeEdition ? '✓ Enregistrer les modifications' : '✓ Créer le bon de commande' }}
                         </button>
 
                     </div>
@@ -1254,8 +1382,13 @@ document.addEventListener('DOMContentLoaded', function () {
     |--------------------------------------------------------------------------
     */
 
-    const itemRows =
-        document.querySelectorAll('.bc-item-row');
+    const itemsBody =
+        document.getElementById('bcItemsBody');
+
+    // Lignes lues à chaque calcul : on peut en ajouter / retirer
+    function itemRowsList() {
+        return document.querySelectorAll('.bc-item-row');
+    }
 
     const discountRate =
         document.getElementById('discount_rate');
@@ -1379,7 +1512,7 @@ document.addEventListener('DOMContentLoaded', function () {
         |--------------------------------------------------------------------------
         */
 
-        itemRows.forEach(function (row) {
+        itemRowsList().forEach(function (row) {
 
             const quantity =
                 row.querySelector(
@@ -1574,43 +1707,93 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /*
     |--------------------------------------------------------------------------
-    | ÉVÉNEMENTS DES LIGNES
+    | ÉVÉNEMENTS DES LIGNES (aussi pour les lignes ajoutées)
     |--------------------------------------------------------------------------
     */
 
-    itemRows.forEach(function (row) {
-
-        const quantity =
-            row.querySelector(
-                '.bc-item-quantity'
-            );
-
-        const unitPrice =
-            row.querySelector(
-                '.bc-item-price'
-            );
-
-        [
-            quantity,
-            unitPrice
-        ].forEach(function (element) {
-
-            if (!element) {
-                return;
+    ['input', 'change'].forEach(function (type) {
+        itemsBody.addEventListener(type, function (event) {
+            if (event.target.matches('.bc-item-quantity, .bc-item-price')) {
+                calculate();
             }
-
-            element.addEventListener(
-                'input',
-                calculate
-            );
-
-            element.addEventListener(
-                'change',
-                calculate
-            );
         });
     });
 
+    // Numéros, nombre de pièces, et au moins une pièce dans le BC
+    function majLignes() {
+        const rows = itemRowsList();
+        rows.forEach(function (row, i) {
+            const numero = row.querySelector('.bc-row-number');
+            if (numero) numero.textContent = i + 1;
+            const retirer = row.querySelector('.bc-remove-row');
+            if (retirer) retirer.disabled = rows.length <= 1;
+        });
+        document.querySelectorAll('.bcNbPieces').forEach(function (el) {
+            el.textContent = rows.length;
+        });
+        calculate();
+    }
+
+    const addSelect = document.getElementById('bcAddSelect');
+
+    itemsBody.addEventListener('click', function (event) {
+        const bouton = event.target.closest('.bc-remove-row');
+        if (!bouton || bouton.disabled) return;
+        const row = bouton.closest('.bc-item-row');
+        const id = row.querySelector('input[name$="[vehicle_part_request_id]"]').value;
+
+        // La pièce retirée redevient proposée dans « Ajouter »
+        if (addSelect) {
+            const option = addSelect.querySelector('option[value="' + id + '"]');
+            if (option) option.hidden = false;
+        }
+
+        row.remove();
+        majLignes();
+    });
+
+    function echapper(texte) {
+        return String(texte ?? '').replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    let prochainIndex = itemRowsList().length + 1000;
+
+    const addButton = document.getElementById('bcAddButton');
+
+    if (addButton && addSelect) {
+        addButton.addEventListener('click', function () {
+            const option = addSelect.selectedOptions[0];
+            if (!option || !option.value) return;
+
+            const d = option.dataset;
+            const index = prochainIndex++;
+            const devise = currency ? currency.value : '';
+            const tr = document.createElement('tr');
+            tr.className = 'bc-item-row';
+            tr.dataset.index = index;
+            tr.innerHTML =
+                '<td class="bc-row-number"></td>'
+                + '<td><input type="hidden" name="items[' + index + '][vehicle_part_request_id]" value="' + echapper(option.value) + '">'
+                + '<span class="bc-reference">' + echapper(d.reference) + '</span></td>'
+                + '<td class="bc-description">' + echapper(d.description)
+                + (d.notes ? '<span class="bc-secondary">' + echapper(d.notes) + '</span>' : '') + '</td>'
+                + '<td><strong>' + echapper(d.vehicle) + '</strong><span class="bc-secondary">' + echapper(d.customer) + '</span></td>'
+                + '<td>' + echapper(d.unit) + '</td>'
+                + '<td><input type="number" name="items[' + index + '][quantity_ordered]" class="bc-control bc-item-quantity" step="0.01" min="0.01" value="' + echapper(d.quantity) + '" required></td>'
+                + '<td><input type="number" name="items[' + index + '][unit_price]" class="bc-control bc-item-price" step="0.0001" min="0" value="' + echapper(d.price) + '" required></td>'
+                + '<td class="bc-number"><strong class="bc-item-total">0,00</strong> <span class="bcCurrency">' + echapper(devise) + '</span></td>'
+                + '<td><button type="button" class="bc-remove-row" title="Retirer cette pièce du bon de commande">✕</button></td>';
+
+            itemsBody.appendChild(tr);
+            option.hidden = true;
+            addSelect.value = '';
+            majLignes();
+        });
+    }
+
+    majLignes();
 
     /*
     |--------------------------------------------------------------------------

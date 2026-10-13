@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
 <link
-    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=Instrument+Sans:wght@400;500;600;700&display=swap"
     rel="stylesheet"
 >
 
@@ -33,17 +33,163 @@
 
 {{-- ============================================================
      CORE CSS
+     Mode nuit connu du serveur (cookie « stcd-theme ») : les CSS sombres
+     sont envoyées directement, sans afficher d'abord le mode clair.
 ============================================================ --}}
 
+@php
+    $stcdSombre = request()->cookie('stcd-theme') === 'dark';
+@endphp
+
 <link
     rel="stylesheet"
-    href="{{ asset('assets/vendor/css/core.css') }}"
+    id="stcd-core-css"
+    href="{{ asset($stcdSombre ? 'assets/vendor/css/core-dark.css' : 'assets/vendor/css/core.css') }}"
+    data-light="{{ asset('assets/vendor/css/core.css') }}"
+    data-dark="{{ asset('assets/vendor/css/core-dark.css') }}"
 >
 
 <link
     rel="stylesheet"
-    href="{{ asset('assets/vendor/css/theme-default.css') }}"
+    id="stcd-template-theme-css"
+    href="{{ asset($stcdSombre ? 'assets/vendor/css/theme-default-dark.css' : 'assets/vendor/css/theme-default.css') }}"
+    data-light="{{ asset('assets/vendor/css/theme-default.css') }}"
+    data-dark="{{ asset('assets/vendor/css/theme-default-dark.css') }}"
 >
+
+{{-- Mode nuit : appliqué avant l'affichage de la page (pas de flash blanc).
+     Le choix est mémorisé dans le navigateur (localStorage « stcd-theme »). --}}
+<style>
+    html.stcd-prep .content-wrapper > .container-xxl { visibility: hidden; }
+</style>
+
+<script>
+    (function () {
+        var dark = false;
+
+        // Contenu caché jusqu'au placement du titre (sécurité : 3 s maximum)
+        document.documentElement.classList.add('stcd-prep');
+        setTimeout(function () { document.documentElement.classList.remove('stcd-prep'); }, 3000);
+
+        function memoriserCookie(sombre) {
+            document.cookie = 'stcd-theme=' + (sombre ? 'dark' : 'light') + ';path=/;max-age=31536000;SameSite=Lax';
+        }
+
+        try {
+            var choix = localStorage.getItem('stcd-theme');
+            dark = choix === 'dark' || (!choix && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        } catch (e) {}
+
+        window.stcdAppliquerTheme = function (sombre) {
+            document.documentElement.classList.toggle('dark', sombre);
+            memoriserCookie(sombre);
+            ['stcd-core-css', 'stcd-template-theme-css'].forEach(function (id) {
+                var lien = document.getElementById(id);
+                var voulu = lien && lien.getAttribute(sombre ? 'data-dark' : 'data-light');
+                if (lien && lien.getAttribute('href') !== voulu) {
+                    lien.href = lien.getAttribute(sombre ? 'data-dark' : 'data-light');
+                    if (sombre && document.body) {
+                        lien.addEventListener('load', function () { assombrirPage(); }, { once: true });
+                    }
+                }
+            });
+            if (sombre && document.body) {
+                setTimeout(assombrirPage, 50);
+            }
+        };
+
+        window.stcdBasculerTheme = function () {
+            var sombre = !document.documentElement.classList.contains('dark');
+            try { localStorage.setItem('stcd-theme', sombre ? 'dark' : 'light'); } catch (e) {}
+            window.stcdAppliquerTheme(sombre);
+        };
+
+        /*
+         * Mode nuit sur les pages qui ont leurs propres couleurs écrites en
+         * dur (fond #fff, texte gris foncé…) : on repère ces fonds clairs
+         * neutres et ces textes foncés neutres et on leur met les couleurs du
+         * mode nuit (classes stcd-auto-*, actives seulement en mode nuit et à
+         * l'écran). Les badges colorés (vert, rouge, orange…) sont gardés.
+         */
+        function rgb(couleur) {
+            var m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(couleur || '');
+            return m ? { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] } : null;
+        }
+        function lum(c) { return (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255; }
+        function neutre(c, ecart) { return Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b) <= ecart; }
+        function clairNeutre(c) { return c && c.a > 0.5 && lum(c) > 0.88 && neutre(c, 12); }
+
+        function fondEffectif(el) {
+            for (var e = el; e && e.nodeType === 1; e = e.parentElement) {
+                var c = rgb(getComputedStyle(e).backgroundColor);
+                if (c && c.a > 0.5) return c;
+            }
+            return null;
+        }
+
+        var IGNORES = /^(SCRIPT|STYLE|LINK|META|IMG|SVG|PATH|CANVAS|VIDEO|IFRAME|BR|HR|OPTION)$/i;
+
+        function assombrir(racine) {
+            if (!document.documentElement.classList.contains('dark') || !racine || racine.nodeType !== 1) return;
+            var tous = [racine].concat(Array.prototype.slice.call(racine.querySelectorAll('*')));
+            var textes = [];
+
+            tous.forEach(function (el) {
+                if (IGNORES.test(el.tagName) || el.closest('#layout-menu, .no-auto-sombre')) return;
+                var st = getComputedStyle(el);
+
+                // 1) fonds blancs / gris très clairs, y compris en dégradé
+                var fond = rgb(st.backgroundColor);
+                var degrade = st.backgroundImage.indexOf('gradient') !== -1
+                    && (st.backgroundImage.match(/rgba?\([^)]+\)/g) || []).every(function (x) { return clairNeutre(rgb(x)); });
+                if (clairNeutre(fond) || degrade) {
+                    el.classList.add(fond && lum(fond) > 0.97 || degrade ? 'stcd-auto-fond' : 'stcd-auto-fond-2');
+                }
+
+                // 2) bordures claires
+                if (['Top', 'Right', 'Bottom', 'Left'].some(function (cote) {
+                    var bord = rgb(st['border' + cote + 'Color']);
+                    return parseFloat(st['border' + cote + 'Width']) > 0 && bord && lum(bord) > 0.8 && neutre(bord, 20);
+                })) {
+                    el.classList.add('stcd-auto-bord');
+                }
+
+                // 3) textes gris foncé / noirs (vérifiés après les fonds)
+                var c = rgb(st.color);
+                if (c && lum(c) < 0.5 && neutre(c, 45)) textes.push(el);
+            });
+
+            textes.forEach(function (el) {
+                var f = fondEffectif(el);
+                if (!f || lum(f) < 0.35) el.classList.add('stcd-auto-texte');
+            });
+        }
+        window.stcdAssombrir = assombrir;
+
+        function assombrirPage() { assombrir(document.body); }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            assombrirPage();
+
+            // Contenu ajouté ensuite (fenêtres, listes Select2, chargements…)
+            var attente = [], minuteur = null;
+            new MutationObserver(function (mutations) {
+                mutations.forEach(function (m) {
+                    Array.prototype.forEach.call(m.addedNodes, function (n) { if (n.nodeType === 1) attente.push(n); });
+                });
+                if (!attente.length || minuteur) return;
+                minuteur = setTimeout(function () {
+                    var lot = attente; attente = []; minuteur = null;
+                    lot.forEach(function (n) { if (n.isConnected) assombrir(n); });
+                }, 120);
+            }).observe(document.body, { childList: true, subtree: true });
+        });
+
+        // Toujours appliqué : remet aussi le cookie à jour (1re visite,
+        // choix fait avant cette version) pour le prochain chargement.
+        window.stcdAppliquerTheme(dark);
+    })();
+</script>
 
 
 {{-- ============================================================

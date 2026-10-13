@@ -3,6 +3,19 @@
 @section('content')
 
 @php
+    // Liste des pièces pour la recherche (Select2), envoyée UNE fois pour
+    // toutes les lignes (avant : 784 options recopiées dans chaque ligne).
+    $piecesSelect = $products->map(fn ($product) => [
+        'id'          => $product->id,
+        'text'        => trim($product->reference . ' — ' . $product->designation
+            . ' (' . trim(($product->brand->name ?? '') . ' ' . ($product->model->name ?? '')) . ')'
+            . ' — stock: ' . (float) $product->quantity
+            . ((float) $product->quantity <= 0 ? ' — INDISPONIBLE' : '')),
+        'reference'   => $product->reference,
+        'designation' => $product->designation,
+        'stock'       => (float) $product->quantity,
+    ])->values();
+
     // Stock par dépôt de chaque produit, pour permettre au vendeur de choisir
     // le dépôt de prélèvement (comme dans la vente normale) sans recharger la page.
     $depotsByProduct = $products->mapWithKeys(function ($product) {
@@ -145,6 +158,42 @@
         width: auto !important;
     }
 
+    /* Note masquée SANS libérer sa place : la ligne ne change pas de hauteur. */
+    .ligne-identification-form .ligne-note-input.note-masquee {
+        visibility: hidden;
+    }
+
+    /* Hauteur fixe des champs : choisir une pièce ne fait plus « sauter » la ligne. */
+    .ligne-identification-form .select2-container .select2-selection--single,
+    .ligne-identification-form .form-select,
+    .ligne-identification-form .form-control {
+        height: 38px;
+    }
+
+    /* Messages flottants en bas à droite : ils ne poussent plus le contenu. */
+    .bc-toasts {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 2000;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-width: min(440px, calc(100vw - 48px));
+    }
+
+    .bc-toast {
+        margin: 0;
+        box-shadow: 0 10px 25px rgba(15, 23, 42, .15);
+        transition: opacity .4s ease, transform .4s ease;
+    }
+
+    .bc-toast-out {
+        opacity: 0;
+        transform: translateY(10px);
+        pointer-events: none;
+    }
+
     .fc-table thead th {
         border: none !important;
         background: transparent;
@@ -219,17 +268,68 @@
         </div>
 
         <div class="d-flex gap-2">
+
+            {{-- Anciennes commandes déjà converties en vente --}}
             @if($commande->vente_id)
+
                 <a href="{{ route('sales.show', $commande->vente_id) }}" class="btn btn-success">
                     <i class="bx bx-receipt"></i> Voir la facture
                 </a>
+
+            {{-- Nouveau workflow : bon de transfert déjà créé --}}
+            @elseif($commande->bon_transfert_id)
+
+                <a href="{{ route('bons-transfert.show', $commande->bon_transfert_id) }}" class="btn btn-success">
+                    <i class="bx bx-transfer"></i> Voir le bon de transfert
+                </a>
+
+                @if(!$commande->bonTransfertAJour() && $commande->toutesPiecesDisponibles())
+                    <form
+                        method="POST"
+                        action="{{ route('fournisseur-commandes.mettre-a-jour-bon-transfert', $commande) }}"
+                        class="m-0"
+                    >
+                        @csrf
+
+                        <button
+                            type="submit"
+                            class="btn btn-warning"
+                            onclick="return confirm('Voulez-vous mettre à jour le bon de transfert et le renvoyer au garage ?')"
+                        >
+                            <i class="bx bx-refresh"></i>
+                            Mettre à jour le BT
+                        </button>
+                    </form>
+                @endif
+
+            {{-- Nouveau workflow : création du bon de transfert --}}
             @elseif($commande->toutesPiecesDisponibles())
-                <form method="POST" action="{{ route('fournisseur-commandes.creer-vente', $commande) }}">
+
+                <form
+                    method="POST"
+                    action="{{ route('fournisseur-commandes.creer-bon-transfert', $commande) }}"
+                    class="m-0"
+                >
                     @csrf
-                    <button type="submit" class="btn btn-success">
-                        <i class="bx bx-cart-add"></i> Créer la vente
+
+                    <button
+                        type="submit"
+                        class="btn btn-success"
+                        onclick="return confirm('Voulez-vous créer le bon de transfert et envoyer les pièces au garage ?')"
+                    >
+                        <i class="bx bx-transfer"></i>
+                        Créer le bon de transfert
                     </button>
                 </form>
+
+            @endif
+
+
+            @if(auth()->user()->isAdmin() && ! $commande->estFacture())
+                <button type="button" class="btn btn-outline-danger"
+                        data-bs-toggle="modal" data-bs-target="#supprimerBcModal">
+                    <i class="bx bx-trash"></i> Supprimer
+                </button>
             @endif
 
             <a href="{{ route('fournisseur-commandes.index') }}" class="fc-btn-back">
@@ -242,11 +342,34 @@
 
     <div class="card-body p-4">
 
-        @if(session('success'))
-            <div class="alert alert-success">{{ session('success') }}</div>
+        @if(session('success') || session('error'))
+            <div class="bc-toasts">
+                @if(session('success'))
+                    <div class="alert alert-success alert-dismissible bc-toast">
+                        {{ session('success') }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                @endif
+                @if(session('error'))
+                    <div class="alert alert-danger alert-dismissible bc-toast">
+                        {{ session('error') }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                @endif
+            </div>
         @endif
-        @if(session('error'))
-            <div class="alert alert-danger">{{ session('error') }}</div>
+
+        @if($commande->bon_transfert_id && ! $commande->bonTransfertAJour())
+            <div class="alert alert-warning">
+                <i class="bx bx-error"></i>
+                Ce bon de commande a été modifié après le bon de transfert
+                <strong>{{ $commande->bonTransfert->numero }}</strong> :
+                @if($commande->toutesPiecesDisponibles())
+                    cliquez sur « Mettre à jour le BT ».
+                @else
+                    vérifiez les pièces et les dépôts, cliquez sur « Tout valider », puis mettez le BT à jour.
+                @endif
+            </div>
         @endif
 
         {{-- INFOS VÉHICULE / CLIENT --}}
@@ -311,35 +434,25 @@
                             <td>{{ $ligne->prix_unitaire !== null ? number_format($ligne->prix_unitaire, 2) : '—' }}</td>
 
                             <td>
-                                @if(is_null($ligne->reference))
+                                @if(! $commande->estFacture())
 
-                                    {{-- Pas de référence transmise par le garage : le vendeur retrouve
-                                         lui-même la pièce (via marque/modèle véhicule + désignation)
-                                         et indique la disponibilité. Le prix de vente part automatiquement
-                                         avec la pièce choisie — pas de saisie manuelle de prix ici. La note
-                                         n'est utile que si aucune pièce n'est sélectionnée (pour expliquer
-                                         l'indisponibilité) : elle se masque dès qu'une pièce est choisie. --}}
+                                    {{-- Même formulaire sur TOUTES les lignes (avec ou sans référence
+                                         garage) : le vendeur peut toujours remplacer la pièce, choisir
+                                         le dépôt, ou noter pourquoi rien ne correspond. La liste des
+                                         pièces est chargée une seule fois (STCD_PIECES, plus bas). --}}
                                     <div class="ligne-identification-form">
 
-                                        <select name="lignes[{{ $ligne->id }}][product_id]" class="form-select ligne-product-select">
+                                        <select name="lignes[{{ $ligne->id }}][product_id]"
+                                                class="form-select ligne-product-select"
+                                                data-selection="{{ $ligne->product_id }}">
                                             <option value="">— Rechercher une pièce —</option>
-                                            @foreach($products as $product)
-                                                <option value="{{ $product->id }}"
-                                                    data-reference="{{ $product->reference }}"
-                                                    data-designation="{{ $product->designation }}"
-                                                    data-stock="{{ (float) $product->quantity }}"
-                                                    @selected($ligne->product_id === $product->id)>
-                                                    {{ $product->reference }} — {{ $product->designation }}
-                                                    ({{ $product->brand->name ?? '' }} {{ $product->model->name ?? '' }})
-                                                    — stock: {{ (float) $product->quantity }}
-                                                    @if($product->quantity <= 0) — INDISPONIBLE @endif
+                                            @if($ligne->product)
+                                                <option value="{{ $ligne->product_id }}" selected>
+                                                    {{ $ligne->product->reference }} — {{ $ligne->product->designation }}
                                                 </option>
-                                            @endforeach
+                                            @endif
                                         </select>
 
-                                        {{-- Dépôt de prélèvement : requis pour créer la vente, comme sur
-                                             la vente normale. Repeuplé en JS quand la pièce change ;
-                                             pré-rempli ici si une pièce est déjà identifiée. --}}
                                         <select name="lignes[{{ $ligne->id }}][depot_id]" class="form-select form-select-sm ligne-depot-select"
                                                 @unless($ligne->product) disabled @endunless>
                                             <option value="">— Choisir le dépôt —</option>
@@ -353,63 +466,37 @@
                                             @endif
                                         </select>
 
+                                        {{-- Toujours présente (place réservée) : masquée sans décaler la ligne --}}
                                         <input type="text" name="lignes[{{ $ligne->id }}][note]" value="{{ $ligne->note }}"
                                                placeholder="Note (optionnel — ex: raison d'indisponibilité)"
-                                               class="form-control form-control-sm ligne-note-input"
-                                               @if($ligne->product_id) hidden @endif>
+                                               class="form-control form-control-sm ligne-note-input @if($ligne->product_id) note-masquee @endif">
 
                                     </div>
 
-                                    <div class="mt-2">
-                                        @if($ligne->product_id)
-                                            @if($ligne->disponible)
-                                                <span class="badge-dispo">Disponible (identifiée manuellement)</span>
-                                            @elseif($ligne->depot_id)
-                                                <span class="badge-indispo">Indisponible</span>
-                                            @else
-                                                <span class="badge-attente">Pièce trouvée — choisissez le dépôt</span>
-                                            @endif
-                                        @elseif(! is_null($ligne->disponible))
-                                            <span class="badge-indispo">Marquée indisponible</span>
-                                        @else
-                                            <span class="badge-attente">Sans référence — à vérifier</span>
-                                        @endif
-                                        @if($ligne->note)
-                                            <span class="text-muted small d-block mt-1">{{ $ligne->note }}</span>
-                                        @endif
-                                    </div>
+                                @endif
 
-                                @elseif($ligne->product_id)
-
-                                    {{-- Référence reconnue automatiquement : le dépôt peut rester à
-                                         choisir si la pièce existe dans plusieurs dépôts. --}}
-                                    <div class="ligne-depot-form">
-
-                                        <select name="lignes[{{ $ligne->id }}][depot_id]" class="form-select form-select-sm">
-                                            <option value="">— Choisir le dépôt —</option>
-                                            @foreach($ligne->product->depotStocks as $stock)
-                                                <option value="{{ $stock->depot_id }}" @selected($ligne->depot_id === $stock->depot_id)>
-                                                    {{ $stock->depot->name ?? ('Dépôt #' . $stock->depot_id) }}
-                                                    — stock: {{ (float) $stock->quantity }}
-                                                </option>
-                                            @endforeach
-                                        </select>
-
-                                    </div>
-
-                                    <div class="mt-2">
+                                <div class="mt-2 ligne-statut">
+                                    @if($ligne->product_id)
                                         @if($ligne->disponible)
                                             <span class="badge-dispo">Disponible</span>
+                                        @elseif($ligne->disponible === false && ! $ligne->depot_id)
+                                            {{-- Choisie au catalogue mais sans stock : prix transmis au garage --}}
+                                            <span class="badge-indispo">En rupture — prix transmis au garage</span>
+                                            <span class="text-muted small d-block mt-1">À l'arrivée de la pièce : choisissez le dépôt puis « Tout valider ».</span>
                                         @elseif($ligne->depot_id)
-                                            <span class="badge-indispo">Indisponible</span>
+                                            <span class="badge-indispo">Indisponible dans ce dépôt</span>
                                         @else
                                             <span class="badge-attente">Pièce trouvée — choisissez le dépôt</span>
                                         @endif
-                                    </div>
-
-                                @else
-                                    <span class="badge-indispo">Indisponible</span>
-                                @endif
+                                    @elseif(! is_null($ligne->disponible))
+                                        <span class="badge-indispo">{{ $ligne->reference ? 'Référence inconnue au magasin' : 'Marquée indisponible' }}</span>
+                                    @else
+                                        <span class="badge-attente">Sans référence — à vérifier</span>
+                                    @endif
+                                    @if($ligne->note)
+                                        <span class="text-muted small d-block mt-1">{{ $ligne->note }}</span>
+                                    @endif
+                                </div>
                             </td>
 
                         </tr>
@@ -422,7 +509,7 @@
 
         </div>
 
-            @unless($commande->vente_id)
+            @unless($commande->estFacture())
                 <div class="d-flex justify-content-end mt-2">
                     <button type="submit" class="btn btn-primary">
                         <i class="bx bx-check-double"></i> Tout valider
@@ -437,70 +524,78 @@
 </div>
 
 <script>
-    // Stock par dépôt de chaque produit (id produit -> [{depot_id, name, quantity}]),
-    // utilisé pour repeupler le menu "Dépôt" quand le vendeur choisit une pièce.
+    // Liste des pièces, chargée UNE seule fois pour toutes les lignes :
+    // { id, text, reference, designation, stock } — et le stock par dépôt.
+    window.STCD_PIECES = @json($piecesSelect);
     window.STCD_PRODUCT_DEPOTS = @json($depotsByProduct);
 </script>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // Recherche restreinte à la référence et à la désignation de la pièce
-        // (ignore la marque/modèle véhicule et le stock affichés dans la liste).
-        function matchReferenceDesignation(params, data) {
-            if ($.trim(params.term) === '') return data;
-            if (typeof data.element === 'undefined') return null;
 
-            var $el = $(data.element);
-            var reference = ($el.data('reference') || '').toString().toUpperCase();
-            var designation = ($el.data('designation') || '').toString().toUpperCase();
-            var term = params.term.toUpperCase();
+        /* ---------------------------------------------------------------
+           Retour à la même hauteur de page après « Tout valider »
+           (avant : la page repartait tout en haut à chaque enregistrement).
+           --------------------------------------------------------------- */
+        var cleScroll = 'stcd-bc-scroll-' + window.location.pathname;
 
-            if (reference.indexOf(term) > -1 || designation.indexOf(term) > -1) {
-                return data;
+        try {
+            var hauteur = sessionStorage.getItem(cleScroll);
+            if (hauteur !== null) {
+                sessionStorage.removeItem(cleScroll);
+                window.scrollTo(0, parseInt(hauteur, 10) || 0);
             }
-            return null;
+        } catch (e) {}
+
+        document.querySelectorAll('form').forEach(function (form) {
+            form.addEventListener('submit', function () {
+                try { sessionStorage.setItem(cleScroll, String(window.scrollY)); } catch (e) {}
+            });
+        });
+
+        /* ---------------------------------------------------------------
+           Recherche de pièce (Select2) : référence ou désignation.
+           --------------------------------------------------------------- */
+        function matchReferenceDesignation(params, data) {
+            var terme = $.trim(params.term || '').toUpperCase();
+            if (terme === '') return data;
+            if (!data.id) return null;
+
+            var reference = (data.reference || '').toString().toUpperCase();
+            var designation = (data.designation || '').toString().toUpperCase();
+
+            return (reference.indexOf(terme) > -1 || designation.indexOf(terme) > -1) ? data : null;
         }
 
         function styleOption(data) {
-            if (!data.id || typeof data.element === 'undefined') return data.text;
-            var stock = parseFloat($(data.element).data('stock'));
+            if (!data.id) return data.text;
             var $result = $('<span></span>').text(data.text);
-            if (!isNaN(stock) && stock <= 0) {
+            if (data.stock !== undefined && parseFloat(data.stock) <= 0) {
                 $result.css('color', '#dc2626').css('font-weight', '600');
             }
             return $result;
         }
 
-        $('.ligne-product-select').select2({
-            width: '100%',
-            placeholder: '— Rechercher une pièce —',
-            matcher: matchReferenceDesignation,
-            templateResult: styleOption,
-        });
-
-        // La note ne sert qu'à expliquer une indisponibilité : elle ne s'affiche
-        // que quand aucune pièce n'est sélectionnée dans le menu déroulant.
-        // Le dépôt est repeuplé avec le stock de la pièce choisie, comme sur
-        // la vente normale, pour que "Créer la vente" ne soit plus refusée
-        // faute de dépôt de prélèvement.
         function escapeHtml(str) {
             return $('<div>').text(str == null ? '' : str).html();
         }
 
-        function populateDepotSelect($depot, depots, selectedDepotId) {
+        function populateDepotSelect($depot, depots) {
             var html = '<option value="">— Choisir le dépôt —</option>';
 
             (depots || []).forEach(function (d) {
-                var selected = (selectedDepotId !== undefined && selectedDepotId !== null
-                    && String(selectedDepotId) === String(d.depot_id)) ? 'selected' : '';
-
-                html += '<option value="' + d.depot_id + '" ' + selected + '>'
+                html += '<option value="' + d.depot_id + '">'
                     + escapeHtml(d.name) + ' — stock: ' + d.quantity
                     + '</option>';
             });
 
             $depot.html(html);
             $depot.prop('disabled', !depots || depots.length === 0);
+
+            // Un seul dépôt possible : on le choisit directement.
+            if (depots && depots.length === 1) {
+                $depot.val(String(depots[0].depot_id));
+            }
         }
 
         $('.ligne-identification-form').each(function () {
@@ -508,22 +603,97 @@
             var $select = $form.find('.ligne-product-select');
             var $note = $form.find('.ligne-note-input');
             var $depot = $form.find('.ligne-depot-select');
+            var selection = String($select.data('selection') || '');
 
+            // L'option affichée sans JavaScript est remplacée par la liste commune.
+            $select.find('option[value!=""]').remove();
+
+            $select.select2({
+                width: '100%',
+                placeholder: '— Rechercher une pièce —',
+                allowClear: true,
+                data: window.STCD_PIECES,
+                matcher: matchReferenceDesignation,
+                templateResult: styleOption,
+            });
+
+            if (selection) {
+                $select.val(selection).trigger('change.select2');
+            }
+
+            // La note sert à expliquer « aucune pièce ne correspond » : elle
+            // garde sa place (pas de décalage) mais n'est visible que sans pièce.
             function toggleNote() {
-                $note.prop('hidden', !!$select.val());
+                $note.toggleClass('note-masquee', !!$select.val());
             }
 
             $select.on('change', function () {
                 toggleNote();
                 var productId = $select.val();
                 var depots = productId ? (window.STCD_PRODUCT_DEPOTS[productId] || []) : [];
-                populateDepotSelect($depot, depots, null);
+                populateDepotSelect($depot, depots);
             });
 
             toggleNote();
         });
+
+        /* Messages : disparaissent seuls après quelques secondes */
+        setTimeout(function () {
+            document.querySelectorAll('.bc-toast').forEach(function (t) { t.classList.add('bc-toast-out'); });
+        }, 6000);
     });
 </script>
+
+{{-- ================================================================
+     SUPPRESSION MANUELLE DU BC (administrateur uniquement)
+================================================================ --}}
+@if(auth()->user()->isAdmin() && ! $commande->estFacture())
+    <div class="modal fade" id="supprimerBcModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form method="POST" action="{{ route('fournisseur-commandes.destroy', $commande) }}">
+                    @csrf
+                    @method('DELETE')
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">Supprimer le bon de commande {{ $commande->numero }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <div class="alert alert-danger small mb-0">
+                            Le bon de commande et ses lignes seront <strong>définitivement supprimés</strong> du magasin.
+                            Si le garage renvoie ce BC plus tard, il réapparaîtra comme un nouveau BC.
+                        </div>
+
+                        @if($commande->bonTransfert)
+                            <div class="alert alert-warning small mt-3">
+                                Son bon de transfert <strong>{{ $commande->bonTransfert->numero }}</strong> sera supprimé aussi.
+                            </div>
+
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="remettre_en_stock" value="1" id="remettreStockBc" checked>
+                                <label class="form-check-label" for="remettreStockBc">
+                                    Les pièces sont revenues au magasin : les <strong>remettre en stock</strong> dans leur dépôt
+                                </label>
+                            </div>
+                            <div class="text-muted small mt-1">
+                                Décochez si les pièces sont restées au garage (le stock ne bouge pas).
+                            </div>
+                        @endif
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bx bx-trash me-1"></i> Supprimer
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+@endif
 
 @push('scripts')
     <script src="{{ asset('assets/vendor/libs/select2/select2.js') }}"></script>

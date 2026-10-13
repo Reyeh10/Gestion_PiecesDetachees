@@ -12,6 +12,8 @@ class EncryptCookies extends Middleware
      * @var array<int, string>
      */
     protected $except = [
-        //
+        // Mode nuit choisi (« dark » / « light ») : lu par le serveur pour
+        // envoyer directement les bonnes CSS, sans flash de l'ancien design.
+        'stcd-theme',
     ];
 }

@@ -410,7 +410,7 @@
 
                                     {{-- ADMIN + CHEF MAGASINIER --}}
 
-                                    @if(in_array(auth()->user()->role, ['admin', 'chef_magasinier']))
+                                    @if(auth()->user()->hasPermission('modifier_mouvements'))
 
                                         <form
 

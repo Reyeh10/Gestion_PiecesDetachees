@@ -160,9 +160,48 @@
         margin-bottom: 22px;
     }
 
-    .reorder-search-input {
-        flex: 1 1 500px;
-        min-width: 240px;
+    .reorder-search {
+        align-items: flex-end;
+    }
+
+    .reorder-filtre {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex: 1 1 180px;
+        min-width: 170px;
+    }
+
+    .reorder-filtre-large {
+        flex: 2 1 260px;
+    }
+
+    .reorder-filtre label {
+        margin: 0;
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .reorder-search .form-select {
+        min-height: 46px;
+        border-radius: 9px;
+    }
+
+    .reorder-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .reorder-search .reorder-export,
+    .reorder-search .reorder-export:hover {
+        color: #ffffff !important;
+    }
+
+    .reorder-export-nb {
+        font-weight: 500;
+        opacity: .85;
     }
 
     .reorder-search .form-control,
@@ -344,7 +383,8 @@
             padding: 16px;
         }
 
-        .reorder-search-input,
+        .reorder-filtre,
+        .reorder-actions,
         .reorder-search .btn {
             flex: 1 1 100%;
             width: 100%;
@@ -458,52 +498,132 @@
 
 
                 {{-- ====================================================
-                     RECHERCHE
+                     FILTRES : recherche, marque, modèle, statut
+                     L'export Excel reprend exactement les mêmes filtres.
                 ==================================================== --}}
+
+                @php
+                    $filtresActifs = array_filter(
+                        request()->only(['search', 'brand_id', 'model_id', 'statut']),
+                        fn ($v) => $v !== null && $v !== ''
+                    );
+                    $statuts = [
+                        'rupture'            => 'Rupture',
+                        'stock_faible'       => 'Stock faible',
+                        'en_recherche'       => 'En recherche',
+                        'en_commande'        => 'En commande',
+                        'partiellement_recu' => 'Partiellement reçu',
+                    ];
+                @endphp
 
                 <form
                     method="GET"
                     action="{{ route('products.to-order') }}"
                     class="reorder-search"
+                    id="reorder-filtres"
                 >
 
-                    <div class="reorder-search-input">
-
+                    <div class="reorder-filtre reorder-filtre-large">
+                        <label for="filtre-search">Référence / désignation</label>
                         <input
                             type="text"
+                            id="filtre-search"
                             name="search"
                             class="form-control"
-                            placeholder="Rechercher par référence, désignation, marque ou modèle..."
+                            placeholder="Référence, désignation…"
                             value="{{ request('search') }}"
                         >
+                    </div>
+
+                    <div class="reorder-filtre">
+                        <label for="filtre-marque">Marque</label>
+                        <select id="filtre-marque" name="brand_id" class="form-select">
+                            <option value="">Toutes les marques</option>
+                            @foreach($brands as $brand)
+                                <option value="{{ $brand->id }}" @selected((string) request('brand_id') === (string) $brand->id)>
+                                    {{ $brand->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="reorder-filtre">
+                        <label for="filtre-modele">Modèle</label>
+                        <select id="filtre-modele" name="model_id" class="form-select">
+                            <option value="">Tous les modèles</option>
+                            @foreach($models as $model)
+                                <option
+                                    value="{{ $model->id }}"
+                                    data-marque="{{ $model->brand_id }}"
+                                    @selected((string) request('model_id') === (string) $model->id)
+                                >
+                                    {{ $model->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="reorder-filtre">
+                        <label for="filtre-statut">Statut</label>
+                        <select id="filtre-statut" name="statut" class="form-select">
+                            <option value="">Tous les statuts</option>
+                            @foreach($statuts as $valeur => $libelle)
+                                <option value="{{ $valeur }}" @selected(request('statut') === $valeur)>
+                                    {{ $libelle }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="reorder-actions">
+
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bx bx-filter-alt"></i>
+                            Filtrer
+                        </button>
+
+                        <a href="{{ route('products.to-order') }}" class="btn btn-secondary">
+                            <i class="bx bx-reset"></i>
+                            Réinitialiser
+                        </a>
+
+                        {{-- Export Excel : la liste filtrée ci-dessous, sans pagination --}}
+                        <a
+                            href="{{ route('products.to-order.export', $filtresActifs) }}"
+                            class="btn btn-success reorder-export"
+                        >
+                            <i class="bx bx-download"></i>
+                            Exporter Excel
+                            <span class="reorder-export-nb">({{ $products->total() }})</span>
+                        </a>
 
                     </div>
 
-
-                    <button
-                        type="submit"
-                        class="btn btn-primary"
-                    >
-
-                        <i class="bx bx-search"></i>
-
-                        Rechercher
-
-                    </button>
-
-
-                    <a
-                        href="{{ route('products.to-order') }}"
-                        class="btn btn-secondary"
-                    >
-
-                        <i class="bx bx-reset"></i>
-
-                        Réinitialiser
-
-                    </a>
-
                 </form>
+
+                <script>
+                    // Modèle : seulement ceux de la marque choisie. Un choix de
+                    // marque, de modèle ou de statut filtre tout de suite.
+                    (function () {
+                        var form = document.getElementById('reorder-filtres');
+                        var marque = document.getElementById('filtre-marque');
+                        var modele = document.getElementById('filtre-modele');
+
+                        function limiterModeles() {
+                            Array.prototype.forEach.call(modele.options, function (opt) {
+                                if (!opt.value) return;
+                                var visible = !marque.value || opt.dataset.marque === marque.value;
+                                opt.hidden = !visible;
+                                if (!visible && opt.selected) modele.value = '';
+                            });
+                        }
+
+                        limiterModeles();
+                        marque.addEventListener('change', function () { limiterModeles(); form.submit(); });
+                        modele.addEventListener('change', function () { form.submit(); });
+                        document.getElementById('filtre-statut').addEventListener('change', function () { form.submit(); });
+                    })();
+                </script>
 
 
                 {{-- ====================================================
@@ -668,7 +788,7 @@
 
 
                                     {{-- STATUT --}}
-                                
+
                                     <td class="text-center">
 
                                         @php

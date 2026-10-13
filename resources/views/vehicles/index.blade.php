@@ -17,13 +17,9 @@
     */
 
     // Peut créer et modifier un véhicule
-    $canManageVehicle = in_array($user->role, [
-        'admin',
-        'chef_magasinier',
-        'magasinier',
-    ]);
+    $canManageVehicle = $user->hasPermission('gerer_vehicules');
     // Seul l'administrateur peut supprimer
-    $canDeleteVehicle = $user->role === 'admin';
+    $canDeleteVehicle = $user->hasPermission('supprimer_vehicules');
 @endphp
 
 {{-- Styles limités à cette page : tableau compact et recherche alignée. --}}

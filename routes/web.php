@@ -19,6 +19,7 @@ use App\Http\Controllers\InventoryAdjustmentController;
 use App\Http\Controllers\StockMovementController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\ProformaController;
+use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\DepotTransferController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\VehiclePartRequestController;
 use App\Http\Controllers\SupplierOrderController;
 use App\Http\Controllers\VehicleHistoryController;
 use App\Http\Controllers\VehicleController;
+use App\Http\Controllers\AvoirController;
 use App\Http\Controllers\BonTransfertController;
 use App\Http\Controllers\FournisseurCommandeController;
 
@@ -97,6 +99,19 @@ Route::middleware(['auth'])->group(function () {
     | NOTIFICATIONS
     |--------------------------------------------------------------------------
     */
+
+    // « Je suis là » : la page signale l'activité (souris, clavier) au
+    // serveur, au plus une fois par minute (déconnexion après 10 min).
+    Route::post(
+        '/session/ping',
+        fn () => response()->noContent()
+    )->name('session.ping');
+
+    // Nouvelles notifications (son + fenêtre), interrogée toutes les 20 s
+    Route::get(
+        '/notifications/nouvelles',
+        [NotificationController::class, 'nouvelles']
+    )->name('notifications.nouvelles');
 
     Route::patch(
         '/notifications/read-all',
@@ -209,14 +224,24 @@ Route::middleware(['auth'])->group(function () {
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier'
+    'auth'
 ])->group(function () {
 
     Route::resource(
         'users',
         UserController::class
     );
+
+    // Permissions personnalisées d'un utilisateur (comme l'app Atelier)
+    Route::get(
+        '/users/{user}/permissions',
+        [PermissionController::class, 'edit']
+    )->name('users.permissions.edit');
+
+    Route::put(
+        '/users/{user}/permissions',
+        [PermissionController::class, 'update']
+    )->name('users.permissions.update');
 
 });
 
@@ -227,8 +252,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+    'auth'
 ])->group(function () {
 
     /*
@@ -241,6 +265,11 @@ Route::middleware([
         '/products/to-order',
         [ProductController::class, 'toOrder']
     )->name('products.to-order');
+
+    Route::get(
+        '/products/to-order/export',
+        [ProductController::class, 'exportToOrderExcel']
+    )->name('products.to-order.export');
 
 
     /*
@@ -460,9 +489,7 @@ Route::middleware([
         '/products/{product}',
         [ProductController::class, 'destroy']
     )
-    ->middleware(
-        'role:admin,chef_magasinier'
-    )
+
     ->name('products.destroy');
 
 });
@@ -473,8 +500,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+    'auth'
 ])->group(function () {
 
     Route::resource(
@@ -492,8 +518,6 @@ Route::middleware([
     Route::delete(
         '/categories/{category}',
         [CategoryController::class, 'destroy']
-    )->middleware(
-        'role:admin,chef_magasinier'
     )->name('categories.destroy');
 
 });
@@ -505,8 +529,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+    'auth'
 ])->group(function () {
 
      /*
@@ -584,8 +607,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+    'auth'
 ])->group(function () {
 
     Route::resource(
@@ -598,8 +620,6 @@ Route::middleware([
     Route::delete(
         '/suppliers/{supplier}',
         [SupplierController::class, 'destroy']
-    )->middleware(
-        'role:admin,chef_magasinier'
     )->name('suppliers.destroy');
 
 });
@@ -611,8 +631,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+    'auth'
 ])->group(function () {
 
     Route::resource(
@@ -625,8 +644,6 @@ Route::middleware([
     Route::delete(
         '/customers/{customer}',
         [CustomerController::class, 'destroy']
-    )->middleware(
-        'role:admin,chef_magasinier'
     )->name('customers.destroy');
 
 });
@@ -644,8 +661,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier'
+    'auth'
 ])->group(function () {
 
     /*
@@ -713,8 +729,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+    'auth'
 ])->group(function () {
 
     /*
@@ -774,8 +789,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+    'auth'
 ])->group(function () {
 
     /*
@@ -847,8 +861,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier'
+    'auth'
 ])->group(function () {
 
     /*
@@ -971,8 +984,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier'
+    'auth'
 ])->group(function () {
 
     /*
@@ -1051,8 +1063,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin'
+    'auth'
 ])->group(function () {
 
     /*
@@ -1104,8 +1115,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+    'auth'
 ])->group(function () {
 
     /*
@@ -1148,8 +1158,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+    'auth'
 ])->group(function () {
 
     Route::get(
@@ -1181,8 +1190,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier'
+    'auth'
 ])->group(function () {
 
     Route::get(
@@ -1350,6 +1358,21 @@ Route::get(
             'store',
         ]
     )->name('supplier-orders.store');
+
+    /*
+    |--------------------------------------------------------------------------
+    | MODIFIER UN BON DE COMMANDE (tant qu'il n'est pas approuvé)
+    |--------------------------------------------------------------------------
+    */
+    Route::get(
+        '/supplier-orders/{supplierOrder}/edit',
+        [SupplierOrderController::class, 'edit']
+    )->name('supplier-orders.edit');
+
+    Route::put(
+        '/supplier-orders/{supplierOrder}',
+        [SupplierOrderController::class, 'update']
+    )->name('supplier-orders.update');
 
 
     /*
@@ -1532,8 +1555,7 @@ Route::get(
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+    'auth'
 ])->group(function () {
 
     Route::get(
@@ -1586,8 +1608,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin'
+    'auth'
 ])->group(function () {
 
     Route::delete(
@@ -1603,8 +1624,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+    'auth'
 ])->group(function () {
 
     /*
@@ -1698,22 +1718,31 @@ Route::middleware([
 
     /*
     |--------------------------------------------------------------------------
-    | SUPPRESSION D'UNE VENTE
+    | AVOIRS (annulation des factures, comme l'app Atelier)
     |--------------------------------------------------------------------------
-    |
-    | Admin + chef magasinier uniquement.
-    |
     */
 
-    Route::delete(
-        '/sales/{sale}',
-        [SaleController::class, 'destroy']
-    )
-    ->whereNumber('sale')
-    ->middleware(
-        'role:admin,chef_magasinier'
-    )
-    ->name('sales.destroy');
+    Route::get('/avoirs', [AvoirController::class, 'index'])->name('avoirs.index');
+
+    Route::get('/avoirs/{avoir}', [AvoirController::class, 'show'])
+        ->whereNumber('avoir')
+        ->name('avoirs.show');
+
+    Route::get('/avoirs/{avoir}/pdf', [AvoirController::class, 'pdf'])
+        ->whereNumber('avoir')
+        ->name('avoirs.pdf');
+
+    Route::get('/avoirs/{avoir}/imprimer', [AvoirController::class, 'imprimer'])
+        ->whereNumber('avoir')
+        ->name('avoirs.imprimer');
+
+    Route::patch('/avoirs/{avoir}/rembourser', [AvoirController::class, 'rembourser'])
+        ->whereNumber('avoir')
+        ->name('avoirs.rembourser');
+
+
+    // Une facture ne se supprime plus : elle s'annule par un avoir
+    // (sales.cancel → AvoirController).
 
 });
 
@@ -1724,8 +1753,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+    'auth'
 ])->group(function () {
 
     /*
@@ -1844,9 +1872,7 @@ Route::middleware([
         [ProformaController::class, 'destroy']
     )
     ->whereNumber('proforma')
-    ->middleware(
-        'role:admin,chef_magasinier'
-    )
+
     ->name('proformas.destroy');
 
 });
@@ -1868,8 +1894,7 @@ Route::middleware([
 */
 
 Route::middleware([
-    'auth',
-    'role:admin,chef_magasinier,magasinier,vendeur,caissier'
+    'auth'
 ])->group(function () {
 
     /*
@@ -1933,6 +1958,14 @@ Route::middleware([
     ->whereNumber('fournisseurCommande')
     ->name('fournisseur-commandes.creer-bon-transfert');
 
+    // Suppression manuelle (administrateur uniquement), ex. devis supprimé côté garage
+    Route::delete(
+        '/fournisseur-commandes/{fournisseurCommande}',
+        [FournisseurCommandeController::class, 'destroy']
+    )
+    ->whereNumber('fournisseurCommande')
+    ->name('fournisseur-commandes.destroy');
+
     Route::post(
         '/fournisseur-commandes/{fournisseurCommande}/mettre-a-jour-bon-transfert',
         [FournisseurCommandeController::class, 'mettreAJourBonTransfert']
@@ -1966,12 +1999,27 @@ Route::middleware([
     ->whereNumber('bonTransfert')
     ->name('bons-transfert.pdf');
 
+    Route::get(
+        '/bons-transfert/{bonTransfert}/imprimer',
+        [BonTransfertController::class, 'imprimer']
+    )
+    ->whereNumber('bonTransfert')
+    ->name('bons-transfert.imprimer');
+
     Route::post(
         '/bons-transfert/{bonTransfert}/envoyer',
         [BonTransfertController::class, 'envoyer']
     )
     ->whereNumber('bonTransfert')
     ->name('bons-transfert.envoyer');
+
+    // Suppression manuelle d'un BT (administrateur uniquement)
+    Route::delete(
+        '/bons-transfert/{bonTransfert}',
+        [BonTransfertController::class, 'destroy']
+    )
+    ->whereNumber('bonTransfert')
+    ->name('bons-transfert.destroy');
 
 });
 

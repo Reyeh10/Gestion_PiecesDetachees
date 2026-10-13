@@ -6,13 +6,13 @@
         </div>
 
         <div class="d-none d-lg-inline-block">
-            <span class="text-muted">Version 1.0</span>
+            <span class="text-muted">Version 4.0</span>
         </div>
 
     </div>
 
     <script>
-        document.getElementById('fileInput').addEventListener('change', function(e) {
+        document.getElementById('fileInput')?.addEventListener('change', function(e) {
             let fileName = e.target.files[0]?.name || 'Aucun fichier choisi';
             document.getElementById('fileName').innerText = fileName;
         });

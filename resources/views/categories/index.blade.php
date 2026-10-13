@@ -26,10 +26,7 @@
                     </div>
 
                     {{-- BTN --}}
-                    @if(in_array(auth()->user()->role, [
-                            'admin',
-                            'chef_magasinier'
-                        ]))
+                    @if(auth()->user()->hasPermission('gerer_categories'))
                         <a href="{{ route('families.create') }}"
                         class="btn btn-primary rounded-pill px-4 shadow-sm">
 
@@ -213,12 +210,7 @@
                                             </a>
 
                                             {{-- ADMIN + CHEF MAGASINIER --}}
-                                            @if(
-                                                in_array(auth()->user()->role, [
-                                                    'admin',
-                                                    'chef_magasinier'
-                                                ])
-                                            )
+                                            @if(auth()->user()->hasPermission('gerer_categories'))
 
                                                 {{-- MODIFIER --}}
                                                 <a href="{{ route('families.edit', $family->id) }}"

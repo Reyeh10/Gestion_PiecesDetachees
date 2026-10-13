@@ -75,10 +75,12 @@
                 class="form-control"
                 required>
 
+            @if(auth()->user()->isAdmin())
             <option value="admin"
                 {{ old('role', $user->role ?? '') == 'admin' ? 'selected' : '' }}>
                 Administrateur
             </option>
+            @endif
 
             <option value="chef_magasinier"
                 {{ old('role', $user->role ?? '') == 'chef_magasinier' ? 'selected' : '' }}>

@@ -489,13 +489,7 @@
             </div>
 
             <div class="product-show-actions">
-                @if(
-                    in_array(
-                        auth()->user()->role,
-                        ['admin', 'chef_magasinier'],
-                        true
-                    )
-                )
+                @if(auth()->user()->hasPermission('modifier_produits'))
                     <a
                         href="{{ route('products.edit', $product) }}"
                         class="btn btn-warning"

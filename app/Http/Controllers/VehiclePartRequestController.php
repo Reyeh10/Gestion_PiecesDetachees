@@ -13,6 +13,7 @@ use App\Models\Supplier;
 use App\Models\Vehicle;
 use App\Models\VehiclePartRequest;
 use App\Models\VehiclePartRequestHistory;
+use App\Models\User;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -2953,16 +2954,15 @@ $import =
     public function destroy(
         VehiclePartRequest $vehiclePartRequest
     ): RedirectResponse {
+        // Récupérer l'utilisateur actuellement connecté.
+        $user = auth()->user();
 
-        if (
-            auth()->user()->role
-            !==
-            'admin'
-        ) {
-
+        // Vérifier que l'utilisateur est authentifié
+        // et qu'il possède la permission de suppression.
+        if (!$user instanceof User || !$user->hasPermission('supprimer_demandes_pieces')) {
             abort(
                 403,
-                'Seul un administrateur peut supprimer cette demande.'
+                'Vous n\'avez pas la permission de supprimer cette demande.'
             );
         }
 
