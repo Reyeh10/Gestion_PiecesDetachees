@@ -1,0 +1,1229 @@
+/* ==========================================================================
+   STCD MOTORS — THÈME DU MAGASIN = DESIGN DE L'APP ATELIER (sys-atelier)
+   --------------------------------------------------------------------------
+   Le Magasin doit ressembler à l'Atelier en tout (icônes, écriture,
+   emplacements) : seules les données changent. Les valeurs ci-dessous sont
+   celles des classes Tailwind de l'Atelier (layouts/app.blade.php) :
+     - menu w-64 (256 px) bg-slate-900, liens px-3 py-2 rounded-lg text-sm
+       font-medium, actif bg #5B3FAF texte blanc, survol bg-slate-800 ;
+     - titres de section text-xs font-semibold text-slate-500 uppercase ;
+     - sous-menus ml-4 pl-3 border-l border-slate-700, liens text-xs ;
+     - barre du haut blanche border-b, titre text-lg font-semibold ;
+     - contenu bg-gray-100 p-6, cartes rounded-2xl border-gray-200 ;
+     - police Instrument Sans ; mode nuit (classe « dark » sur <html>).
+
+   Chargée EN DERNIER par layouts/layoutMaster. Les règles du menu utilisent
+   « #layout-menu#layout-menu » (deux fois l'id) pour passer devant les
+   anciens styles du menu (sections/styles et <style> de sections/sidebar).
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. COULEURS ET DIMENSIONS
+   -------------------------------------------------------------------------- */
+html:root {
+    --stcd-sidebar-width: 256px !important;
+    --sidebar-width: 256px !important;
+}
+
+:root {
+    --stcd-primary: #5B3FAF;           /* violet STCD (orange-500 redéfini dans l'Atelier) */
+    --stcd-primary-hover: #4a329a;     /* orange-600 */
+    --stcd-primary-active: #3a2680;    /* orange-700 */
+    --stcd-primary-light: #8a66d9;     /* orange-400 */
+    --stcd-primary-rgb: 91, 63, 175;
+    --stcd-primary-50: #f3f0ff;        /* orange-50 */
+    --stcd-primary-100: #e5dcff;       /* orange-100 */
+
+    --stcd-slate-950: #020617;
+    --stcd-slate-900: #0f172a;
+    --stcd-slate-800: #1e293b;
+    --stcd-slate-700: #334155;
+    --stcd-slate-600: #475569;
+    --stcd-slate-500: #64748b;
+    --stcd-slate-400: #94a3b8;
+    --stcd-slate-300: #cbd5e1;
+
+    --stcd-bg: #f3f4f6;                /* gray-100 */
+    --stcd-surface: #ffffff;
+    --stcd-surface-2: #f9fafb;         /* gray-50 */
+    --stcd-border: #e5e7eb;            /* gray-200 */
+    --stcd-border-light: #f3f4f6;      /* gray-100 */
+    --stcd-border-strong: #d1d5db;     /* gray-300 */
+    --stcd-text: #1e293b;              /* slate-800 */
+    --stcd-text-2: #334155;            /* slate-700 */
+    --stcd-muted: #64748b;             /* slate-500 */
+
+    --stcd-font: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+html.dark {
+    color-scheme: dark;
+    --stcd-bg: #020617;                /* slate-950 */
+    --stcd-surface: #1e293b;           /* slate-800 */
+    --stcd-surface-2: #0f172a;         /* slate-900 */
+    --stcd-border: #334155;            /* slate-700 */
+    --stcd-border-light: #1e293b;
+    --stcd-border-strong: #475569;
+    --stcd-text: #f1f5f9;              /* slate-100 */
+    --stcd-text-2: #e2e8f0;            /* slate-200 */
+    --stcd-muted: #94a3b8;             /* slate-400 */
+    --stcd-primary-50: rgba(139, 92, 246, .14);
+    --stcd-primary-100: rgba(139, 92, 246, .26);
+}
+
+html body.stcd-theme {
+    --bs-primary: var(--stcd-primary);
+    --bs-primary-rgb: var(--stcd-primary-rgb);
+    --bs-link-color: var(--stcd-primary);
+    --bs-link-color-rgb: var(--stcd-primary-rgb);
+    --bs-link-hover-color: var(--stcd-primary-hover);
+    --bs-body-font-family: var(--stcd-font);
+    --bs-body-font-size: 14px;
+    --bs-body-bg: var(--stcd-bg);
+    --bs-body-color: var(--stcd-text-2);
+    --bs-border-color: var(--stcd-border);
+    --bs-heading-color: var(--stcd-text);
+}
+
+/* --------------------------------------------------------------------------
+   2. BASE
+   -------------------------------------------------------------------------- */
+html body.stcd-theme {
+    font-family: var(--stcd-font) !important;
+    font-size: 14px;
+    line-height: 1.5;
+    background: var(--stcd-bg) !important;
+    color: var(--stcd-text-2);
+    -webkit-font-smoothing: antialiased;
+    transition: background-color .2s ease, color .2s ease;
+}
+
+html body.stcd-theme h1, html body.stcd-theme h2, html body.stcd-theme h3,
+html body.stcd-theme h4, html body.stcd-theme h5, html body.stcd-theme h6,
+html body.stcd-theme .h1, html body.stcd-theme .h2, html body.stcd-theme .h3,
+html body.stcd-theme .h4, html body.stcd-theme .h5, html body.stcd-theme .h6 {
+    font-family: var(--stcd-font);
+    font-weight: 600;
+    color: var(--stcd-text);
+}
+
+html body.stcd-theme a { color: var(--stcd-primary); }
+html body.stcd-theme a:hover { color: var(--stcd-primary-hover); }
+html body.stcd-theme .text-primary { color: var(--stcd-primary) !important; }
+html body.stcd-theme .bg-primary { background-color: var(--stcd-primary) !important; }
+html body.stcd-theme .border-primary { border-color: var(--stcd-primary) !important; }
+html body.stcd-theme .text-muted { color: var(--stcd-muted) !important; }
+
+html body.stcd-theme .layout-page,
+html body.stcd-theme .content-wrapper {
+    background: var(--stcd-bg) !important;
+}
+
+/* --------------------------------------------------------------------------
+   3. MISE EN PAGE : menu 256 px, barre du haut à sa droite, contenu p-6
+   -------------------------------------------------------------------------- */
+@media (min-width: 1200px) {
+    html body.stcd-theme #layout-menu#layout-menu {
+        width: 256px !important;
+        min-width: 256px !important;
+        max-width: 256px !important;
+    }
+
+    html body.stcd-theme .layout-page {
+        width: calc(100% - 256px) !important;
+        max-width: calc(100% - 256px) !important;
+        margin-left: 256px !important;
+    }
+
+    html body.stcd-theme .layout-page > .layout-navbar {
+        left: 256px !important;
+        right: 0 !important;
+        width: auto !important;
+        max-width: none !important;
+    }
+}
+
+@media (max-width: 1199.98px) {
+    html body.stcd-theme #layout-menu#layout-menu {
+        width: 256px !important;
+        min-width: 256px !important;
+        max-width: 256px !important;
+    }
+
+    html body.stcd-theme .layout-page > .layout-navbar {
+        left: 0 !important;
+        right: 0 !important;
+        width: auto !important;
+        max-width: none !important;
+    }
+}
+
+html body.stcd-theme .content-wrapper > .container-xxl,
+html body.stcd-theme .content-wrapper > .container-fluid {
+    padding: 24px !important;
+}
+
+html body.stcd-theme .layout-page > .content-wrapper {
+    padding-top: 81px !important;
+}
+
+/* --------------------------------------------------------------------------
+   4. MENU LATÉRAL (identique à l'Atelier)
+   -------------------------------------------------------------------------- */
+html body.stcd-theme #layout-menu#layout-menu {
+    display: flex !important;
+    flex-direction: column !important;
+    background: var(--stcd-slate-900) !important;
+    background-image: none !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-inner-shadow,
+html body.stcd-theme #layout-menu#layout-menu .ps__rail-x,
+html body.stcd-theme #layout-menu#layout-menu .ps__rail-y {
+    display: none !important;
+}
+
+/* ---- En-tête : logo h-12 rounded-xl, « STCD Motors », slogan ---- */
+html body.stcd-theme #layout-menu#layout-menu .stcd-sidebar-brand,
+html body.stcd-theme #layout-menu#layout-menu .app-brand {
+    flex-shrink: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 16px 20px !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--stcd-slate-700) !important;
+    box-shadow: none !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .stcd-brand-link {
+    gap: 12px;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .stcd-brand-logo {
+    width: 48px !important;
+    min-width: 48px !important;
+    height: 48px !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    border: 0 !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .stcd-brand-logo img {
+    width: 100% !important;
+    height: 100% !important;
+    padding: 2px !important;
+    object-fit: contain !important;
+    border-radius: 12px !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .stcd-brand-name {
+    margin: 0 !important;
+    color: #ffffff !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    line-height: 1.25 !important;
+    letter-spacing: 0 !important;
+    white-space: nowrap !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .stcd-brand-city {
+    margin: 0 !important;
+    color: var(--stcd-slate-400) !important;
+    font-size: 10px !important;
+    font-style: italic !important;
+    font-weight: 400 !important;
+    line-height: 1.3 !important;
+    white-space: normal !important;
+}
+
+/* ---- Liste : nav flex-1 px-3 py-4 space-y-1 overflow-y-auto ---- */
+html body.stcd-theme #layout-menu#layout-menu > .menu-inner {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 16px 12px !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu > .menu-inner::-webkit-scrollbar { width: 6px; }
+html body.stcd-theme #layout-menu#layout-menu > .menu-inner::-webkit-scrollbar-track { background: transparent; }
+html body.stcd-theme #layout-menu#layout-menu > .menu-inner::-webkit-scrollbar-thumb {
+    background: var(--stcd-slate-700);
+    border-radius: 10px;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-item {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-inner > .menu-item + .menu-item {
+    margin-top: 4px !important;
+}
+
+/* ---- Titres de section : pt-3 pb-1, px-3 text-xs font-semibold slate-500 uppercase ---- */
+html body.stcd-theme #layout-menu#layout-menu .menu-inner > .menu-header {
+    width: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 12px 12px 4px !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-inner > .menu-header .menu-header-text {
+    color: var(--stcd-slate-500) !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    letter-spacing: .05em !important;
+    line-height: 16px !important;
+    text-transform: uppercase !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-header::before,
+html body.stcd-theme #layout-menu#layout-menu .menu-header::after {
+    display: none !important;
+}
+
+/* ---- Liens : flex gap-3 px-3 py-2 rounded-lg text-sm font-medium ---- */
+html body.stcd-theme #layout-menu#layout-menu .menu-inner > .menu-item > .menu-link {
+    position: relative !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 8px 12px !important;
+    color: var(--stcd-slate-400) !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    outline: none !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    line-height: 20px !important;
+    text-decoration: none !important;
+    transform: none !important;
+    transition: background-color .15s ease, color .15s ease !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-inner > .menu-item > .menu-link > div {
+    min-width: 0;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    line-height: 20px !important;
+}
+
+/* petit libellé sous un lien (ex. « Pièces spéciales ») */
+html body.stcd-theme #layout-menu#layout-menu .menu-link small,
+html body.stcd-theme #layout-menu#layout-menu .menu-link .menu-subtitle {
+    display: block;
+    color: var(--stcd-slate-500) !important;
+    font-size: 10px !important;
+    line-height: 14px !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-inner > .menu-item > .menu-link::before {
+    content: none !important;
+    display: none !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-inner > .menu-item > .menu-link:hover,
+html body.stcd-theme #layout-menu#layout-menu .menu-inner > .menu-item.open:not(.active) > .menu-link {
+    color: #ffffff !important;
+    background: var(--stcd-slate-800) !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-inner > .menu-item.active > .menu-link {
+    color: #ffffff !important;
+    background: var(--stcd-primary) !important;
+    box-shadow: none !important;
+}
+
+/* ---- Icônes : w-5 h-5, couleur du texte ---- */
+html body.stcd-theme #layout-menu#layout-menu .menu-icon {
+    flex-shrink: 0 !important;
+    width: 20px !important;
+    min-width: 20px !important;
+    height: 20px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: inherit !important;
+    font-size: 20px !important;
+    line-height: 20px !important;
+}
+
+/* ---- Chevron des menus dépliables : w-4 h-4, tourne à l'ouverture ---- */
+html body.stcd-theme #layout-menu#layout-menu .menu-inner > .menu-item > .menu-link.menu-toggle {
+    padding-right: 36px !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-link.menu-toggle::after {
+    content: "" !important;
+    position: absolute !important;
+    top: 50% !important;
+    right: 14px !important;
+    left: auto !important;
+    width: 7px !important;
+    height: 7px !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-right: 2px solid currentColor !important;
+    border-bottom: 2px solid currentColor !important;
+    background: none !important;
+    transform: translateY(-70%) rotate(45deg) !important;
+    transition: transform .2s ease !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-item.open > .menu-link.menu-toggle::after {
+    transform: translateY(-25%) rotate(225deg) !important;
+}
+
+/* ---- Sous-menus : mt-1 ml-4 pl-3 border-l border-slate-700 space-y-0.5 ---- */
+html body.stcd-theme #layout-menu#layout-menu .menu-sub {
+    width: auto !important;
+    margin: 4px 0 0 16px !important;
+    padding: 0 0 0 12px !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-left: 1px solid var(--stcd-slate-700) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-sub::before,
+html body.stcd-theme #layout-menu#layout-menu .menu-sub::after {
+    content: none !important;
+    display: none !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-sub > .menu-item + .menu-item {
+    margin-top: 2px !important;
+}
+
+/* liens : flex gap-2 px-3 py-1.5 rounded-lg text-xs font-medium + point w-1.5 */
+html body.stcd-theme #layout-menu#layout-menu .menu-sub > .menu-item > .menu-link {
+    position: relative !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 6px 12px 6px 26px !important;
+    color: var(--stcd-slate-400) !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    line-height: 16px !important;
+    transform: none !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-sub > .menu-item > .menu-link > div {
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    line-height: 16px !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-sub > .menu-item > .menu-link::before {
+    content: "" !important;
+    position: absolute !important;
+    top: 50% !important;
+    left: 12px !important;
+    display: block !important;
+    width: 6px !important;
+    height: 6px !important;
+    margin: 0 !important;
+    background: var(--stcd-slate-500) !important;
+    border: 0 !important;
+    border-radius: 50% !important;
+    box-shadow: none !important;
+    transform: translateY(-50%) !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-sub > .menu-item > .menu-link::after {
+    display: none !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-sub > .menu-item > .menu-link:hover {
+    color: #ffffff !important;
+    background: var(--stcd-slate-800) !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-sub > .menu-item.active > .menu-link {
+    color: #ffffff !important;
+    background: var(--stcd-slate-700) !important;
+    font-weight: 500 !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-sub > .menu-item.active > .menu-link::before {
+    background: var(--stcd-primary-light) !important;
+}
+
+/* sous-menu de 2e niveau */
+html body.stcd-theme #layout-menu#layout-menu .menu-sub .menu-sub {
+    margin-left: 8px !important;
+}
+
+/* petits titres dans un sous-menu */
+html body.stcd-theme #layout-menu#layout-menu .menu-sub > .menu-header {
+    margin: 0 !important;
+    padding: 8px 12px 2px !important;
+    min-height: 0 !important;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .menu-sub > .menu-header .menu-header-text {
+    color: var(--stcd-slate-500) !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    letter-spacing: .05em !important;
+    text-transform: uppercase !important;
+}
+
+/* ---- Compteurs : bg couleur text-white text-[11px] font-bold min-w-[19px] h-[19px] rounded-full ---- */
+html body.stcd-theme #layout-menu#layout-menu .menu-link .badge {
+    flex-shrink: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 19px !important;
+    height: 19px !important;
+    margin-left: auto !important;
+    padding: 0 4px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    border-radius: 999px !important;
+}
+
+/* ---- Pied : border-t border-slate-700 px-4 py-4 ---- */
+html body.stcd-theme #layout-menu#layout-menu .stcd-sidebar-footer {
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    background: var(--stcd-slate-900);
+    border-top: 1px solid var(--stcd-slate-700);
+}
+
+html body.stcd-theme #layout-menu#layout-menu .stcd-sidebar-user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 4px;
+    margin: -4px;
+    border-radius: 8px;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .stcd-sidebar-avatar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    color: #ffffff;
+    background: var(--stcd-primary);
+    border-radius: 50%;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .stcd-sidebar-user-name {
+    overflow: hidden;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .stcd-sidebar-user-role {
+    overflow: hidden;
+    color: var(--stcd-slate-400);
+    font-size: 12px;
+    line-height: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .stcd-sidebar-icon-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    color: var(--stcd-slate-400);
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color .15s ease, color .15s ease;
+}
+
+html body.stcd-theme #layout-menu#layout-menu .stcd-sidebar-icon-btn svg { width: 20px; height: 20px; }
+
+html body.stcd-theme #layout-menu#layout-menu .stcd-sidebar-icon-btn:hover {
+    color: #ffffff;
+    background: var(--stcd-slate-800);
+}
+
+html body.stcd-theme #layout-menu#layout-menu .stcd-sidebar-footer form { margin: 0; }
+
+html body.stcd-theme #layout-menu#layout-menu .stcd-sidebar-version {
+    width: 100%;
+    margin: 0;
+    color: var(--stcd-slate-500);
+    font-size: 12px;
+    text-align: center;
+}
+
+/* bouton lune / soleil */
+html body.stcd-theme .stcd-icon-sun { display: none; }
+html.dark body.stcd-theme .stcd-icon-sun { display: inline; }
+html.dark body.stcd-theme .stcd-icon-moon { display: none; }
+
+/* --------------------------------------------------------------------------
+   5. BARRE DU HAUT : bg-white border-b border-gray-200 px-6 py-4
+   -------------------------------------------------------------------------- */
+html body.stcd-theme .layout-page > .layout-navbar {
+    min-height: 81px !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 16px 24px !important;
+    background: var(--stcd-surface) !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--stcd-border) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+}
+
+html body.stcd-theme .stcd-topbar-title {
+    margin: 0 !important;
+    overflow: hidden;
+    color: var(--stcd-text) !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    line-height: 28px !important;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+html body.stcd-theme .stcd-topbar-subtitle {
+    overflow: hidden;
+    color: var(--stcd-muted) !important;
+    font-size: 14px !important;
+    line-height: 20px !important;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+html body.stcd-theme .layout-navbar .layout-menu-toggle .bx-menu,
+html body.stcd-theme .layout-navbar .layout-menu-toggle svg {
+    color: var(--stcd-muted) !important;
+}
+
+/* cloche : p-2 rounded-lg text-slate-500 hover:bg-gray-100 */
+html body.stcd-theme .stcd-notification-button {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: auto !important;
+    height: auto !important;
+    padding: 8px !important;
+    color: var(--stcd-muted) !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+}
+
+html body.stcd-theme .stcd-notification-button:hover {
+    color: var(--stcd-muted) !important;
+    background: #f3f4f6 !important;
+}
+
+html.dark body.stcd-theme .stcd-notification-button:hover { background: var(--stcd-slate-700) !important; }
+
+html body.stcd-theme .stcd-notification-button svg { width: 20px; height: 20px; }
+
+/* compteur : absolute -top-0.5 -right-0.5 bg-red-500 text-[10px] font-bold w-4 h-4 rounded-full */
+html body.stcd-theme .stcd-notification-badge {
+    position: absolute !important;
+    top: -2px !important;
+    right: -2px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 16px !important;
+    height: 16px !important;
+    padding: 0 3px !important;
+    color: #ffffff !important;
+    background: #ef4444 !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+}
+
+/* menu déroulant des notifications : w-80 bg-white border rounded-xl shadow-lg */
+html body.stcd-theme .stcd-notification-menu {
+    width: 320px !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background: var(--stcd-surface) !important;
+    border: 1px solid var(--stcd-border) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, .1), 0 4px 6px -4px rgba(0, 0, 0, .1) !important;
+}
+
+html body.stcd-theme .stcd-notification-header {
+    padding: 12px 16px !important;
+    background: var(--stcd-surface) !important;
+    border-bottom: 1px solid var(--stcd-border-light) !important;
+}
+
+html body.stcd-theme .stcd-notification-header-title {
+    color: var(--stcd-text-2) !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+}
+
+html body.stcd-theme .stcd-notification-item.unread { background: var(--stcd-primary-50) !important; }
+
+html body.stcd-theme .stcd-notification-badge.est-vide { display: none !important; }
+
+/* réglages « Sur cet appareil » : px-4 py-3 border-t bg-gray-50 */
+html body.stcd-theme .stcd-notif-reglages {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--stcd-surface-2);
+    border-top: 1px solid var(--stcd-border-light);
+}
+
+html body.stcd-theme .stcd-notif-reglages-titre {
+    margin: 0;
+    color: var(--stcd-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+html body.stcd-theme .stcd-notif-reglage {
+    padding: 0;
+    color: var(--stcd-primary);
+    background: none;
+    border: 0;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+}
+
+html body.stcd-theme .stcd-notif-reglage:hover { color: var(--stcd-primary-hover); }
+html body.stcd-theme .stcd-notif-reglage[hidden] { display: none; }
+
+/* --------------------------------------------------------------------------
+   6. CARTES : bg-white rounded-2xl border border-gray-200
+   -------------------------------------------------------------------------- */
+html body.stcd-theme .card {
+    background-color: var(--stcd-surface) !important;
+    border: 1px solid var(--stcd-border) !important;
+    border-radius: 16px !important;
+    box-shadow: none !important;
+}
+
+html body.stcd-theme .card-header {
+    background-color: transparent;
+    border-bottom: 1px solid var(--stcd-border-light);
+    color: var(--stcd-text);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+html body.stcd-theme .card-footer {
+    background-color: transparent;
+    border-top: 1px solid var(--stcd-border-light);
+}
+
+html body.stcd-theme .card-title { color: var(--stcd-text); font-weight: 600; }
+
+/* --------------------------------------------------------------------------
+   7. BOUTONS : rounded-xl text-sm font-semibold, violet / blanc à bordure
+   -------------------------------------------------------------------------- */
+html body.stcd-theme .btn {
+    font-family: var(--stcd-font);
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 12px;
+    box-shadow: none;
+}
+
+html body.stcd-theme .btn-sm { font-size: 12px; border-radius: 8px; }
+
+html body.stcd-theme .btn-primary {
+    --bs-btn-bg: var(--stcd-primary);
+    --bs-btn-border-color: var(--stcd-primary);
+    --bs-btn-hover-bg: var(--stcd-primary-hover);
+    --bs-btn-hover-border-color: var(--stcd-primary-hover);
+    --bs-btn-active-bg: var(--stcd-primary-active);
+    --bs-btn-active-border-color: var(--stcd-primary-active);
+    color: #ffffff !important;
+    background-color: var(--stcd-primary) !important;
+    border-color: var(--stcd-primary) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .05) !important;
+}
+
+html body.stcd-theme .btn-primary:hover,
+html body.stcd-theme .btn-primary:focus {
+    background-color: var(--stcd-primary-hover) !important;
+    border-color: var(--stcd-primary-hover) !important;
+}
+
+html body.stcd-theme .btn-outline-primary {
+    color: var(--stcd-primary) !important;
+    background: transparent !important;
+    border-color: var(--stcd-primary) !important;
+}
+
+html body.stcd-theme .btn-outline-primary:hover {
+    color: #ffffff !important;
+    background: var(--stcd-primary) !important;
+}
+
+html body.stcd-theme .btn-outline-secondary,
+html body.stcd-theme .btn-secondary,
+html body.stcd-theme .btn-light {
+    color: var(--stcd-slate-600) !important;
+    background: var(--stcd-surface) !important;
+    border: 1px solid var(--stcd-border) !important;
+}
+
+html body.stcd-theme .btn-outline-secondary:hover,
+html body.stcd-theme .btn-secondary:hover,
+html body.stcd-theme .btn-light:hover {
+    background: var(--stcd-surface-2) !important;
+}
+
+html.dark body.stcd-theme .btn-outline-secondary,
+html.dark body.stcd-theme .btn-secondary,
+html.dark body.stcd-theme .btn-light { color: var(--stcd-slate-300) !important; }
+
+html body.stcd-theme .btn-label-primary {
+    color: var(--stcd-primary) !important;
+    background: var(--stcd-primary-50) !important;
+    border-color: transparent !important;
+}
+
+/* --------------------------------------------------------------------------
+   8. TABLEAUX : thead bg-gray-50, th text-xs uppercase slate-500, divide-y
+   -------------------------------------------------------------------------- */
+html body.stcd-theme .table {
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--stcd-text-2);
+    --bs-table-border-color: var(--stcd-border-light);
+    --bs-table-hover-bg: var(--stcd-surface-2);
+    color: var(--stcd-text-2);
+    font-size: 14px;
+}
+
+html body.stcd-theme .table:not(.fc-table):not(.bt-table) > thead > tr > th {
+    padding: 12px 16px;
+    color: var(--stcd-muted) !important;
+    background-color: var(--stcd-surface-2) !important;
+    border-color: var(--stcd-border) !important;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+/* En-têtes : un mot n'est JAMAIS coupé au milieu (« MAR QUE », « PONDÉR É ») :
+   le retour à la ligne se fait seulement entre deux mots. */
+html body.stcd-theme table th {
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+    hyphens: none !important;
+}
+
+html body.stcd-theme .table:not(.fc-table):not(.bt-table) > thead > tr > th {
+    padding: 12px 10px;
+    letter-spacing: .03em;
+    line-height: 1.35;
+}
+
+html body.stcd-theme .table:not(.fc-table):not(.bt-table) > tbody > tr > td {
+    padding: 12px 16px;
+    border-color: var(--stcd-border-light);
+}
+
+html body.stcd-theme .table-hover > tbody > tr:hover > * {
+    --bs-table-bg-state: var(--stcd-surface-2);
+}
+
+/* --------------------------------------------------------------------------
+   9. FORMULAIRES : border-gray-300 rounded-xl, focus ring-2 violet
+   -------------------------------------------------------------------------- */
+html body.stcd-theme .form-control,
+html body.stcd-theme .form-select {
+    color: var(--stcd-text);
+    background-color: var(--stcd-surface);
+    border-color: var(--stcd-border-strong);
+    border-radius: 12px;
+    font-family: var(--stcd-font);
+    font-size: 14px;
+}
+
+html body.stcd-theme .form-control-sm,
+html body.stcd-theme .form-select-sm { border-radius: 8px; }
+
+html body.stcd-theme .form-control:focus,
+html body.stcd-theme .form-select:focus {
+    border-color: transparent !important;
+    box-shadow: 0 0 0 2px var(--stcd-primary) !important;
+}
+
+html body.stcd-theme .form-control::placeholder { color: var(--stcd-slate-400); }
+
+html body.stcd-theme .form-label {
+    margin-bottom: 6px;
+    color: var(--stcd-text-2);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+html body.stcd-theme .form-check-input:checked {
+    background-color: var(--stcd-primary);
+    border-color: var(--stcd-primary);
+}
+
+html body.stcd-theme .form-check-input:focus {
+    border-color: var(--stcd-primary);
+    box-shadow: 0 0 0 2px rgba(var(--stcd-primary-rgb), .35);
+}
+
+html body.stcd-theme .input-group-text {
+    color: var(--stcd-muted);
+    background-color: var(--stcd-surface-2);
+    border-color: var(--stcd-border-strong);
+}
+
+/* Select2 */
+html body.stcd-theme .select2-container .select2-selection--single,
+html body.stcd-theme .select2-container .select2-selection--multiple {
+    background-color: var(--stcd-surface) !important;
+    border-color: var(--stcd-border-strong) !important;
+    border-radius: 12px !important;
+}
+
+html body.stcd-theme .select2-container .select2-selection__rendered { color: var(--stcd-text) !important; }
+
+html body.stcd-theme .select2-container--open .select2-selection,
+html body.stcd-theme .select2-container--focus .select2-selection {
+    border-color: var(--stcd-primary) !important;
+}
+
+html body.stcd-theme .select2-dropdown {
+    background-color: var(--stcd-surface);
+    border-color: var(--stcd-border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+html body.stcd-theme .select2-results__option { color: var(--stcd-text-2); }
+
+html body.stcd-theme .select2-container--default .select2-results__option--highlighted[aria-selected],
+html body.stcd-theme .select2-container--default .select2-results__option--highlighted.select2-results__option--selectable {
+    color: #ffffff !important;
+    background-color: var(--stcd-primary) !important;
+}
+
+/* --------------------------------------------------------------------------
+   10. BADGES, ALERTES, PAGINATION, ONGLETS, MENUS, MODALES
+   -------------------------------------------------------------------------- */
+html body.stcd-theme .badge {
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 999px;
+}
+
+html body.stcd-theme .bg-label-primary {
+    color: var(--stcd-primary) !important;
+    background-color: var(--stcd-primary-50) !important;
+}
+
+/* alertes : rounded-lg border px-4 py-3 text-sm */
+html body.stcd-theme .alert {
+    padding: 12px 16px;
+    font-size: 14px;
+    border-radius: 8px;
+    box-shadow: none;
+}
+
+html body.stcd-theme .alert-success { color: #15803d; background: #f0fdf4; border: 1px solid #bbf7d0; }
+html body.stcd-theme .alert-danger  { color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; }
+html body.stcd-theme .alert-warning { color: #92400e; background: #fffbeb; border: 1px solid #fde68a; }
+html body.stcd-theme .alert-info    { color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe; }
+
+html body.stcd-theme .page-link {
+    color: var(--stcd-text-2);
+    background-color: var(--stcd-surface);
+    border-color: var(--stcd-border);
+}
+
+html body.stcd-theme .page-item.active .page-link,
+html body.stcd-theme .page-link.active {
+    color: #ffffff !important;
+    background-color: var(--stcd-primary) !important;
+    border-color: var(--stcd-primary) !important;
+}
+
+html body.stcd-theme .nav-pills .nav-link.active,
+html body.stcd-theme .nav-pills .show > .nav-link {
+    color: #ffffff;
+    background-color: var(--stcd-primary) !important;
+    box-shadow: none;
+}
+
+html body.stcd-theme .nav-tabs .nav-link.active {
+    color: var(--stcd-primary);
+    border-bottom-color: var(--stcd-primary);
+}
+
+html body.stcd-theme .dropdown-menu {
+    color: var(--stcd-text-2);
+    background-color: var(--stcd-surface);
+    border: 1px solid var(--stcd-border);
+    border-radius: 12px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, .1), 0 4px 6px -4px rgba(0, 0, 0, .1);
+}
+
+html body.stcd-theme .dropdown-item { color: var(--stcd-text-2); border-radius: 8px; }
+html body.stcd-theme .dropdown-item:hover,
+html body.stcd-theme .dropdown-item:focus { color: var(--stcd-text); background-color: var(--stcd-surface-2); }
+
+html body.stcd-theme .modal-content {
+    background-color: var(--stcd-surface);
+    border: 1px solid var(--stcd-border);
+    border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, .25);
+}
+
+html body.stcd-theme .modal-header,
+html body.stcd-theme .modal-footer { border-color: var(--stcd-border-light); }
+
+html body.stcd-theme .progress-bar { background-color: var(--stcd-primary); }
+
+/* pas de pied de page dans le contenu (l'Atelier affiche la version en bas du menu) */
+html body.stcd-theme .layout-page .content-footer {
+    display: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   11. MODE NUIT (mêmes teintes que l'Atelier)
+   -------------------------------------------------------------------------- */
+html.dark body.stcd-theme .card,
+html.dark body.stcd-theme .bg-white,
+html.dark body.stcd-theme .bg-body,
+html.dark body.stcd-theme .bg-light {
+    background-color: var(--stcd-surface) !important;
+    color: var(--stcd-text-2);
+}
+
+/* liens et textes violets éclaircis, comme l'Atelier (orange-500 → #a78bfa) */
+html.dark body.stcd-theme .layout-page a:not(.btn):not(.dropdown-item),
+html.dark body.stcd-theme .text-primary { color: #a78bfa !important; }
+
+html.dark body.stcd-theme .text-dark,
+html.dark body.stcd-theme .text-body,
+html.dark body.stcd-theme .text-heading { color: var(--stcd-text) !important; }
+
+html.dark body.stcd-theme .border,
+html.dark body.stcd-theme .border-top,
+html.dark body.stcd-theme .border-bottom,
+html.dark body.stcd-theme .border-start,
+html.dark body.stcd-theme .border-end { border-color: var(--stcd-border) !important; }
+
+html.dark body.stcd-theme .table > :not(caption) > * > * {
+    color: var(--stcd-text-2);
+    background-color: transparent;
+    border-color: var(--stcd-border);
+}
+
+html.dark body.stcd-theme .table:not(.fc-table):not(.bt-table) > thead > tr > th {
+    color: var(--stcd-muted) !important;
+    background-color: var(--stcd-surface-2) !important;
+}
+
+html.dark body.stcd-theme .form-control,
+html.dark body.stcd-theme .form-select,
+html.dark body.stcd-theme textarea,
+html.dark body.stcd-theme input:not([type=checkbox]):not([type=radio]):not([type=submit]):not([type=button]) {
+    color: var(--stcd-text);
+    background-color: var(--stcd-slate-900);
+    border-color: var(--stcd-slate-600);
+    color-scheme: dark;
+}
+
+/* Pages aux couleurs écrites en dur : classes posées par le script du mode
+   nuit (sections/styles.blade.php). Écran seulement : l'impression reste claire. */
+@media screen {
+    html.dark body.stcd-theme .stcd-auto-fond:not(#stcd-x#stcd-x) {
+        background-color: var(--stcd-surface) !important;
+        background-image: none !important;
+    }
+
+    html.dark body.stcd-theme .stcd-auto-fond-2:not(#stcd-x#stcd-x) {
+        background-color: var(--stcd-surface-2) !important;
+        background-image: none !important;
+    }
+
+    html.dark body.stcd-theme .stcd-auto-texte:not(#stcd-x#stcd-x) { color: var(--stcd-text-2) !important; }
+    html.dark body.stcd-theme .stcd-auto-bord:not(#stcd-x#stcd-x) { border-color: var(--stcd-border) !important; }
+
+    html.dark body.stcd-theme input[type=file]::file-selector-button {
+        color: var(--stcd-text-2);
+        background: var(--stcd-slate-700);
+        border-color: var(--stcd-slate-600);
+    }
+}
+
+html.dark body.stcd-theme input::placeholder,
+html.dark body.stcd-theme textarea::placeholder { color: var(--stcd-slate-500); }
+
+html.dark body.stcd-theme .alert-success { color: #86efac; background: #052e16; border-color: #166534; }
+html.dark body.stcd-theme .alert-danger  { color: #fca5a5; background: #450a0a; border-color: #991b1b; }
+html.dark body.stcd-theme .alert-warning { color: #fcd34d; background: #422006; border-color: #78350f; }
+html.dark body.stcd-theme .alert-info    { color: #93c5fd; background: #172554; border-color: #1e40af; }
+
+html.dark body.stcd-theme .stcd-notification-menu,
+html.dark body.stcd-theme .stcd-notification-header,
+html.dark body.stcd-theme .stcd-notification-footer {
+    color: var(--stcd-text-2) !important;
+    background: var(--stcd-surface) !important;
+    border-color: var(--stcd-border) !important;
+}
+
+html.dark body.stcd-theme .stcd-notification-item { border-color: var(--stcd-border) !important; }
+html.dark body.stcd-theme .stcd-notification-item:hover { background: var(--stcd-slate-700) !important; }
+html.dark body.stcd-theme .stcd-notification-title,
+html.dark body.stcd-theme .stcd-notification-header-title { color: var(--stcd-text) !important; }
+
+html.dark body.stcd-theme ::-webkit-scrollbar-track { background: var(--stcd-surface-2); }
+html.dark body.stcd-theme ::-webkit-scrollbar-thumb { background: var(--stcd-border-strong); }
+
+/* --------------------------------------------------------------------------
+   EXPIRATION DE SESSION (fenêtre 60 s avant la déconnexion, comme l'Atelier)
+   -------------------------------------------------------------------------- */
+.stcd-idle {
+    position: fixed;
+    inset: 0;
+    z-index: 4000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.stcd-idle[hidden] { display: none; }
+
+.stcd-idle-fond {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, .6);
+    backdrop-filter: blur(4px);
+}
+
+.stcd-idle-boite {
+    position: relative;
+    width: 100%;
+    max-width: 384px;
+    margin: 0 16px;
+    padding: 32px;
+    text-align: center;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, .25);
+    font-family: var(--stcd-font);
+}
+
+.stcd-idle-icone {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 16px;
+    color: #f97316;
+    background: #ffedd5;
+    border-radius: 50%;
+}
+
+.stcd-idle-icone svg { width: 28px; height: 28px; }
+
+.stcd-idle-boite h2 {
+    margin: 0 0 8px;
+    color: #1e293b;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.stcd-idle-boite p {
+    margin: 0 0 20px;
+    color: #64748b;
+    font-size: 14px;
+}
+
+#stcd-idle-countdown {
+    color: #f97316;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.stcd-idle-boite button {
+    width: 100%;
+    padding: 10px;
+    color: #fff;
+    background: var(--stcd-primary, #5B3FAF);
+    border: 0;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color .15s;
+}
+
+.stcd-idle-boite button:hover { background: var(--stcd-primary-hover, #4c3394); }
+
+html.dark .stcd-idle-boite { background: #1e293b; }
+html.dark .stcd-idle-boite h2 { color: #f1f5f9; }
+html.dark .stcd-idle-boite p { color: #94a3b8; }
+html.dark .stcd-idle-icone { background: rgba(249, 115, 22, .15); }

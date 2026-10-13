@@ -2,6 +2,12 @@
 
     $user = auth()->user();
 
+    // Une entrée du menu n'est affichée que si l'utilisateur a la permission
+    // de la page (App\Services\PermissionService::$routes).
+    $peut = fn (string $route): bool => $user !== null
+        && (($permission = \App\Services\PermissionService::forRoute($route)) === null
+            || $user->hasPermission($permission));
+
     /**
 
      * --------------------------------------------------------------------------
@@ -22,15 +28,7 @@
 
         $user &&
 
-        in_array($user->role, [
-
-            'admin',
-
-            'chef_magasinier',
-
-            'vendeur'
-
-        ])
+        $user->hasPermission('voir_commandes_garage')
 
     ) {
 
@@ -660,13 +658,13 @@
 
             <span class="stcd-brand-name">
 
-                STCD<br>Motors
+                STCD Motors
 
             </span>
 
             <span class="stcd-brand-city">
 
-                Djibouti
+                Your Dream Car,<br>One Visit Away
 
             </span>
 
@@ -690,7 +688,7 @@
 
                class="menu-link">
 
-                <i class="menu-icon tf-icons bx bx-home-circle"></i>
+                <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
 
                 <div>Tableau de bord</div>
 
@@ -720,19 +718,7 @@
 
         {{-- ===================================================== --}}
 
-        @if($user && in_array($user->role, [
-
-            'admin',
-
-            'chef_magasinier',
-
-            'magasinier',
-
-            'vendeur',
-
-            'caissier'
-
-        ]))
+        @if($peut('products.index') || $peut('products.available') || $peut('products.sold') || $peut('products.to-order'))
 
             <li class="menu-item
 
@@ -752,7 +738,7 @@
 
                 class="menu-link menu-toggle">
 
-                    <i class="menu-icon tf-icons bx bx-package"></i>
+                    <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
 
                     <div>Produits</div>
 
@@ -772,6 +758,7 @@
 
                     </li>
 
+                    @if($peut('products.index'))
                     <li class="menu-item
 
                         {{
@@ -805,7 +792,9 @@
                         </a>
 
                     </li>
+                    @endif
 
+                    @if($peut('products.available'))
                     <li class="menu-item
 
                         {{
@@ -829,6 +818,7 @@
                         </a>
 
                     </li>
+                    @endif
 
                     {{-- ===================================================== --}}
 
@@ -872,6 +862,7 @@
 
                     --}}
 
+                    @if($peut('products.sold'))
                     <li class="menu-item
 
                         {{
@@ -895,20 +886,11 @@
                         </a>
 
                     </li>
+                    @endif
 
                     {{-- RÉAPPROVISIONNEMENT --}}
 
-                    @if(in_array($user->role, [
-
-                        'admin',
-
-                        'chef_magasinier',
-
-                        'magasinier',
-
-                        'vendeur'
-
-                    ]))
+                    @if($peut('products.to-order'))
 
                         <li class="menu-header small text-uppercase">
 
@@ -920,6 +902,7 @@
 
                         </li>
 
+                        @if($peut('products.to-order'))
                         <li class="menu-item
 
                             {{
@@ -943,6 +926,7 @@
                             </a>
 
                         </li>
+                        @endif
 
                     @endif
 
@@ -954,35 +938,39 @@
 
         {{-- CATEGORIES --}}
 
+        @if($peut('categories.index'))
         <li class="menu-item {{ request()->routeIs('categories.*') ? 'active' : '' }}">
 
             <a href="{{ route('categories.index') }}"
 
                class="menu-link">
 
-                <i class="menu-icon tf-icons bx bx-grid-alt"></i>
+                <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
 
                 <div>Catégories</div>
 
             </a>
 
         </li>
+        @endif
 
         {{-- FOURNISSEURS --}}
 
+        @if($peut('suppliers.index'))
         <li class="menu-item {{ request()->routeIs('suppliers.*') ? 'active' : '' }}">
 
             <a href="{{ route('suppliers.index') }}"
 
                class="menu-link">
 
-                <i class="menu-icon tf-icons bx bx-building-house"></i>
+                <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
 
                 <div>Fournisseurs</div>
 
             </a>
 
         </li>
+        @endif
 
        {{-- ===================================================== --}}
 
@@ -1014,7 +1002,7 @@
 
         >
 
-            <i class="menu-icon tf-icons bx bx-user"></i>
+            <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
 
             <div>
 
@@ -1034,6 +1022,7 @@
 
             {{-- =============================================== --}}
 
+            @if($peut('customers.index'))
             <li class="menu-item
 
                 {{
@@ -1073,6 +1062,7 @@
                 </a>
 
             </li>
+            @endif
 
             {{-- =============================================== --}}
 
@@ -1080,6 +1070,7 @@
 
             {{-- =============================================== --}}
 
+            @if($peut('customers.history'))
             <li class="menu-item
 
                 {{
@@ -1117,6 +1108,7 @@
                 </a>
 
             </li>
+            @endif
 
         </ul>
 
@@ -1128,19 +1120,7 @@
 
         {{-- ===================================================== --}}
 
-        @if($user && in_array($user->role, [
-
-            'admin',
-
-            'chef_magasinier',
-
-            'magasinier',
-
-            'vendeur',
-
-            'caissier'
-
-            ]))
+        @if($peut('vehicles.index') || $peut('vehicles.create') || $peut('vehicles.history') || $peut('vehicle-part-requests.index') || $peut('vehicle-part-requests.ordered') || $peut('vehicle-part-requests.received'))
 
             <li class="menu-item
 
@@ -1164,7 +1144,7 @@
 
                 class="menu-link menu-toggle">
 
-                    <i class="menu-icon tf-icons bx bx-car"></i>
+                    <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10l2 1m0-7h8m0 0V6a1 1 0 00-1-1H9M5 16H3"/></svg>
 
                     <div
                         style="
@@ -1236,6 +1216,7 @@
 
                     {{-- LISTE DES VÉHICULES --}}
 
+                    @if($peut('vehicles.index'))
                     <li class="menu-item
 
                         {{
@@ -1271,6 +1252,7 @@
                         </a>
 
                     </li>
+                    @endif
 
                     {{-- NOUVEAU VÉHICULE --}}
 
@@ -1304,6 +1286,7 @@
 
                     {{-- HISTORIQUE / TRAÇABILITÉ --}}
 
+                    @if($peut('vehicles.history'))
                     <li class="menu-item
 
                         {{
@@ -1334,6 +1317,7 @@
                         </a>
 
                     </li>
+                    @endif
 
                     {{-- ================================================= --}}
 
@@ -1341,15 +1325,7 @@
 
                     {{-- ================================================= --}}
 
-                    @if($user && in_array($user->role, [
-
-                        'admin',
-
-                        'chef_magasinier',
-
-                        'magasinier'
-
-                    ]))
+                    @if($peut('vehicle-part-requests.index') || $peut('vehicle-part-requests.ordered') || $peut('vehicle-part-requests.received'))
 
                         <li class="menu-header small text-uppercase"
 
@@ -1385,6 +1361,7 @@
 
                         {{-- TOUTES LES PIÈCES --}}
 
+                        @if($peut('vehicle-part-requests.index'))
                         <li class="menu-item
 
                             {{
@@ -1428,9 +1405,11 @@
                             </a>
 
                         </li>
+                        @endif
 
                         {{-- PIÈCES COMMANDÉES --}}
 
+                        @if($peut('vehicle-part-requests.ordered'))
                         <li class="menu-item
 
                             {{
@@ -1462,9 +1441,11 @@
                             </a>
 
                         </li>
+                        @endif
 
                         {{-- PIÈCES REÇUES --}}
 
+                        @if($peut('vehicle-part-requests.received'))
                         <li class="menu-item
 
                             {{
@@ -1496,6 +1477,7 @@
                             </a>
 
                         </li>
+                        @endif
 
                         {{-- PIÈCES NON TROUVÉES --}}
 
@@ -1549,18 +1531,9 @@
 
         {{-- ===================================================== --}}
 
-        @if($user && in_array($user->role, [
+        @if($peut('supplier-orders.index'))
 
-            'admin',
-
-            'chef_magasinier',
-
-            'magasinier',
-
-            'vendeur'
-
-        ]))
-
+            @if($peut('supplier-orders.index'))
             <li class="menu-item
 
                 {{
@@ -1583,7 +1556,7 @@
 
                 >
 
-                    <i class="menu-icon tf-icons bx bx-file"></i>
+                    <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
 
                     <div class="flex-grow-1 text-truncate">
 
@@ -1594,6 +1567,7 @@
                 </a>
 
             </li>
+            @endif
 
         @endif
 
@@ -1615,20 +1589,9 @@
 
         {{-- DEPOTS --}}
 
-        @if($user && in_array($user->role, [
+        @if($peut('depots.index'))
 
-            'admin',
-
-            'chef_magasinier',
-
-            'magasinier',
-
-            'vendeur',
-
-            'caissier'
-
-        ]))
-
+        @if($peut('depots.index'))
         <li class="menu-item
 
             {{
@@ -1645,13 +1608,14 @@
 
                class="menu-link">
 
-                <i class="menu-icon tf-icons bx bx-building-house"></i>
+                <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
 
                 <div>Dépôts</div>
 
             </a>
 
         </li>
+        @endif
 
         @endif
 
@@ -1663,20 +1627,9 @@
 
         {{-- ===================================================== --}}
 
-        @if($user && in_array($user->role, [
+        @if($peut('depot-transfers.index'))
 
-            'admin',
-
-            'chef_magasinier',
-
-            'magasinier',
-
-            'vendeur',
-
-            'caissier'
-
-        ]))
-
+            @if($peut('depot-transfers.index'))
             <li class="menu-item
 
                 {{
@@ -1695,7 +1648,7 @@
 
                 class="menu-link">
 
-                    <i class="menu-icon tf-icons bx bx-transfer-alt"></i>
+                    <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
 
                     <div>
 
@@ -1706,25 +1659,15 @@
                 </a>
 
             </li>
+            @endif
 
         @endif
 
         {{-- AJUSTEMENTS INVENTAIRE --}}
 
-        @if($user && in_array($user->role, [
+        @if($peut('inventory-adjustments.index'))
 
-            'admin',
-
-            'chef_magasinier',
-
-            'magasinier',
-
-            'vendeur',
-
-            'caissier'
-
-        ]))
-
+        @if($peut('inventory-adjustments.index'))
         <li class="menu-item
 
             {{
@@ -1741,13 +1684,14 @@
 
                class="menu-link">
 
-                <i class="menu-icon tf-icons bx bx-wrench"></i>
+                <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
 
                 <div>Ajustements inventaire</div>
 
             </a>
 
         </li>
+        @endif
 
         @endif
 
@@ -1761,7 +1705,7 @@
 
             class="menu-link menu-toggle">
 
-                <i class="menu-icon tf-icons bx bx-transfer-alt"></i>
+                <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
 
                 <div>
 
@@ -1775,6 +1719,7 @@
 
                 {{-- TOUS --}}
 
+                @if($peut('stock-movements.index'))
                 <li class="menu-item
 
                     {{ request()->routeIs('stock-movements.index') ? 'active' : '' }}">
@@ -1792,9 +1737,11 @@
                     </a>
 
                 </li>
+                @endif
 
                 {{-- ENTREES --}}
 
+                @if($peut('stock-movements.entries'))
                 <li class="menu-item
 
                     {{ request()->routeIs('stock-movements.entries') ? 'active' : '' }}">
@@ -1812,9 +1759,11 @@
                     </a>
 
                 </li>
+                @endif
 
                 {{-- SORTIES --}}
 
+                @if($peut('stock-movements.exits'))
                 <li class="menu-item
 
                     {{ request()->routeIs('stock-movements.exits') ? 'active' : '' }}">
@@ -1832,6 +1781,7 @@
                     </a>
 
                 </li>
+                @endif
 
             </ul>
 
@@ -1843,16 +1793,9 @@
 
                 {{-- ===================================================== --}}
 
-                @if($user && in_array($user->role, [
+                @if($peut('fournisseur-commandes.index') || $peut('bons-transfert.index'))
 
-                    'admin',
-
-                    'chef_magasinier',
-
-                    'vendeur'
-
-                ]))
-
+                    @if($peut('fournisseur-commandes.index'))
                     <li class="menu-item
 
                         {{
@@ -1871,7 +1814,7 @@
 
                         class="menu-link">
 
-                            <i class="menu-icon tf-icons bx bx-receipt"></i>
+                            <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
 
                             <div class="flex-grow-1 text-truncate">
 
@@ -1894,6 +1837,22 @@
                         </a>
 
                     </li>
+                    @endif
+
+
+                    {{-- ===================================================== --}}
+                    {{-- BONS DE TRANSFERT --}}
+                    {{-- ===================================================== --}}
+                    @if($peut('bons-transfert.index'))
+                    <li class="menu-item {{ request()->routeIs('bons-transfert.*') ? 'active' : '' }}">
+                        <a href="{{ route('bons-transfert.index') }}" class="menu-link">
+                            <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13 9l3 3m0 0l-3 3m3-3H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <div class="flex-grow-1 text-truncate">
+                                Bons de transfert
+                            </div>
+                        </a>
+                    </li>
+                    @endif
 
 
                     {{-- ===================================================== --}}
@@ -1910,7 +1869,7 @@
 
                                @endif
 
-       
+
 
         {{-- ===================================================== --}}
 
@@ -1956,7 +1915,7 @@
 
                class="menu-link menu-toggle">
 
-                <i class="menu-icon tf-icons bx bx-cart"></i>
+                <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
 
                 <div>Achats</div>
 
@@ -2002,19 +1961,7 @@
 
         {{-- ===================================================== --}}
 
-        @if($user && in_array($user->role, [
-
-            'admin',
-
-            'chef_magasinier',
-
-            'magasinier',
-
-            'vendeur',
-
-            'caissier'
-
-        ]))
+        @if($peut('sales.create') || $peut('sales.index') || $peut('proformas.create') || $peut('proformas.index') || $peut('avoirs.index'))
 
             <li class="menu-item
 
@@ -2023,6 +1970,8 @@
                     request()->routeIs('sales.*')
 
                     || request()->routeIs('proformas.*')
+
+                    || request()->routeIs('avoirs.*')
 
                         ? 'active open'
 
@@ -2038,7 +1987,7 @@
 
                 class="menu-link menu-toggle">
 
-                    <i class="menu-icon tf-icons bx bx-store"></i>
+                    <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
 
                     <div>Ventes</div>
 
@@ -2086,6 +2035,7 @@
 
                     {{-- GÉNÉRER UNE VENTE --}}
 
+                    @if($peut('sales.create'))
                     <li class="menu-item
 
                         {{
@@ -2113,9 +2063,11 @@
                         </a>
 
                     </li>
+                    @endif
 
                     {{-- LISTE DES VENTES --}}
 
+                    @if($peut('sales.index'))
                     <li class="menu-item
 
                         {{
@@ -2149,6 +2101,20 @@
                         </a>
 
                     </li>
+                    @endif
+
+                    {{-- AVOIRS : factures annulées (une facture ne se supprime pas) --}}
+                    @if($peut('avoirs.index'))
+                    <li class="menu-item {{ request()->routeIs('avoirs.*') ? 'active' : '' }}">
+
+                        <a href="{{ route('avoirs.index') }}" class="menu-link">
+
+                            <div>Avoirs</div>
+
+                        </a>
+
+                    </li>
+                    @endif
 
                     {{-- ================================================= --}}
 
@@ -2190,6 +2156,7 @@
 
                     {{-- GÉNÉRER UN PROFORMA --}}
 
+                    @if($peut('proformas.create'))
                     <li class="menu-item
 
                         {{
@@ -2217,9 +2184,11 @@
                         </a>
 
                     </li>
+                    @endif
 
                     {{-- LISTE DES PROFORMAS --}}
 
+                    @if($peut('proformas.index'))
                     <li class="menu-item
 
                         {{
@@ -2253,6 +2222,7 @@
                         </a>
 
                     </li>
+                    @endif
 
                 </ul>
 
@@ -2266,7 +2236,7 @@
 
         {{-- ===================================================== --}}
 
-        @if($user && $user->role == 'admin')
+        @if($peut('users.index') || $peut('users.create'))
 
         <li class="menu-header small text-uppercase">
 
@@ -2294,7 +2264,7 @@
 
                class="menu-link menu-toggle">
 
-                <i class="menu-icon tf-icons bx bx-user-circle"></i>
+                <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
 
                 <div>Utilisateurs</div>
 
@@ -2302,6 +2272,7 @@
 
             <ul class="menu-sub">
 
+                @if($peut('users.index'))
                 <li class="menu-item {{ request()->routeIs('users.index') ? 'active' : '' }}">
 
                     <a href="{{ route('users.index') }}"
@@ -2313,7 +2284,9 @@
                     </a>
 
                 </li>
+                @endif
 
+                @if($peut('users.create'))
                 <li class="menu-item {{ request()->routeIs('users.create') ? 'active' : '' }}">
 
                     <a href="{{ route('users.create') }}"
@@ -2325,6 +2298,7 @@
                     </a>
 
                 </li>
+                @endif
 
             </ul>
 
@@ -2333,6 +2307,56 @@
         @endif
 
     </ul>
+
+    {{-- ============================================================ --}}
+    {{-- PIED DU MENU : UTILISATEUR, MODE NUIT, DÉCONNEXION (comme l'Atelier) --}}
+    {{-- ============================================================ --}}
+
+    @if($user)
+        @php
+            $roleLabels = [
+                'admin'           => 'Administrateur',
+                'chef_magasinier' => 'Chef magasinier',
+                'magasinier'      => 'Magasinier',
+                'vendeur'         => 'Vendeur',
+                'caissier'        => 'Caissier',
+            ];
+
+            $initiales = collect(preg_split('/\s+/', trim((string) $user->name)))
+                ->filter()
+                ->take(2)
+                ->map(fn ($mot) => mb_strtoupper(mb_substr($mot, 0, 1)))
+                ->implode('') ?: 'U';
+        @endphp
+
+        <div class="stcd-sidebar-footer">
+
+            <div class="stcd-sidebar-user" title="{{ $user->email }}">
+                <div class="stcd-sidebar-avatar">{{ $initiales }}</div>
+                <div class="min-w-0">
+                    <div class="stcd-sidebar-user-name">{{ $user->name }}</div>
+                    <div class="stcd-sidebar-user-role">{{ $roleLabels[$user->role] ?? 'Utilisateur' }}</div>
+                </div>
+            </div>
+
+            <button type="button" class="stcd-sidebar-icon-btn" onclick="stcdBasculerTheme()" title="Basculer mode nuit / mode clair">
+                <svg class="stcd-icon-moon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                <svg class="stcd-icon-sun" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M12 7a5 5 0 100 10A5 5 0 0012 7z"/></svg>
+            </button>
+
+            <form method="POST" action="{{ route('logout') }}">
+                @csrf
+                <button type="submit" class="stcd-sidebar-icon-btn" title="Déconnexion">
+                    <svg class="" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                </button>
+            </form>
+
+            <p class="stcd-sidebar-version">Magasin — Version 4.0</p>
+
+        </div>
+
+
+    @endif
 
   <script>
 

@@ -1162,29 +1162,14 @@
                 <div class="text-end mt-5 print-hide">
 
                    @if(
-                        auth()->user()->role === 'admin'
+                        auth()->user()->hasPermission('annuler_ventes')
                         && !$isCancelled
                     )
 
-                        <form
-                            action="{{ route('sales.cancel', $sale) }}"
-                            method="POST"
-                            id="cancelInvoiceForm"
-                            class="d-inline"
-                        >
-                            @csrf
-                            @method('PUT')
-
-                            <button
-                                type="button"
-                                class="btn btn-warning btn-lg"
-                                id="cancelInvoiceButton"
-                            >
-                                <i class="bx bx-x-circle me-1"></i>
-                                Annuler la facture
-                            </button>
-
-                        </form>
+                        <a href="{{ route('sales.invoice', $sale) }}" class="btn btn-warning btn-lg">
+                            <i class="bx bx-x-circle me-1"></i>
+                            Annuler par avoir
+                        </a>
 
                     @endif
 

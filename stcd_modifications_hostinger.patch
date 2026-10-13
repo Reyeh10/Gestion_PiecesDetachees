@@ -1,0 +1,95 @@
+diff --git a/resources/views/fournisseur-commandes/show.blade.php b/resources/views/fournisseur-commandes/show.blade.php
+index a04720f..43a536b 100644
+--- a/resources/views/fournisseur-commandes/show.blade.php
++++ b/resources/views/fournisseur-commandes/show.blade.php
+@@ -219,19 +219,63 @@
+         </div>
+ 
+         <div class="d-flex gap-2">
++
++            {{-- Anciennes commandes déjà converties en vente --}}
+             @if($commande->vente_id)
++
+                 <a href="{{ route('sales.show', $commande->vente_id) }}" class="btn btn-success">
+                     <i class="bx bx-receipt"></i> Voir la facture
+                 </a>
++
++            {{-- Nouveau workflow : bon de transfert déjà créé --}}
++            @elseif($commande->bon_transfert_id)
++
++                <a href="{{ route('bons-transfert.show', $commande->bon_transfert_id) }}" class="btn btn-success">
++                    <i class="bx bx-transfer"></i> Voir le bon de transfert
++                </a>
++
++                @if(!$commande->bonTransfertAJour())
++                    <form
++                        method="POST"
++                        action="{{ route('fournisseur-commandes.mettre-a-jour-bon-transfert', $commande) }}"
++                        class="m-0"
++                    >
++                        @csrf
++
++                        <button
++                            type="submit"
++                            class="btn btn-warning"
++                            onclick="return confirm('Voulez-vous mettre à jour le bon de transfert et le renvoyer au garage ?')"
++                        >
++                            <i class="bx bx-refresh"></i>
++                            Mettre à jour le BT
++                        </button>
++                    </form>
++                @endif
++
++            {{-- Nouveau workflow : création du bon de transfert --}}
+             @elseif($commande->toutesPiecesDisponibles())
+-                <form method="POST" action="{{ route('fournisseur-commandes.creer-vente', $commande) }}">
++
++                <form
++                    method="POST"
++                    action="{{ route('fournisseur-commandes.creer-bon-transfert', $commande) }}"
++                    class="m-0"
++                >
+                     @csrf
+-                    <button type="submit" class="btn btn-success">
+-                        <i class="bx bx-cart-add"></i> Créer la vente
++
++                    <button
++                        type="submit"
++                        class="btn btn-success"
++                        onclick="return confirm('Voulez-vous créer le bon de transfert et envoyer les pièces au garage ?')"
++                    >
++                        <i class="bx bx-transfer"></i>
++                        Créer le bon de transfert
+                     </button>
+                 </form>
++
+             @endif
+ 
++
+             <a href="{{ route('fournisseur-commandes.index') }}" class="fc-btn-back">
+                 <i class="bx bx-arrow-back"></i>
+                 Retour à la liste
+diff --git a/resources/views/sections/sidebar.blade.php b/resources/views/sections/sidebar.blade.php
+index d73a3fe..a2b6bb7 100644
+--- a/resources/views/sections/sidebar.blade.php
++++ b/resources/views/sections/sidebar.blade.php
+@@ -1895,6 +1895,19 @@ class="menu-link">
+ 
+                     </li>
+ 
++
++                    {{-- ===================================================== --}}
++                    {{-- BONS DE TRANSFERT --}}
++                    {{-- ===================================================== --}}
++                    <li class="menu-item {{ request()->routeIs('bons-transfert.*') ? 'active' : '' }}">
++                        <a href="{{ route('bons-transfert.index') }}" class="menu-link">
++                            <i class="menu-icon tf-icons bx bx-transfer"></i>
++                            <div class="flex-grow-1 text-truncate">
++                                Bons de transfert
++                            </div>
++                        </a>
++                    </li>
++
+                                @endif
+ 
+        

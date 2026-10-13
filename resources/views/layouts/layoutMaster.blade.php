@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html lang="fr">
+<html lang="fr" @class(['dark' => request()->cookie('stcd-theme') === 'dark'])>
 
 <head>
 
@@ -870,9 +870,12 @@
 
     </style>
 
+    {{-- THÈME STCD « ATELIER » : chargé en dernier pour passer devant les styles ci-dessus --}}
+    <link rel="stylesheet" href="{{ asset('assets/css/stcd-theme.css') }}?v={{ filemtime(public_path('assets/css/stcd-theme.css')) }}">
+
 </head>
 
-<body>
+<body class="stcd-theme" @if(request()->routeIs('dashboard')) data-route-dashboard="1" @endif>
 
 {{-- ============================================================= --}}
 
@@ -932,6 +935,16 @@
 
                 </div>
 
+                {{-- Titre de la page remonté dans la barre du haut dès que le
+                     contenu est lu (sans attendre les scripts) : pas de flash. --}}
+                <script>
+                    try {
+                        window.stcdPlacerTitre && window.stcdPlacerTitre();
+                        window.stcdAssombrir && window.stcdAssombrir(document.querySelector('.layout-page'));
+                    }
+                    finally { document.documentElement.classList.remove('stcd-prep'); }
+                </script>
+
                 {{-- ============================================= --}}
 
                 {{-- FOOTER --}}
@@ -967,6 +980,8 @@
 {{-- SCRIPTS PRINCIPAUX --}}
 
 {{-- ============================================================= --}}
+
+@include('sections.session-timeout')
 
 @include('sections.scripts')
 

@@ -1,4 +1,4 @@
-<nav class="layout-navbar navbar navbar-expand-xl navbar-detached align-items-center bg-white shadow-sm px-4 py-2">
+<nav class="layout-navbar navbar navbar-expand-xl navbar-detached align-items-center px-4 py-2">
 
     @php
 
@@ -9,60 +9,6 @@
         */
 
         $user = auth()->user();
-
-        $initials = 'U';
-
-        $roleLabels = [
-            'admin' => 'Administrateur',
-            'chef_magasinier' => 'Chef magasinier',
-            'magasinier' => 'Magasinier',
-            'vendeur' => 'Vendeur',
-            'caissier' => 'Caissier',
-        ];
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | INITIALes
-        |--------------------------------------------------------------------------
-        */
-
-        if ($user) {
-
-            $names = preg_split(
-                '/\s+/',
-                trim($user->name)
-            );
-
-            $initials = '';
-
-            foreach (
-                array_slice(
-                    $names,
-                    0,
-                    2
-                ) as $name
-            ) {
-
-                if (!empty($name)) {
-
-                    $initials .= strtoupper(
-                        mb_substr(
-                            $name,
-                            0,
-                            1
-                        )
-                    );
-
-                }
-
-            }
-
-            if (empty($initials)) {
-                $initials = 'U';
-            }
-
-        }
 
 
         /*
@@ -417,7 +363,7 @@
             href="javascript:void(0);"
         >
 
-            <i class="bx bx-menu bx-sm text-primary"></i>
+            <svg class="" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
 
         </a>
 
@@ -428,21 +374,133 @@
         LEFT SECTION
     ============================================================ --}}
 
-    <div class="d-flex align-items-center">
+    {{-- Titre de la page dans la barre du haut, comme l'Atelier : pas de
+         répétition. Le titre affiché en haut de la page est remonté ici
+         (avec son sous-titre) puis masqué dans la page — voir le script.
+         Sous-titre par défaut : « Bienvenue, Prénom — date ». --}}
+    @php
+        $prenomConnecte = auth()->check()
+            ? (preg_split('/\s+/', trim((string) auth()->user()->name))[0] ?? '')
+            : '';
+    @endphp
 
-        <div class="me-4">
+    <div class="d-flex align-items-center min-w-0 me-3">
 
-            <h4 class="mb-0 fw-bold text-dark">
-                STCD Motors
-            </h4>
+        <div class="min-w-0">
 
-            <small class="text-muted">
-                Gestion de stock & ventes
-            </small>
+            <h1 class="stcd-topbar-title" id="stcd-topbar-title">
+                @hasSection('title')
+                    @yield('title')
+                @else
+                    Tableau de bord
+                @endif
+            </h1>
+
+            <div class="stcd-topbar-subtitle" id="stcd-topbar-subtitle">
+                Bienvenue{{ $prenomConnecte ? ', ' . $prenomConnecte : '' }} — {{ now()->format('d/m/Y') }}
+            </div>
 
         </div>
 
     </div>
+
+    <script>
+        // Appelée par layoutMaster juste après le contenu de la page (et, au
+        // cas où, au chargement complet) : une seule exécution.
+        window.stcdPlacerTitre = function () {
+            if (window.stcdTitrePlace) {
+                return;
+            }
+            window.stcdTitrePlace = true;
+
+            var titre = document.getElementById('stcd-topbar-title');
+            var sousTitre = document.getElementById('stcd-topbar-subtitle');
+            var contenu = document.querySelector('.content-wrapper > .container-xxl');
+
+            if (!titre || !contenu) {
+                return;
+            }
+
+            var texte = function (el) {
+                return (el.textContent || '').replace(/\s+/g, ' ').trim();
+            };
+
+            // Zones qui font partie du document (facture, BT, avoir imprimés…) :
+            // on ne touche jamais à leurs titres.
+            var exclu = function (el) {
+                return !!el.closest('.modal, .alert, .card-body table, [class*="invoice"], .no-move-title');
+            };
+
+            // 1er titre de la page = titre d'en-tête de la page
+            var candidats = contenu.querySelectorAll('h1, h2, h3, h4, .fc-title, .bt-show-title');
+            var entete = null;
+
+            for (var i = 0; i < candidats.length; i++) {
+                if (!exclu(candidats[i]) && texte(candidats[i]) !== '') {
+                    entete = candidats[i];
+                    break;
+                }
+            }
+
+            // Pas de titre dans la page : libellé de l'entrée active du menu
+            if (!entete) {
+                @unless(View::hasSection('title'))
+                    var actifs = document.querySelectorAll('#layout-menu .menu-item.active > .menu-link:not(.menu-toggle) > div');
+                    var dernier = actifs.length ? actifs[actifs.length - 1] : null;
+                    if (dernier && texte(dernier)) {
+                        titre.textContent = texte(dernier);
+                    }
+                @endunless
+                return;
+            }
+
+            // Le titre de la page est un simple texte court : on le remonte
+            // dans la barre et on le masque dans la page.
+            if (entete.querySelector('a, button, form, input, select') || texte(entete).length > 90) {
+                return;
+            }
+
+            titre.textContent = texte(entete);
+            entete.style.display = 'none';
+
+            // Sous-titre juste sous le titre (description courte) : remonté
+            // aussi, sauf sur le tableau de bord qui garde « Bienvenue… ».
+            var suivant = entete.nextElementSibling;
+            var estSousTitre = suivant
+                && /^(P|SMALL|DIV|SPAN)$/.test(suivant.tagName)
+                && !suivant.querySelector('a, button, form, input, select, table, img, .badge')
+                && texte(suivant) !== ''
+                && texte(suivant).length <= 160;
+
+            if (estSousTitre) {
+                if (!document.body.dataset.routeDashboard && sousTitre) {
+                    sousTitre.textContent = texte(suivant);
+                }
+                suivant.style.display = 'none';
+            }
+
+            // Bloc d'en-tête devenu vide (titre + sous-titre seuls, ou avec
+            // une simple icône décorative) : masqué pour ne pas laisser un
+            // bloc avec seulement l'icône.
+            function decoratif(el) {
+                return texte(el) === '' && !el.querySelector('a, button, form, input, select, textarea, img, canvas, table');
+            }
+            var parent = entete.parentElement;
+            for (var niveau = 0; niveau < 4 && parent && parent !== contenu; niveau++) {
+                var visibles = Array.prototype.filter.call(parent.children, function (enfant) {
+                    return enfant.style.display !== 'none' && enfant.tagName !== 'SCRIPT' && enfant.tagName !== 'STYLE'
+                        && !decoratif(enfant);
+                });
+                if (visibles.length) {
+                    break;
+                }
+                parent.style.display = 'none';
+                parent = parent.parentElement;
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', window.stcdPlacerTitre);
+    </script>
 
 
     {{-- ============================================================
@@ -481,22 +539,12 @@
                     title="Notifications"
                 >
 
-                    <i class="bx bx-bell"></i>
+                    <svg class="" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
 
 
-                    @if($headerUnreadCount > 0)
-
-                        <span class="stcd-notification-badge">
-
-                            {{
-                                $headerUnreadCount > 99
-                                    ? '99+'
-                                    : $headerUnreadCount
-                            }}
-
-                        </span>
-
-                    @endif
+                    <span id="stcd-notif-badge" class="stcd-notification-badge {{ $headerUnreadCount > 0 ? '' : 'est-vide' }}">
+                        {{ $headerUnreadCount > 9 ? '9+' : $headerUnreadCount }}
+                    </span>
 
                 </a>
 
@@ -574,7 +622,7 @@
                         LISTE DES NOTIFICATIONS
                     ============================================= --}}
 
-                    <div class="stcd-notification-list">
+                    <div class="stcd-notification-list" id="stcd-notif-liste">
 
                         @forelse(
                             $headerNotifications
@@ -687,7 +735,7 @@
 
                         @empty
 
-                            <div class="stcd-notification-empty">
+                            <div class="stcd-notification-empty" id="stcd-notif-vide">
 
                                 <i class="bx bx-bell-off"></i>
 
@@ -705,6 +753,13 @@
 
                     </div>
 
+
+                    {{-- Réglages de cet appareil : son dans la page, notifications de l'appareil --}}
+                    <div class="stcd-notif-reglages">
+                        <p class="stcd-notif-reglages-titre">Sur cet appareil</p>
+                        <button type="button" id="stcd-notif-son-btn" class="stcd-notif-reglage" onclick="stcdNotifBasculerSon()">🔊 Son dans la page : activé</button>
+                        <button type="button" id="stcd-notif-appareil-btn" class="stcd-notif-reglage" onclick="stcdNotifBasculerAppareil()">🔔 Activer les notifications de cet appareil</button>
+                    </div>
 
                     {{-- =============================================
                         ACTIONS
@@ -808,270 +863,182 @@
             </li>
 
 
-            {{-- ====================================================
-                UTILISATEUR
-            ==================================================== --}}
-
-            <li
-                class="
-                    nav-item
-                    navbar-dropdown
-                    dropdown-user
-                    dropdown
-                "
-            >
-
-                <a
-                    class="
-                        nav-link
-                        dropdown-toggle
-                        hide-arrow
-                        d-flex
-                        align-items-center
-                    "
-                    href="javascript:void(0);"
-                    data-bs-toggle="dropdown"
-                    aria-expanded="false"
-                >
-
-
-                    {{-- AVATAR --}}
-
-                    <div class="avatar avatar-online me-2">
-
-                        <span
-                            class="
-                                avatar-initial
-                                rounded-circle
-                                bg-primary
-                                text-white
-                                fw-bold
-                                shadow-sm
-                                d-flex
-                                align-items-center
-                                justify-content-center
-                            "
-                            style="
-                                width: 42px;
-                                height: 42px;
-                                font-size: 16px;
-                                border: 2px solid #696cff;
-                            "
-                        >
-
-                            {{ $initials }}
-
-                        </span>
-
-                    </div>
-
-
-                    {{-- NOM + RÔLE --}}
-
-                    <div class="d-none d-md-block">
-
-                        <span
-                            class="
-                                fw-semibold
-                                d-block
-                                text-dark
-                            "
-                        >
-
-                            {{ $user->name }}
-
-                        </span>
-
-
-                        <small class="text-muted">
-
-                            {{
-                                $roleLabels[$user->role]
-                                ?? 'Utilisateur'
-                            }}
-
-                        </small>
-
-                    </div>
-
-                </a>
-
-
-                {{-- =================================================
-                    MENU UTILISATEUR
-                ================================================= --}}
-
-                <ul
-                    class="
-                        dropdown-menu
-                        dropdown-menu-end
-                        shadow
-                        border-0
-                        rounded-3
-                    "
-                >
-
-
-                    {{-- INFORMATIONS UTILISATEUR --}}
-
-                    <li>
-
-                        <div class="dropdown-item-text py-3">
-
-                            <div class="d-flex align-items-center">
-
-                                <div class="avatar avatar-online me-3">
-
-                                    <span
-                                        class="
-                                            avatar-initial
-                                            rounded-circle
-                                            bg-primary
-                                            text-white
-                                            fw-bold
-                                            d-flex
-                                            align-items-center
-                                            justify-content-center
-                                        "
-                                        style="
-                                            width: 45px;
-                                            height: 45px;
-                                            font-size: 18px;
-                                        "
-                                    >
-
-                                        {{ $initials }}
-
-                                    </span>
-
-                                </div>
-
-
-                                <div>
-
-                                    <span class="fw-bold d-block">
-
-                                        {{ $user->name }}
-
-                                    </span>
-
-
-                                    <small class="text-muted">
-
-                                        {{ $user->email }}
-
-                                    </small>
-
-
-                                    <br>
-
-
-                                    <small class="text-muted">
-
-                                        {{
-                                            $roleLabels[$user->role]
-                                            ?? 'Utilisateur'
-                                        }}
-
-                                    </small>
-
-                                </div>
-
-                            </div>
-
-                        </div>
-
-                    </li>
-
-
-                    <li>
-
-                        <div class="dropdown-divider"></div>
-
-                    </li>
-
-
-                    {{-- =================================================
-                        PROFIL
-                    ================================================= --}}
-
-                    {{--
-
-                    <li>
-
-                        <a
-                            class="dropdown-item"
-                            href="{{ route('profile.edit') }}"
-                        >
-
-                            <i class="bx bx-user me-2"></i>
-
-                            Mon profil
-
-                        </a>
-
-                    </li>
-
-
-                    <li>
-
-                        <div class="dropdown-divider"></div>
-
-                    </li>
-
-                    --}}
-
-
-                    {{-- =================================================
-                        DÉCONNEXION
-                    ================================================= --}}
-
-                    <li>
-
-                        <form
-                            method="POST"
-                            action="{{ route('logout') }}"
-                            class="m-0 p-0"
-                        >
-
-                            @csrf
-
-
-                            <button
-                                type="submit"
-                                class="
-                                    dropdown-item
-                                    text-danger
-                                    w-100
-                                    d-flex
-                                    align-items-center
-                                "
-                            >
-
-                                <i
-                                    class="
-                                        bx
-                                        bx-power-off
-                                        me-2
-                                    "
-                                ></i>
-
-                                <span>
-                                    Déconnexion
-                                </span>
-
-                            </button>
-
-                        </form>
-
-                    </li>
-
-                </ul>
-
-            </li>
+            {{-- Utilisateur, mode nuit et déconnexion : en bas du menu latéral (comme l'Atelier). --}}
 
         @endauth
 
     </ul>
+
+{{-- ============================================================
+        NOTIFICATIONS EN DIRECT, AVEC SON (comme l'app Atelier)
+        Toutes les 20 s : nouvelles notifications → son « ding » + fenêtre
+        en bas à droite + cloche à jour. Réglages par appareil dans la
+        cloche : son activé / coupé, notifications de l'appareil.
+    ============================================================ --}}
+    @auth
+    @php
+        $dernierMsNotif = optional(auth()->user()->notifications()->latest()->value('created_at'), function ($date) {
+            return \Illuminate\Support\Carbon::parse($date)->getTimestampMs();
+        }) ?? 0;
+    @endphp
+    <script>
+        (function () {
+            var CFG = {
+                nouvelles: @json(route('notifications.nouvelles')),
+                dernier: {{ (int) $dernierMsNotif }},
+                user: {{ (int) auth()->id() }}
+            };
+            var cleDernier = 'stcd-notif-dernier-' + CFG.user;
+
+            function lire(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+            function ecrire(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+            function sonActive() { return lire('stcd-notif-son') !== 'off'; }
+            function appareilActive() { return lire('stcd-notif-appareil') === 'on' && 'Notification' in window && Notification.permission === 'granted'; }
+
+            // Son « ding » généré (aucun fichier) ; les navigateurs l'autorisent après un premier clic.
+            var audio = null;
+            function debloquerSon() {
+                try {
+                    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+                    if (audio.state === 'suspended') audio.resume();
+                } catch (e) {}
+            }
+            document.addEventListener('pointerdown', debloquerSon, { once: true });
+            document.addEventListener('keydown', debloquerSon, { once: true });
+
+            function jouerSon() {
+                if (!audio) return;
+                [[880, 0], [1320, 0.16]].forEach(function (note) {
+                    var o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime + note[1];
+                    o.type = 'sine';
+                    o.frequency.value = note[0];
+                    g.gain.setValueAtTime(0.0001, t);
+                    g.gain.exponentialRampToValueAtTime(0.35, t + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+                    o.connect(g).connect(audio.destination);
+                    o.start(t);
+                    o.stop(t + 0.5);
+                });
+            }
+
+            function echapper(s) {
+                return String(s).replace(/[&<>"']/g, function (c) {
+                    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                });
+            }
+
+            // Fenêtre en bas à droite, quelques secondes ; un clic ouvre la page concernée.
+            function afficherFenetre(n) {
+                var zone = document.getElementById('stcd-notif-fenetres');
+                if (!zone) {
+                    zone = document.createElement('div');
+                    zone.id = 'stcd-notif-fenetres';
+                    zone.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:3000;display:flex;flex-direction:column;gap:8px;max-width:340px;width:calc(100% - 32px)';
+                    document.body.appendChild(zone);
+                }
+                var a = document.createElement('a');
+                a.href = n.url;
+                a.style.cssText = 'display:block;background:#fff;border:1px solid #e5dcff;border-left:4px solid #5B3FAF;border-radius:12px;padding:10px 14px;box-shadow:0 8px 24px rgba(0,0,0,.15);text-decoration:none;transition:opacity .3s';
+                a.innerHTML = '<p style="font-size:13px;font-weight:700;color:#1e293b;margin:0">🔔 ' + echapper(n.titre) + '</p>'
+                    + '<p style="font-size:12px;color:#64748b;margin:2px 0 0">' + echapper(n.corps) + '</p>';
+                zone.appendChild(a);
+                setTimeout(function () { a.style.opacity = '0'; setTimeout(function () { a.remove(); }, 300); }, 8000);
+            }
+
+            // Notification de l'appareil (barre Windows / téléphone) quand l'onglet n'est pas regardé.
+            function notifierAppareil(n) {
+                if (!appareilActive() || document.visibilityState === 'visible') return;
+                try {
+                    var notif = new Notification(n.titre, { body: n.corps, tag: n.id });
+                    notif.onclick = function () { window.focus(); window.location.href = n.url; };
+                } catch (e) {}
+            }
+
+            function ajouterALaListe(n) {
+                var liste = document.getElementById('stcd-notif-liste');
+                if (!liste) return;
+                var vide = document.getElementById('stcd-notif-vide');
+                if (vide) vide.remove();
+                var a = document.createElement('a');
+                a.href = n.url;
+                a.className = 'stcd-notification-item unread';
+                a.innerHTML = '<div class="stcd-notification-content">'
+                    + '<div class="stcd-notification-title">' + echapper(n.titre) + '</div>'
+                    + '<p class="stcd-notification-message">' + echapper(n.corps) + '</p>'
+                    + '<small class="stcd-notification-time">à l\'instant</small></div>'
+                    + '<span class="stcd-notification-dot"></span>';
+                liste.prepend(a);
+            }
+
+            function majBadge(nb) {
+                var b = document.getElementById('stcd-notif-badge');
+                if (!b) return;
+                b.textContent = nb > 9 ? '9+' : nb;
+                b.classList.toggle('est-vide', nb <= 0);
+            }
+
+            function interroger() {
+                // Plusieurs onglets ouverts : chaque notification ne sonne qu'une fois.
+                var dejaVu = parseInt(lire(cleDernier) || '0', 10);
+                var depuis = Math.max(dejaVu, CFG.dernier);
+
+                fetch(CFG.nouvelles + '?depuis=' + depuis, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+                    .then(function (r) {
+                        if (r.status === 401 && window.stcdSessionExpiree) { window.stcdSessionExpiree(); return null; }
+                        return r.ok ? r.json() : null;
+                    })
+                    .then(function (d) {
+                        if (!d) return;
+                        majBadge(d.non_lues);
+                        var vu = parseInt(lire(cleDernier) || '0', 10);
+                        var neuves = d.nouvelles.filter(function (n) { return n.ms > vu; });
+                        CFG.dernier = Math.max(CFG.dernier, d.dernier);
+                        ecrire(cleDernier, Math.max(vu, d.dernier));
+                        neuves.forEach(function (n) { afficherFenetre(n); ajouterALaListe(n); notifierAppareil(n); });
+                        if (neuves.length && sonActive()) jouerSon();
+                    })
+                    .catch(function () {});
+            }
+
+            if (lire(cleDernier) === null) ecrire(cleDernier, CFG.dernier);
+            setTimeout(interroger, 3000);
+            setInterval(interroger, 20000);
+
+            // ── Réglages de cet appareil (dans la cloche) ──
+            function majBoutons() {
+                var son = document.getElementById('stcd-notif-son-btn');
+                if (son) son.textContent = sonActive() ? '🔊 Son dans la page : activé' : '🔇 Son dans la page : coupé';
+
+                var app = document.getElementById('stcd-notif-appareil-btn');
+                if (app) {
+                    if (!('Notification' in window)) { app.hidden = true; return; }
+                    app.textContent = appareilActive()
+                        ? '🔕 Désactiver les notifications de cet appareil'
+                        : '🔔 Activer les notifications de cet appareil';
+                }
+            }
+
+            window.stcdNotifBasculerSon = function () {
+                ecrire('stcd-notif-son', sonActive() ? 'off' : 'on');
+                majBoutons();
+                if (sonActive()) { debloquerSon(); jouerSon(); }
+            };
+
+            window.stcdNotifBasculerAppareil = function () {
+                if (appareilActive()) {
+                    ecrire('stcd-notif-appareil', 'off');
+                    majBoutons();
+                    return;
+                }
+                Notification.requestPermission().then(function (p) {
+                    ecrire('stcd-notif-appareil', p === 'granted' ? 'on' : 'off');
+                    majBoutons();
+                });
+            };
+
+            document.addEventListener('DOMContentLoaded', majBoutons);
+        })();
+    </script>
+    @endauth
 
 </nav>

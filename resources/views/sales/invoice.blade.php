@@ -786,28 +786,20 @@
 
             @if(
                 auth()->check()
-                && auth()->user()->role === 'admin'
+                && auth()->user()->hasPermission('annuler_ventes')
                 && !$isCancelled
             )
 
-                <form
-                    action="{{ route('sales.cancel', $sale) }}"
-                    method="POST"
-                    class="d-inline"
-                    onsubmit="return confirm('Voulez-vous vraiment annuler cette facture ?');"
+                {{-- Annulation par avoir (comme l'app Atelier) : motif obligatoire --}}
+                <button
+                    type="button"
+                    class="btn btn-warning"
+                    data-bs-toggle="modal"
+                    data-bs-target="#avoirModal"
                 >
-                    @csrf
-                    @method('PUT')
-
-                    <button
-                        type="submit"
-                        class="btn btn-warning"
-                    >
-                        <i class="bx bx-x-circle"></i>
-                        Annuler facture
-                    </button>
-
-                </form>
+                    <i class="bx bx-x-circle"></i>
+                    Annuler par avoir
+                </button>
 
             @endif
 
@@ -827,6 +819,33 @@
         @if(session('error'))
             <div class="alert alert-danger no-print">
                 {{ session('error') }}
+            </div>
+        @endif
+
+        @if($isCancelled && $sale->avoir)
+            <div class="alert alert-warning no-print d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div>
+                    <strong>Facture annulée par l'avoir {{ $sale->avoir->numero }}</strong>
+                    du {{ $sale->avoir->created_at->format('d/m/Y') }} —
+                    motif : {{ $sale->avoir->motif }}
+                    @if($sale->avoir->resteARembourser())
+                        <br>
+                        <span class="text-danger fw-bold">
+                            {{ number_format((float) $sale->avoir->montant_a_rembourser, 0, ',', ' ') }} FDJ
+                            déjà encaissés, à rembourser au client.
+                        </span>
+                    @endif
+                </div>
+
+                @if(auth()->user()->hasPermission('voir_avoirs'))
+                    <a href="{{ route('avoirs.show', $sale->avoir) }}" class="btn btn-sm btn-warning">
+                        <i class="bx bx-receipt"></i> Voir l'avoir
+                    </a>
+                @endif
+            </div>
+        @elseif($isCancelled)
+            <div class="alert alert-warning no-print">
+                <strong>Facture annulée</strong> (annulation faite avant la mise en place des avoirs).
             </div>
         @endif
 
@@ -926,7 +945,7 @@
                         <strong>Adresse :</strong>
                         {{ $sale->customer->address ?? '-' }}
                     </div>
-                    
+
                     <div>
                         <strong>Immatriculation :</strong>
                         {{ $sale->vehicle->plate_number ?? '-' }}
@@ -1305,6 +1324,62 @@
     </div>
 
 </div>
+
+{{-- ================================================================
+    MODAL ANNULATION PAR AVOIR
+================================================================ --}}
+@if(
+    auth()->check()
+    && auth()->user()->hasPermission('annuler_ventes')
+    && !$isCancelled
+)
+
+    <div class="modal fade" id="avoirModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+
+                <form action="{{ route('sales.cancel', $sale) }}" method="POST">
+                    @csrf
+                    @method('PUT')
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">Annuler la facture {{ $invoiceNumber }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body">
+
+                        <div class="alert alert-warning small mb-3">
+                            La facture ne sera <strong>pas supprimée</strong> : un <strong>avoir</strong>
+                            du même montant ({{ number_format($invoiceTotal, 0, ',', ' ') }} FDJ) sera émis,
+                            la facture passera en « annulée » et les pièces reviendront dans leur dépôt.
+                            @if($paidAmount > 0)
+                                <br>
+                                Montant déjà encaissé : <strong>{{ number_format($paidAmount, 0, ',', ' ') }} FDJ</strong>,
+                                à rembourser au client.
+                            @endif
+                        </div>
+
+                        <label for="avoir_motif" class="form-label">Motif de l'annulation</label>
+                        <textarea id="avoir_motif" name="motif" rows="3" maxlength="1000" class="form-control"
+                                  placeholder="Ex : erreur de pièce, client a renoncé…" required>{{ old('motif') }}</textarea>
+
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                        <button type="submit" class="btn btn-warning">
+                            <i class="bx bx-receipt me-1"></i> Émettre l'avoir
+                        </button>
+                    </div>
+
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+@endif
 
 {{-- ================================================================
 **    MODAL PAIEMENT**

@@ -5,9 +5,55 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
+
+        /**
+     * Récupérer l'utilisateur connecté avec son type exact.
+     *
+     * Cette méthode permet à Intelephense de reconnaître
+     * les méthodes personnalisées du modèle User.
+     */
+    private function utilisateurConnecte(): User
+    {
+        $user = auth()->user();
+
+        // Refuser l'accès si aucun utilisateur n'est connecté.
+        abort_unless($user instanceof User, 401);
+
+        return $user;
+    }
+    /*
+    |--------------------------------------------------------------------------
+    | PROTECTION DES COMPTES ADMINISTRATEUR
+    |--------------------------------------------------------------------------
+    |
+    | La gestion des utilisateurs peut être confiée à un non-administrateur
+    | (permission « gerer_utilisateurs »), mais seul un administrateur peut
+    | créer un administrateur, modifier ou supprimer un compte administrateur.
+    |
+    */
+
+    private function rolesAutorises(): array
+    {
+        $roles = ['chef_magasinier', 'magasinier', 'vendeur', 'caissier'];
+
+       return $this->utilisateurConnecte()->isAdmin()
+    ? array_merge(['admin'], $roles)
+    : $roles;
+    }
+
+    private function protegerCompteAdmin(User $cible): void
+            {
+                abort_if(
+            ! $this->utilisateurConnecte()->isAdmin() && $cible->isAdmin(),
+            403,
+            'Seul un administrateur peut gérer un compte administrateur.'
+        );
+    }
+
     /*
     |--------------------------------------------------------------------------
     | LISTE UTILISATEURS
@@ -51,7 +97,7 @@ class UserController extends Controller
 
             'password' => 'required|min:6|confirmed',
 
-            'role' => 'required',
+            'role' => ['required', Rule::in($this->rolesAutorises())],
 
             'is_active' => 'required',
 
@@ -105,6 +151,8 @@ class UserController extends Controller
     {
         $user = User::findOrFail($id);
 
+        $this->protegerCompteAdmin($user);
+
         return view(
             'users.edit',
             compact('user')
@@ -124,11 +172,13 @@ class UserController extends Controller
 
         $user = User::findOrFail($id);
 
+        $this->protegerCompteAdmin($user);
+
         $request->validate([
 
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email,' . $user->id,
-            'role' => 'required',
+            'role' => ['required', Rule::in($this->rolesAutorises())],
             'is_active' => 'required',
 
         ]);
@@ -139,7 +189,11 @@ class UserController extends Controller
 
             'email' => $request->email,
 
-            'role' => $request->role,
+            // Un non-administrateur ne peut pas changer son propre rôle.
+            'role' => $user->id === auth()->id()
+            && ! $this->utilisateurConnecte()->isAdmin()
+                ? $user->role
+                : $request->role,
 
             'is_active' => $request->is_active,
 
@@ -223,6 +277,8 @@ public function changePassword(Request $request)
     public function destroy(string $id)
     {
         $user = User::findOrFail($id);
+
+        $this->protegerCompteAdmin($user);
 
         /*
         |--------------------------------------------------------------------------

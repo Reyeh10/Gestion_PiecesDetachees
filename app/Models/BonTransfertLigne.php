@@ -40,4 +40,25 @@ class BonTransfertLigne extends Model
     {
         return $this->belongsTo(Depot::class);
     }
+
+    /**
+     * Stock de la pièce dans le dépôt de prélèvement : c'est lui qui porte le
+     * rayon et l'emplacement propres à ce dépôt. Charger
+     * `lignes.product.depotStocks.rayon` / `.location` pour éviter une requête
+     * par ligne.
+     */
+    public function stockDepot(): ?ProductDepotStock
+    {
+        return $this->product?->depotStocks->firstWhere('depot_id', $this->depot_id);
+    }
+
+    public function getRayonNomAttribute(): ?string
+    {
+        return $this->stockDepot()?->rayon?->name;
+    }
+
+    public function getEmplacementNomAttribute(): ?string
+    {
+        return $this->stockDepot()?->location?->name;
+    }
 }

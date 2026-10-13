@@ -11,35 +11,11 @@
     |--------------------------------------------------------------------------
     */
 
-    $canCreateSupplier = $user && in_array(
-        $user->role,
-        [
-            'admin',
-            'chef_magasinier',
-            'magasinier',
-            'vendeur',
-            'caissier',
-        ],
-        true
-    );
+    $canCreateSupplier = $user && $user->hasPermission('creer_fournisseurs');
 
-    $canEditSupplier = $user && in_array(
-        $user->role,
-        [
-            'admin',
-            'chef_magasinier',
-        ],
-        true
-    );
+    $canEditSupplier = $user && $user->hasPermission('modifier_fournisseurs');
 
-    $canDeleteSupplier = $user && in_array(
-        $user->role,
-        [
-            'admin',
-            'chef_magasinier',
-        ],
-        true
-    );
+    $canDeleteSupplier = $user && $user->hasPermission('supprimer_referentiels');
 @endphp
 
 

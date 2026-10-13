@@ -21,6 +21,20 @@ use Throwable;
 
 class SupplierOrderController extends Controller
 {
+        /**
+     * Récupérer l'utilisateur connecté avec son type User.
+     *
+     * Permet à Intelephense de reconnaître les méthodes
+     * personnalisées : hasPermission(), isAdmin(), etc.
+     */
+    private function utilisateurConnecte(): User
+    {
+        $user = auth()->user();
+
+        abort_unless($user instanceof User, 401);
+
+        return $user;
+    }
     /*
     |--------------------------------------------------------------------------
     | LISTE DES BONS DE COMMANDE
@@ -1782,6 +1796,308 @@ public function createFromPartRequests(Request $request): View|RedirectResponse
 }
     /*
     |--------------------------------------------------------------------------
+    | MODIFIER UN BC (TANT QU'IL N'EST PAS APPROUVÉ)
+    |--------------------------------------------------------------------------
+    |
+    | Un BC brouillon (ou rejeté) peut être modifié : fournisseur, dépôt,
+    | dates, devise, conditions, montants, et les pièces (ajouter, retirer,
+    | quantité, prix). Une fois approuvé par l'administrateur, il est figé.
+    | Un BC rejeté puis modifié repasse en brouillon pour être revu.
+    |
+    */
+
+    private const STATUTS_MODIFIABLES = [
+        SupplierOrder::STATUS_DRAFT,
+        SupplierOrder::STATUS_REJECTED,
+    ];
+
+    public static function estModifiable(SupplierOrder $supplierOrder): bool
+    {
+        return in_array($supplierOrder->status, self::STATUTS_MODIFIABLES, true);
+    }
+
+    /**
+     * Pièces COMMANDÉES qui ne sont dans aucun BC actif (hors ce BC) :
+     * elles peuvent être ajoutées au BC.
+     */
+    private function piecesAjoutables(SupplierOrder $supplierOrder)
+    {
+        return VehiclePartRequest::query()
+            ->with(['vehicle.customer', 'product', 'supplier'])
+            ->where('status', VehiclePartRequest::STATUS_ORDERED)
+            ->whereDoesntHave('supplierOrderItems', function ($q) use ($supplierOrder) {
+                $q->where('supplier_order_id', '!=', $supplierOrder->id)
+                    ->whereHas('supplierOrder', fn ($o) => $o->where('status', '!=', SupplierOrder::STATUS_CANCELLED));
+            })
+            ->whereDoesntHave('supplierOrderItems', fn ($q) => $q->where('supplier_order_id', $supplierOrder->id))
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    public function edit(SupplierOrder $supplierOrder): View|RedirectResponse
+    {
+        if (! self::estModifiable($supplierOrder)) {
+            return redirect()
+                ->route('supplier-orders.show', $supplierOrder)
+                ->with('error', 'Ce bon de commande est déjà approuvé : il ne peut plus être modifié.');
+        }
+
+        $supplierOrder->load([
+            'supplier',
+            'items.vehiclePartRequest.vehicle.customer',
+            'items.vehiclePartRequest.product',
+            'items.vehiclePartRequest.supplier',
+        ]);
+
+        /*
+         * Lignes affichées : celles du BC, ou celles envoyées juste avant
+         * si le formulaire est revenu avec une erreur (rien n'est perdu).
+         */
+        $anciennes = old('items');
+
+        if (is_array($anciennes)) {
+            $parts = VehiclePartRequest::query()
+                ->with(['vehicle.customer', 'product', 'supplier'])
+                ->whereIn('id', collect($anciennes)->pluck('vehicle_part_request_id')->filter())
+                ->get()
+                ->keyBy('id');
+
+            $lignes = collect($anciennes)
+                ->map(fn ($l) => [
+                    'part'     => $parts->get((int) ($l['vehicle_part_request_id'] ?? 0)),
+                    'quantity' => $l['quantity_ordered'] ?? 1,
+                    'price'    => $l['unit_price'] ?? 0,
+                ])
+                ->filter(fn ($l) => $l['part'] !== null)
+                ->values();
+        } else {
+            $lignes = $supplierOrder->items
+                ->filter(fn ($item) => $item->vehiclePartRequest !== null)
+                ->map(fn ($item) => [
+                    'part'     => $item->vehiclePartRequest,
+                    'quantity' => (float) $item->quantity_ordered,
+                    'price'    => (float) $item->unit_price,
+                ])
+                ->values();
+        }
+
+        $piecesAjoutables = $this->piecesAjoutables($supplierOrder)
+            ->reject(fn ($p) => $lignes->contains(fn ($l) => $l['part']->id === $p->id))
+            ->values();
+
+        $vehiclePartRequests = $lignes->pluck('part');
+        $supplier = $supplierOrder->supplier;
+
+        $suppliers = Supplier::query()->orderBy('name')->get();
+
+        $depots = Depot::query()
+            ->where(fn ($q) => $q->where('is_active', true)->orWhere('id', $supplierOrder->depot_id))
+            ->orderBy('name')
+            ->get();
+
+        return view(
+            'supplier-orders.create-multiple',
+            compact(
+                'supplierOrder',
+                'lignes',
+                'piecesAjoutables',
+                'vehiclePartRequests',
+                'supplier',
+                'suppliers',
+                'depots'
+            )
+        );
+    }
+
+    public function update(Request $request, SupplierOrder $supplierOrder): RedirectResponse
+    {
+        $validated = $request->validate([
+            'supplier_id'            => ['required', 'integer', 'exists:suppliers,id'],
+            'depot_id'               => ['required', 'integer', 'exists:depots,id'],
+            'order_date'             => ['required', 'date'],
+            'expected_delivery_date' => ['nullable', 'date', 'after_or_equal:order_date'],
+            'currency'               => ['required', 'string', 'max:10'],
+            'discount_rate'          => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'shipping_cost'          => ['nullable', 'numeric', 'min:0'],
+            'tax_rate'               => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'payment_terms'          => ['nullable', 'string', 'max:255'],
+            'delivery_terms'         => ['nullable', 'string', 'max:255'],
+            'notes'                  => ['nullable', 'string'],
+            'items'                                => ['required', 'array', 'min:1'],
+            'items.*.vehicle_part_request_id'      => ['required', 'integer', 'distinct', 'exists:vehicle_part_requests,id'],
+            'items.*.quantity_ordered'             => ['required', 'numeric', 'gt:0'],
+            'items.*.unit_price'                   => ['required', 'numeric', 'min:0'],
+        ], [
+            'items.required' => 'Le bon de commande doit contenir au moins une pièce.',
+            'items.min'      => 'Le bon de commande doit contenir au moins une pièce.',
+        ]);
+
+        $items = array_values($validated['items']);
+
+        try {
+            DB::transaction(function () use ($supplierOrder, $validated, $items) {
+                $bc = SupplierOrder::query()->lockForUpdate()->findOrFail($supplierOrder->id);
+
+                if (! self::estModifiable($bc)) {
+                    throw ValidationException::withMessages([
+                        'items' => 'Ce bon de commande vient d\'être approuvé : il ne peut plus être modifié.',
+                    ]);
+                }
+
+                $ids = collect($items)->pluck('vehicle_part_request_id')->map(fn ($id) => (int) $id)->all();
+
+                $parts = VehiclePartRequest::query()
+                    ->with('product')
+                    ->whereIn('id', $ids)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy('id');
+
+                $lignesActuelles = $bc->items()->get()->keyBy('vehicle_part_request_id');
+
+                foreach ($items as $index => $item) {
+                    $part = $parts->get((int) $item['vehicle_part_request_id']);
+                    $nom = $part->part_name ?? $part->reference ?? ('#' . $part->id);
+
+                    // Pièce ajoutée : doit être COMMANDÉE et libre
+                    if (! $lignesActuelles->has($part->id)) {
+                        if ($part->status !== VehiclePartRequest::STATUS_ORDERED) {
+                            throw ValidationException::withMessages([
+                                "items.$index.vehicle_part_request_id" => 'La pièce « ' . $nom . ' » n’est pas au statut COMMANDÉE.',
+                            ]);
+                        }
+
+                        $ailleurs = SupplierOrderItem::query()
+                            ->where('vehicle_part_request_id', $part->id)
+                            ->where('supplier_order_id', '!=', $bc->id)
+                            ->whereHas('supplierOrder', fn ($q) => $q->where('status', '!=', SupplierOrder::STATUS_CANCELLED))
+                            ->exists();
+
+                        if ($ailleurs) {
+                            throw ValidationException::withMessages([
+                                "items.$index.vehicle_part_request_id" => 'La pièce « ' . $nom . ' » appartient déjà à un autre bon de commande actif.',
+                            ]);
+                        }
+                    }
+                }
+
+                // Dépôt : même règle qu'à la création
+                $depotsImposes = $parts->pluck('depot_id')->filter()->map(fn ($d) => (int) $d)->unique()->values();
+
+                if ($depotsImposes->count() > 1) {
+                    throw ValidationException::withMessages([
+                        'depot_id' => 'Les pièces sont destinées à plusieurs dépôts différents : elles ne peuvent pas être dans le même bon de commande.',
+                    ]);
+                }
+
+                if ($depotsImposes->count() === 1) {
+                    if ($parts->contains(fn ($p) => is_null($p->depot_id) && ! is_null($p->vehicle_id))) {
+                        throw ValidationException::withMessages([
+                            'depot_id' => 'Un même bon de commande ne peut pas mélanger des pièces destinées directement à un dépôt et des pièces destinées à des véhicules.',
+                        ]);
+                    }
+                    $depotId = (int) $depotsImposes->first();
+                } else {
+                    $depotId = (int) $validated['depot_id'];
+                }
+
+                // Montants (mêmes calculs qu'à la création)
+                $subtotal = 0;
+                $preparees = [];
+
+                foreach ($items as $item) {
+                    $part = $parts->get((int) $item['vehicle_part_request_id']);
+                    $qte = round((float) $item['quantity_ordered'], 2);
+                    $prix = round((float) $item['unit_price'], 4);
+                    $total = round($qte * $prix, 2);
+                    $subtotal = round($subtotal + $total, 2);
+                    $preparees[] = compact('part', 'qte', 'prix', 'total');
+                }
+
+                $tauxRemise = max(0, min(100, round((float) ($validated['discount_rate'] ?? 0), 2)));
+                $remise = round($subtotal * $tauxRemise / 100, 2);
+                $transport = round(max(0, (float) ($validated['shipping_cost'] ?? 0)), 2);
+                $tauxTaxe = max(0, min(100, round((float) ($validated['tax_rate'] ?? 0), 2)));
+                $base = max(0, $subtotal - $remise) + $transport;
+                $taxe = round($base * $tauxTaxe / 100, 2);
+
+                $bc->update([
+                    'supplier_id'            => $validated['supplier_id'],
+                    'depot_id'               => $depotId,
+                    'order_date'             => $validated['order_date'],
+                    'expected_delivery_date' => $validated['expected_delivery_date'] ?? null,
+                    'currency'               => strtoupper(trim($validated['currency'])),
+                    'subtotal'               => $subtotal,
+                    'discount_rate'          => $tauxRemise,
+                    'discount'               => $remise,
+                    'shipping_cost'          => $transport,
+                    'tax_rate'               => $tauxTaxe,
+                    'tax_amount'             => $taxe,
+                    'total'                  => max(0, round($base + $taxe, 2)),
+                    'payment_terms'          => $validated['payment_terms'] ?? null,
+                    'delivery_terms'         => $validated['delivery_terms'] ?? null,
+                    'notes'                  => $validated['notes'] ?? null,
+                    // Rejeté puis corrigé : repart en brouillon pour être revu
+                    'status'                 => SupplierOrder::STATUS_DRAFT,
+                    'rejected_by'            => null,
+                    'rejected_at'            => null,
+                    'rejection_reason'       => null,
+                ]);
+
+                // Pièces retirées : ligne supprimée, la pièce redevient libre
+                foreach ($lignesActuelles as $partId => $ligne) {
+                    if (! in_array((int) $partId, $ids, true)) {
+                        $ligne->delete();
+                        VehiclePartRequest::query()
+                            ->whereKey($partId)
+                            ->where('order_reference', $bc->order_number)
+                            ->update(['order_reference' => null]);
+                    }
+                }
+
+                // Pièces gardées / ajoutées
+                foreach ($preparees as $p) {
+                    $part = $p['part'];
+
+                    SupplierOrderItem::updateOrCreate(
+                        ['supplier_order_id' => $bc->id, 'vehicle_part_request_id' => $part->id],
+                        [
+                            'product_id'        => $part->product_id,
+                            'reference'         => $part->reference ?? $part->product?->reference,
+                            'description'       => $part->part_name ?? $part->product?->designation ?? 'Pièce',
+                            'unit'              => $part->unit ?? $part->product?->unit_label,
+                            'quantity_ordered'  => $p['qte'],
+                            'quantity_received' => min($p['qte'], max(0, (float) ($part->received_quantity ?? 0))),
+                            'unit_price'        => $p['prix'],
+                            'line_total'        => $p['total'],
+                            'notes'             => $part->notes,
+                        ]
+                    );
+
+                    // La pièce suit le fournisseur et le numéro du BC
+                    $part->supplier_id = (int) $validated['supplier_id'];
+                    $part->order_reference = $bc->order_number;
+                    $part->save();
+                }
+            }, 3);
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()
+                ->withInput()
+                ->with('error', 'Impossible de modifier le bon de commande : ' . $exception->getMessage());
+        }
+
+        return redirect()
+            ->route('supplier-orders.show', $supplierOrder)
+            ->with('success', 'Bon de commande ' . $supplierOrder->order_number . ' modifié.');
+    }
+
+    /*
+    |--------------------------------------------------------------------------
     | AFFICHER UN BC
     |--------------------------------------------------------------------------
     */
@@ -1855,13 +2171,11 @@ public function createFromPartRequests(Request $request): View|RedirectResponse
     |
     */
 
-    abort_unless(
-        auth()->check()
-        &&
-        auth()->user()->role === 'admin',
-        403
-    );
-
+   abort_unless(
+    $this->utilisateurConnecte()
+        ->hasPermission('approuver_commandes_fournisseurs'),
+    403
+);
 
     /*
     |--------------------------------------------------------------------------
@@ -2707,13 +3021,11 @@ public function createFromPartRequests(Request $request): View|RedirectResponse
         |
         */
 
-        abort_unless(
-            auth()->check()
-            &&
-            auth()->user()->role === 'admin',
+       abort_unless(
+            $this->utilisateurConnecte()
+                ->hasPermission('approuver_commandes_fournisseurs'),
             403
         );
-
 
         /*
         |--------------------------------------------------------------------------

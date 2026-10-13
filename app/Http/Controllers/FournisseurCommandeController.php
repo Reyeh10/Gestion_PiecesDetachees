@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\ProductDepotStock;
 use App\Services\AppAtelierApiService;
 use App\Services\BonTransfertService;
+use App\Models\User;
 
 use Illuminate\Http\Request;
 
@@ -238,6 +239,25 @@ class FournisseurCommandeController extends Controller
             ->where('quantity', '>', 0)
             ->get();
 
+        // Pièce EN RUPTURE (aucun dépôt n'en a) : elle existe au catalogue, on la
+        // garde sur la ligne et on transmet au garage « indisponible » AVEC le prix
+        // de vente — le devis montre le vrai montant au client. Quand la pièce
+        // revient en stock, le vendeur choisit le dépôt : la ligne passe disponible.
+        if (! $depotId && $depotStocks->isEmpty()) {
+            $ligne->update([
+                'product_id'          => $product->id,
+                'depot_id'            => null,
+                'quantite_disponible' => 0,
+                'disponible'          => false,
+                'prix_unitaire'       => $product->sale_price,
+                'note'                => $noteFournie && ! empty($data['note']) ? $data['note'] : 'En rupture de stock',
+            ]);
+
+            app(AppAtelierApiService::class)->envoyerDisponibilite($ligne);
+
+            return [true, 'Pièce en rupture : prix de vente transmis au garage (indisponible pour le moment).'];
+        }
+
         // Un seul dépôt en stock : on le retient sans obliger le vendeur à le choisir.
         if (! $depotId && $depotStocks->count() === 1) {
             $depotId = (int) $depotStocks->first()->depot_id;
@@ -375,5 +395,51 @@ class FournisseurCommandeController extends Controller
         }
 
         return $redirection->with('success', "Bon de transfert {$bt->numero} mis à jour et renvoyé au garage.");
+    }
+
+    /**
+     * Suppression manuelle d'un bon de commande reçu du garage —
+     * administrateur uniquement (par exemple devis supprimé côté garage).
+     * Son bon de transfert éventuel est supprimé avec lui (case « pièces
+     * revenues au magasin » : remise en stock). Un ancien BC facturé
+     * (vente) ne se supprime pas : la facture s'annule par un avoir.
+     */
+    public function destroy(Request $request, ExternalBonCommande $fournisseurCommande, BonTransfertService $service)
+    {
+        // Récupérer l'utilisateur actuellement connecté.
+    $user = auth()->user();
+
+    // Seul un administrateur authentifié peut supprimer
+    // un bon de commande provenant de l'Atelier.
+    abort_unless(
+        $user instanceof User && $user->isAdmin(),
+        403,
+        'Seul un administrateur peut supprimer un bon de commande.'
+    );
+
+        if ($fournisseurCommande->estFacture()) {
+            return back()->with('error', "Ce bon de commande a été facturé : il ne se supprime pas (annulez la facture par un avoir).");
+        }
+
+        $numero = $fournisseurCommande->numero;
+        $remettre = $request->boolean('remettre_en_stock');
+        $numeroBt = null;
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($fournisseurCommande, $service, $remettre, &$numeroBt) {
+            if ($bt = $fournisseurCommande->bonTransfert) {
+                $numeroBt = $bt->numero;
+                $service->supprimer($bt, $remettre);
+            }
+
+            $fournisseurCommande->refresh()->delete();
+        });
+
+        $message = "Bon de commande {$numero} supprimé.";
+        if ($numeroBt) {
+            $message .= " Son bon de transfert {$numeroBt} aussi"
+                . ($remettre ? ', et les pièces ont été remises dans leurs dépôts.' : ' (stock non modifié).');
+        }
+
+        return redirect()->route('fournisseur-commandes.index')->with('success', $message);
     }
 }

@@ -704,38 +704,7 @@
                                         <i class="bx bx-show" aria-hidden="true"></i>
                                     </a>
 
-                                   {{-- DELETE ADMIN + CHEF MAGASINIER SEULEMENT --}}
-
-                                    @if(
-
-                                        auth()->user()->role == 'admin'
-
-                                        ||
-
-                                        auth()->user()->role == 'chef_magasinier'
-
-                                    )
-
-                                        <form action="{{ route('sales.destroy', $sale->id) }}"
-
-                                            method="POST"
-
-                                            class="delete-sale-form d-inline">
-
-                                            @csrf
-
-                                            @method('DELETE')
-
-                                            <button type="submit"
-
-                                                    class="btn btn-danger btn-sm" title="Supprimer la vente" aria-label="Supprimer la vente">
-
-                                                <i class="bx bx-trash" aria-hidden="true"></i>
-                                            </button>
-
-                                        </form>
-
-                                    @endif
+                                   {{-- Une facture ne se supprime plus : elle s'annule par un avoir (page de la facture). --}}
 
                                 </div>
 

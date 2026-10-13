@@ -2,6 +2,7 @@
 namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Vehicle;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -79,9 +80,15 @@ class VehicleController extends Controller
             ->withQueryString();
         // Charger les clients pour le formulaire de création dans le popup.
         // Les rôles sans bouton de création ne chargent pas cette liste.
-        $customers = in_array(auth()->user()->role, ['admin', 'chef_magasinier', 'magasinier'])
-            ? Customer::query()->orderBy('name')->get()
-            : collect();
+       // Récupérer l'utilisateur authentifié.
+$user = auth()->user();
+
+// Charger les clients uniquement si l'utilisateur
+// possède la permission de gérer les véhicules.
+$customers = $user instanceof User
+    && $user->hasPermission('gerer_vehicules')
+        ? Customer::query()->orderBy('name')->get()
+        : collect();
 
         return view(
             'vehicles.index',
@@ -416,17 +423,20 @@ class VehicleController extends Controller
         | CONTRÔLE DU RÔLE
         |--------------------------------------------------------------------------
         */
+// Récupérer l'utilisateur connecté.
+$user = auth()->user();
 
-        if (
-            !auth()->check() ||
-            auth()->user()->role !== 'admin'
-        ) {
-            abort(
-                403,
-                'Seul l’administrateur peut supprimer un véhicule.'
-            );
-        }
-
+// Refuser la suppression si l'utilisateur n'est pas
+// authentifié ou ne possède pas la permission requise.
+if (
+    !$user instanceof User ||
+    !$user->hasPermission('supprimer_vehicules')
+) {
+    abort(
+        403,
+        'Vous n’avez pas la permission de supprimer ce véhicule.'
+    );
+}
        /*
        |--------------------------------------------------------------------------
        | PROTECTION DE L'HISTORIQUE

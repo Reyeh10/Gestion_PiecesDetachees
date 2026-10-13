@@ -70,7 +70,7 @@
 
                                 <span class="badge bg-primary">
 
-                                    {{ ucfirst($user->role) }}
+                                    {{ $user->getRoleLabel() }}
 
                                 </span>
 
@@ -103,12 +103,25 @@
 
                                 </a>
 
+                                {{-- Seul un administrateur gère un compte administrateur --}}
+                                @if(auth()->user()->isAdmin() || ! $user->isAdmin())
+
                                 <a href="{{ route('users.edit', $user->id) }}"
                                    class="btn btn-warning btn-sm">
 
                                     Modifier
 
                                 </a>
+
+                                {{-- Permissions personnalisées (comme l'app Atelier) ;
+                                     un non-administrateur ne modifie pas les siennes --}}
+                                @if(! $user->isAdmin() && (auth()->user()->isAdmin() || $user->id !== auth()->id()))
+                                    <a href="{{ route('users.permissions.edit', $user->id) }}"
+                                       class="btn btn-outline-primary btn-sm">
+                                        <i class="bx bx-shield-quarter"></i>
+                                        Permissions
+                                    </a>
+                                @endif
 
                                 <form action="{{ route('users.destroy', $user->id) }}"
                                     method="POST"
@@ -127,6 +140,8 @@
                                     </button>
 
                                 </form>
+
+                                @endif
 
                             </td>
 

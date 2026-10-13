@@ -354,7 +354,16 @@
                             @endif
                         </td>
 
-                        <td class="text-end">
+                        <td class="text-end text-nowrap">
+
+                            <button
+                                type="button"
+                                class="btn btn-outline-dark bt-btn"
+                                title="Imprimer {{ $bt->numero }}"
+                                data-imprimer="{{ route('bons-transfert.imprimer', $bt) }}"
+                            >
+                                <i class="bx bx-printer"></i>
+                            </button>
 
                             <a
                                 href="{{ route('bons-transfert.show', $bt) }}"
@@ -396,5 +405,7 @@
     @endif
 
 </div>
+
+@include('bons-transfert._impression')
 
 @endsection

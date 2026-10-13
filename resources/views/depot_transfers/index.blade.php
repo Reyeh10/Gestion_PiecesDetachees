@@ -6,10 +6,7 @@
     <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="mb-0">Transferts entre dépôts</h4>
 
-        @if(in_array(auth()->user()->role, [
-                'admin',
-                'chef_magasinier'
-            ]))
+        @if(auth()->user()->hasPermission('gerer_transferts'))
             <a href="{{ route('depot-transfers.create') }}" class="btn btn-primary">
                 Nouveau transfert
             </a>
@@ -63,12 +60,7 @@
                                 </a>
 
                                 {{-- ADMIN + CHEF MAGASINIER --}}
-                                @if(
-                                    in_array(auth()->user()->role, [
-                                        'admin',
-                                        'chef_magasinier'
-                                    ])
-                                )
+                                @if(auth()->user()->hasPermission('gerer_transferts'))
 
                                     {{-- MODIFIER --}}
                                     <a href="{{ route('depot-transfers.edit', $transfer->id) }}"

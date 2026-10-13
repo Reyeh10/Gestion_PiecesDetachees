@@ -17,6 +17,8 @@ use App\Models\ProductDepotStock;
 
 use App\Exports\ProductsExport;
 use App\Exports\SoldProductsExport;
+use App\Exports\ProductsToOrderExport;
+use App\Models\User;
 // use Barryvdh\DomPDF\Facade\Pdf;
 
 
@@ -2151,22 +2153,14 @@ class ProductController extends Controller
             $fileName
         );
     }
-    /**
-     * Liste des pièces à commander.
-     *
-     * Une pièce doit être commandée lorsque :
-     *
-     * quantité disponible <= stock minimum
-     *
-     * Cela inclut :
-     * - les produits en rupture
-     * - les produits avec stock faible
-     */
-    public function toOrder(Request $request)
+    /*
+    |--------------------------------------------------------------------------
+    | PIÈCES À COMMANDER — REQUÊTE COMMUNE (page et export Excel)
+    |--------------------------------------------------------------------------
+    */
+    private function piecesACommanderQuery(string $search)
     {
-        $search = trim((string) $request->input('search'));
-
-        $products = Product::query()
+        return Product::query()
 
             /*
             |--------------------------------------------------------------------------
@@ -2296,8 +2290,79 @@ class ProductController extends Controller
             |
             | Les quantités les plus faibles apparaissent en premier.
             |
-            */
+            */;
+    }
 
+    /*
+    |--------------------------------------------------------------------------
+    | PIÈCES À COMMANDER — FILTRES (page et export Excel)
+    |--------------------------------------------------------------------------
+    |
+    | Recherche + marque + modèle + statut. Le statut suit le même ordre de
+    | priorité que la colonne STATUT de la page.
+    |
+    */
+    private function piecesACommanderFiltrees(Request $request)
+    {
+        $search = trim((string) $request->input('search'));
+        $brandId = $request->integer('brand_id');
+        $modelId = $request->integer('model_id');
+        $statut = (string) $request->input('statut');
+
+        $enCours = ['en_recherche', 'en_commande'];
+        $partiel = fn ($q) => $q->where('received_quantity', '>', 0)->whereColumn('received_quantity', '<', 'initial_quantity');
+        $sansStatutPrioritaire = fn ($q) => $q
+            ->where(fn ($w) => $w->whereNull('supply_status')->orWhereNotIn('supply_status', $enCours))
+            ->whereNot($partiel);
+
+        return $this->piecesACommanderQuery($search)
+            ->when($brandId > 0, fn ($q) => $q->where('brand_id', $brandId))
+            ->when($modelId > 0, fn ($q) => $q->where('model_id', $modelId))
+            ->when($statut === 'en_recherche', fn ($q) => $q->where('supply_status', 'en_recherche'))
+            ->when($statut === 'en_commande', fn ($q) => $q->where('supply_status', 'en_commande'))
+            ->when($statut === 'partiellement_recu', fn ($q) => $q->whereNotIn('supply_status', $enCours)->where($partiel))
+            ->when($statut === 'rupture', fn ($q) => $q->where($sansStatutPrioritaire)->where('quantity', '<=', 0))
+            ->when($statut === 'stock_faible', fn ($q) => $q->where($sansStatutPrioritaire)
+                ->where('quantity', '>', 0)
+                ->where('min_stock', '>', 0)
+                ->whereColumn('quantity', '<=', 'min_stock'));
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | PIÈCES À COMMANDER — EXPORT EXCEL
+    |--------------------------------------------------------------------------
+    |
+    | Même liste et même recherche que la page, sans pagination.
+    |
+    */
+    public function exportToOrderExcel(Request $request)
+    {
+        $products = $this->piecesACommanderFiltrees($request)
+            ->orderBy('quantity', 'asc')
+            ->orderBy('designation', 'asc')
+            ->get();
+
+        return Excel::download(
+            new ProductsToOrderExport($products),
+            'pieces_a_commander_' . now()->format('Y-m-d_H-i-s') . '.xlsx'
+        );
+    }
+
+    /**
+     * Liste des pièces à commander.
+     *
+     * Une pièce doit être commandée lorsque :
+     *
+     * quantité disponible <= stock minimum
+     *
+     * Cela inclut :
+     * - les produits en rupture
+     * - les produits avec stock faible
+     */
+    public function toOrder(Request $request)
+    {
+        $products = $this->piecesACommanderFiltrees($request)
             ->orderBy('quantity', 'asc')
             ->orderBy('designation', 'asc')
 
@@ -2314,9 +2379,21 @@ class ProductController extends Controller
 
 
 
+        // Listes des filtres : uniquement les marques / modèles présents
+        // parmi les pièces à commander.
+        $aCommander = $this->piecesACommanderQuery('')->setEagerLoads([]);
+
+        $brands = Brand::whereIn('id', (clone $aCommander)->whereNotNull('brand_id')->select('brand_id'))
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $models = CarModel::whereIn('id', (clone $aCommander)->whereNotNull('model_id')->select('model_id'))
+            ->orderBy('name')
+            ->get(['id', 'name', 'brand_id']);
+
         return view(
             'products.to-order',
-            compact('products')
+            compact('products', 'brands', 'models')
         );
     }
 
@@ -2960,14 +3037,24 @@ public function exportExcel()
     |--------------------------------------------------------------------------
     */
 
-    if(
-        !in_array(auth()->user()->role, [
-            'admin',
-            'chef_magasinier'
-        ])
-    ){
-        abort(403);
-    }
+   /*
+    |--------------------------------------------------------------------------
+    | SECURITY — MODIFICATION DES PRODUITS
+    |--------------------------------------------------------------------------
+    |
+    | Vérifier que l'utilisateur est authentifié et possède
+    | l'autorisation de modifier les produits.
+    |
+    */
+
+    $user = auth()->user();
+
+    abort_unless(
+        $user instanceof User
+            && $user->hasPermission('modifier_produits'),
+        403,
+        'Vous n’avez pas la permission de modifier ce produit.'
+    );
         /*
         |--------------------------------------------------------------------------
         | RELATIONS

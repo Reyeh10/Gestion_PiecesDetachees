@@ -298,6 +298,44 @@
     @endif
 
 
+    {{-- Pièces pas encore disponibles : pas de facture tant qu'elles ne
+         sont pas réapprovisionnées dans le dépôt choisi --}}
+    @php
+        $manquants = $manquants ?? [];
+        $bloqueStock = !$isConverted && !$isCancelled && count($manquants) > 0;
+    @endphp
+
+    @if($bloqueStock)
+
+        <div class="alert alert-warning print-hide">
+
+            <div class="fw-semibold mb-1">
+                <i class="bx bx-error me-1"></i>
+                Transformation en facture impossible pour l'instant
+            </div>
+
+            <div class="mb-2">
+                Ce proforma contient des pièces qui ne sont pas (ou plus) disponibles.
+                Dès qu'elles seront réapprovisionnées dans le dépôt indiqué, la
+                transformation en facture sera possible.
+            </div>
+
+            <ul class="mb-0 ps-3">
+                @foreach($manquants as $m)
+                    <li>
+                        <strong>{{ $m['reference'] }}</strong> — {{ $m['designation'] }}
+                        ({{ $m['depot'] }}) :
+                        disponible {{ number_format($m['disponible'], 2, ',', ' ') }},
+                        demandé {{ number_format($m['demande'], 2, ',', ' ') }} {{ $m['unite'] }}
+                    </li>
+                @endforeach
+            </ul>
+
+        </div>
+
+    @endif
+
+
     @if(session('info'))
 
         <div class="alert alert-info print-hide">
@@ -1217,6 +1255,10 @@
                             type="submit"
                             class="btn btn-success"
                             id="convertProformaButton"
+                            @if($bloqueStock)
+                                disabled
+                                title="Pièce(s) pas encore disponible(s) : réapprovisionnez d'abord"
+                            @endif
                         >
 
                             <i class="bx bx-transfer me-1"></i>

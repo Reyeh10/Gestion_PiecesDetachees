@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Models\Depot;
 use App\Models\Product;
 use App\Models\ProductDepotStock;
 use App\Models\Proforma;
@@ -266,22 +267,15 @@ class ProformaController extends Controller
                 'brand',
                 'model',
                 'depotStocks' => function ($query) {
-                    $query
-                        ->where('quantity', '>', 0)
-                        ->orderBy('depot_id');
+                    $query->orderBy('depot_id');
                 },
                 'depotStocks.depot',
             ])
-            ->whereHas(
-                'depotStocks',
-                function ($query) {
-                    $query->where(
-                        'quantity',
-                        '>',
-                        0
-                    );
-                }
-            )
+            /*
+             * Proforma possible même si la pièce est à 0 : c'est un devis.
+             * La transformation en facture, elle, attend que la pièce soit
+             * disponible dans le dépôt choisi (voir convertToSale).
+             */
             ->where(
                 'status',
                 '!=',
@@ -294,11 +288,16 @@ class ProformaController extends Controller
             ->orderBy('name')
             ->get();
 
+        $depots = Depot::query()
+            ->orderBy('name')
+            ->get();
+
         return view(
             'proformas.create',
             compact(
                 'products',
-                'customers'
+                'customers',
+                'depots'
             )
         );
     }
@@ -322,22 +321,15 @@ class ProformaController extends Controller
                 'brand',
                 'model',
                 'depotStocks' => function ($query) {
-                    $query
-                        ->where('quantity', '>', 0)
-                        ->orderBy('depot_id');
+                    $query->orderBy('depot_id');
                 },
                 'depotStocks.depot',
             ])
-            ->whereHas(
-                'depotStocks',
-                function ($query) {
-                    $query->where(
-                        'quantity',
-                        '>',
-                        0
-                    );
-                }
-            )
+            /*
+             * Proforma possible même si la pièce est à 0 : c'est un devis.
+             * La transformation en facture, elle, attend que la pièce soit
+             * disponible dans le dépôt choisi (voir convertToSale).
+             */
             ->where(
                 'status',
                 '!=',
@@ -358,6 +350,9 @@ class ProformaController extends Controller
 
                 'customers' =>
                     $customers,
+
+                'depots' =>
+                    Depot::query()->orderBy('name')->get(),
 
                 'selectedVehicle' =>
                     $vehicle,
@@ -733,67 +728,15 @@ class ProformaController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | VÉRIFIER LE STOCK DES PRODUITS CATALOGUE
+        | STOCK : PAS DE BLOCAGE À LA CRÉATION
         |--------------------------------------------------------------------------
+        |
+        | Un proforma est un devis : il peut contenir une pièce à 0 ou en
+        | quantité insuffisante. La transformation en facture, elle, est
+        | refusée tant que la pièce n'est pas disponible dans le dépôt choisi
+        | (convertToSale) ; après réapprovisionnement, elle devient possible.
+        |
         */
-
-        foreach ($requestedByProductDepot as $requested) {
-            $product = Product::query()
-                ->whereKey($requested['product_id'])
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            $depotStock = ProductDepotStock::query()
-                ->with('depot')
-                ->where(
-                    'product_id',
-                    $requested['product_id']
-                )
-                ->where(
-                    'depot_id',
-                    $requested['depot_id']
-                )
-                ->lockForUpdate()
-                ->first();
-
-            $availableQuantity = round(
-                (float) ($depotStock->quantity ?? 0),
-                2
-            );
-
-            $requestedQuantity = round(
-                (float) $requested['quantity'],
-                2
-            );
-
-            if (
-                !$depotStock
-                || $requestedQuantity > $availableQuantity
-            ) {
-                $depotName =
-                    $depotStock?->depot?->name
-                    ?? ('Dépôt #' . $requested['depot_id']);
-
-                throw new \RuntimeException(
-                    'Stock insuffisant pour : '
-                    . $product->reference
-                    . ' - '
-                    . $product->designation
-                    . ' dans le dépôt '
-                    . $depotName
-                    . '. Disponible : '
-                    . number_format(
-                        $availableQuantity,
-                        2,
-                        ',',
-                        ' '
-                    )
-                    . ' '
-                    . ($product->unit_label ?? 'Pièce')
-                );
-            }
-        }
-
 
         /*
         |--------------------------------------------------------------------------
@@ -1125,10 +1068,62 @@ class ProformaController extends Controller
             'items.depot',
         ]);
 
+        $manquants = $this->piecesNonDisponibles($proforma);
+
         return view(
             'proformas.show',
-            compact('proforma')
+            compact('proforma', 'manquants')
         );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | PIÈCES PAS ENCORE DISPONIBLES POUR LA FACTURE
+    |--------------------------------------------------------------------------
+    |
+    | Lignes du catalogue dont le dépôt choisi n'a pas (ou plus) assez de
+    | stock aujourd'hui. Tant que la liste n'est pas vide, le proforma ne
+    | peut pas être transformé en facture. Même règle que convertToSale.
+    |
+    */
+    private function piecesNonDisponibles(Proforma $proforma): array
+    {
+        $demandes = [];
+
+        foreach ($proforma->items as $item) {
+            if (empty($item->product_id)) {
+                continue; // hors catalogue : pas de stock
+            }
+
+            $cle = $item->product_id . ':' . ($item->depot_id ?? 0);
+            $demandes[$cle] ??= ['item' => $item, 'quantite' => 0.0];
+            $demandes[$cle]['quantite'] += (float) $item->quantity;
+        }
+
+        $manquants = [];
+
+        foreach ($demandes as $demande) {
+            $item = $demande['item'];
+            $disponible = $item->depot_id
+                ? (float) ProductDepotStock::query()
+                    ->where('product_id', $item->product_id)
+                    ->where('depot_id', $item->depot_id)
+                    ->value('quantity')
+                : 0.0;
+
+            if (round($demande['quantite'], 2) > round($disponible, 2)) {
+                $manquants[] = [
+                    'reference'   => $item->product?->reference,
+                    'designation' => $item->product?->designation,
+                    'depot'       => $item->depot?->name ?? '—',
+                    'demande'     => $demande['quantite'],
+                    'disponible'  => $disponible,
+                    'unite'       => $item->product?->unit_label ?? 'Pièce',
+                ];
+            }
+        }
+
+        return $manquants;
     }
 
     /*
@@ -1239,6 +1234,23 @@ class ProformaController extends Controller
                     | plusieurs dépôts.
                     |
                     */
+                    /*
+                     * Pièces pas encore disponibles (proforma fait alors que la
+                     * pièce était à 0, pas encore réapprovisionnée) : pas de
+                     * facture. Quantités cumulées si une pièce est sur 2 lignes.
+                     */
+                    $manquants = $this->piecesNonDisponibles($locked);
+
+                    if ($manquants !== []) {
+                        throw new \RuntimeException(
+                            'Transformation en facture impossible : pièce(s) pas encore disponible(s) — '
+                            . collect($manquants)->map(fn ($m) => $m['reference'] . ' (' . $m['depot']
+                                . ' : disponible ' . number_format($m['disponible'], 2, ',', ' ')
+                                . ' / demandé ' . number_format($m['demande'], 2, ',', ' ') . ')')->implode(', ')
+                            . '. Réapprovisionnez puis réessayez.'
+                        );
+                    }
+
                     $allocations = [];
 
                     foreach ($locked->items as $item) {

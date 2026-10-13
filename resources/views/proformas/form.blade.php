@@ -8,47 +8,43 @@
 
 @php
 
+    $depotsListe = $depots ?? collect();
+
     $searchableProducts = $products
 
-        ->map(function ($product) {
+        ->map(function ($product) use ($depotsListe) {
 
-            $depots = $product->depotStocks
+            // Tous les dépôts (même à 0) : un proforma peut contenir une
+            // pièce non disponible ; la facture attendra le réapprovisionnement.
+            $stocksParDepot = $product->depotStocks->keyBy('depot_id');
 
-                ->filter(function ($stock) {
+            $depots = $depotsListe
 
-                    return
-
-                        (float) $stock->quantity > 0
-
-                        &&
-
-                        $stock->depot !== null;
-
-                })
-
-                ->map(function ($stock) {
+                ->map(function ($depot) use ($stocksParDepot) {
 
                     return [
 
                         'depot_id' =>
 
-                            (int) $stock->depot_id,
+                            (int) $depot->id,
 
                         'name' =>
 
-                            (string) $stock->depot->name,
+                            (string) $depot->name,
 
                         'code' =>
 
-                            (string) ($stock->depot->code ?? ''),
+                            (string) ($depot->code ?? ''),
 
                         'quantity' =>
 
-                            (float) $stock->quantity,
+                            (float) ($stocksParDepot[$depot->id]->quantity ?? 0),
 
                     ];
 
                 })
+
+                ->sortByDesc('quantity')
 
                 ->values();
 
@@ -356,6 +352,12 @@
 
         margin-top: 7px;
 
+    }
+
+    .depot-chip.depot-chip-rupture {
+        color: #b91c1c;
+        background: #fee2e2;
+        border-color: #fecaca;
     }
 
     .depot-chip {
@@ -1709,7 +1711,7 @@ document.addEventListener(
 
                         <div class="p-3 text-center text-muted">
 
-                            Aucun produit disponible trouvé.
+                            Aucun produit trouvé.
 
                         </div>
 
@@ -1733,7 +1735,7 @@ document.addEventListener(
 
                         function (product) {
 
-                            const depots =
+                            const depotsEnStock =
 
                                 (
 
@@ -1744,6 +1746,28 @@ document.addEventListener(
                                     []
 
                                 )
+
+                                .filter(
+
+                                    function (depot) {
+
+                                        return parseFloat(depot.quantity || 0) > 0;
+
+                                    }
+
+                                );
+
+                            const depots = depotsEnStock.length === 0
+
+                                ? `<span class="depot-chip depot-chip-rupture">
+
+                                        <i class="bx bx-error-circle"></i>
+
+                                        Non disponible : 0 ${escapeHtml(product.unit)}
+
+                                   </span>`
+
+                                : depotsEnStock
 
                                 .map(
 
@@ -1883,11 +1907,25 @@ document.addEventListener(
 
             const depots =
 
-                product?.depots
+                (
 
-                ||
+                    product?.depots
 
-                [];
+                    ||
+
+                    []
+
+                )
+
+                .filter(
+
+                    function (depot) {
+
+                        return parseFloat(depot.quantity || 0) > 0;
+
+                    }
+
+                );
 
             if (
 
@@ -1903,7 +1941,7 @@ document.addEventListener(
 
                     <span class="depot-empty">
 
-                        Aucun stock dépôt
+                        Non disponible — à approvisionner avant facture
 
                     </span>
 
@@ -2038,6 +2076,25 @@ document.addEventListener(
                 ) || null;
             }
 
+            // Disponible dans le dépôt choisi ; si la quantité dépasse, on
+            // prévient que la facture attendra le réapprovisionnement.
+            function majInfoDepot() {
+                const product = selectedProduct();
+                const depot = selectedDepot();
+                if (!product || !depot) {
+                    return;
+                }
+                const dispo = parseFloat(depot.quantity || 0);
+                const qty = parseFloat(quantityInput.value || 0);
+                const manque = qty > dispo;
+                depotStockInfo.className = 'd-block mt-1 ' + (manque ? 'text-warning fw-semibold' : 'text-muted');
+                depotStockInfo.textContent =
+                    `Disponible dans ce dépôt : ${formatNumber(dispo)} ${product.unit}`
+                    + (manque ? ' — facture possible après réapprovisionnement' : '');
+            }
+
+            quantityInput.addEventListener('input', majInfoDepot);
+
             function depotChanged() {
                 const product = selectedProduct();
                 const depot = selectedDepot();
@@ -2049,15 +2106,9 @@ document.addEventListener(
                     return;
                 }
 
-                quantityInput.max = String(depot.quantity);
-                depotStockInfo.textContent =
-                    `Disponible dans ce dépôt : ${formatNumber(depot.quantity)} ${product.unit}`;
-
-                const qty = parseFloat(quantityInput.value || 0);
-                if (qty > parseFloat(depot.quantity || 0)) {
-                    quantityInput.value = String(depot.quantity);
-                }
-
+                // Pas de plafond : un proforma peut dépasser le stock.
+                quantityInput.removeAttribute('max');
+                majInfoDepot();
                 calculateRow(currentIndex);
             }
 
@@ -2559,33 +2610,8 @@ document.addEventListener(
 
                 'Pièce';
 
-            if (
-
-                quantity > stock
-
-                &&
-
-                stock >= 0
-
-            ) {
-
-                showWarning(
-
-                    'Stock insuffisant',
-
-                    `Stock total disponible dans les dépôts : ${formatNumber(stock)} ${unit}`
-
-                );
-
-                quantity =
-
-                    stock;
-
-                quantityInput.value =
-
-                    stock;
-
-            }
+            // Pas de blocage : un proforma peut contenir une pièce non
+            // disponible (la facture attendra le réapprovisionnement).
 
             const lineTotal =
 

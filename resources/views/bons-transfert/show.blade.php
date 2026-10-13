@@ -329,6 +329,15 @@
                         PDF
                     </a>
 
+                    <button
+                        type="button"
+                        class="btn btn-outline-dark bt-btn"
+                        data-imprimer="{{ route('bons-transfert.imprimer', $bt) }}"
+                    >
+                        <i class="bx bx-printer"></i>
+                        Imprimer
+                    </button>
+
                     <form
                         method="POST"
                         action="{{ route('bons-transfert.envoyer', $bt) }}"
@@ -349,6 +358,14 @@
                         </button>
 
                     </form>
+
+                    @if(auth()->user()->isAdmin())
+                        <button type="button" class="btn btn-outline-danger bt-btn"
+                                data-bs-toggle="modal" data-bs-target="#supprimerBtModal">
+                            <i class="bx bx-trash"></i>
+                            Supprimer
+                        </button>
+                    @endif
 
                 </div>
 
@@ -524,6 +541,8 @@
                         <th>Référence</th>
                         <th>Désignation</th>
                         <th>Dépôt</th>
+                        <th>Rayon</th>
+                        <th>Emplacement</th>
                         <th class="text-end">Quantité</th>
                         <th class="text-end">Prix unitaire</th>
                         <th class="text-end">Total</th>
@@ -556,6 +575,14 @@
 
                             <td class="bt-depot">
                                 {{ $ligne->depot?->name ?: '—' }}
+                            </td>
+
+                            <td class="bt-depot">
+                                {{ $ligne->rayon_nom ?: '—' }}
+                            </td>
+
+                            <td class="bt-depot">
+                                {{ $ligne->emplacement_nom ?: '—' }}
                             </td>
 
                             <td class="bt-number-cell">
@@ -597,7 +624,7 @@
 
                         <tr>
                             <td
-                                colspan="7"
+                                colspan="9"
                                 class="text-center text-muted py-4"
                             >
                                 Aucune ligne dans ce bon de transfert.
@@ -692,5 +719,53 @@
     </div>
 
 </div>
+
+{{-- ================================================================
+     SUPPRESSION MANUELLE DU BT (administrateur uniquement)
+================================================================ --}}
+@if(auth()->user()->isAdmin())
+    <div class="modal fade" id="supprimerBtModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form method="POST" action="{{ route('bons-transfert.destroy', $bt) }}">
+                    @csrf
+                    @method('DELETE')
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">Supprimer le bon de transfert {{ $bt->numero }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <div class="alert alert-danger small">
+                            Le BT sera <strong>définitivement supprimé</strong> du magasin.
+                            @if($bc) Le bon de commande {{ $bc->numero }} sera gardé, sans BT. @endif
+                            Le garage n'est pas prévenu : supprimez aussi le BT côté Atelier si besoin.
+                        </div>
+
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="remettre_en_stock" value="1" id="remettreStockBt" checked>
+                            <label class="form-check-label" for="remettreStockBt">
+                                Les pièces sont revenues au magasin : les <strong>remettre en stock</strong> dans leur dépôt
+                            </label>
+                        </div>
+                        <div class="text-muted small mt-1">
+                            Décochez si les pièces sont restées au garage (le stock ne bouge pas).
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bx bx-trash me-1"></i> Supprimer le BT
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+@endif
+
+@include('bons-transfert._impression')
 
 @endsection

@@ -401,31 +401,39 @@
 
     <thead>
         <tr>
-            <th style="width: 5%;" class="text-center">
+            <th style="width: 4%;" class="text-center">
                 #
             </th>
 
-            <th style="width: 16%;">
+            <th style="width: 13%;">
                 Référence
             </th>
 
-            <th style="width: 29%;">
+            <th style="width: 23%;">
                 Désignation
             </th>
 
-            <th style="width: 16%;">
+            <th style="width: 12%;">
                 Dépôt
             </th>
 
-            <th style="width: 9%;" class="text-right">
+            <th style="width: 9%;">
+                Rayon
+            </th>
+
+            <th style="width: 10%;">
+                Emplacement
+            </th>
+
+            <th style="width: 7%;" class="text-right">
                 Qté
             </th>
 
-            <th style="width: 12%;" class="text-right">
+            <th style="width: 10%;" class="text-right">
                 P.U.
             </th>
 
-            <th style="width: 13%;" class="text-right">
+            <th style="width: 12%;" class="text-right">
                 Total
             </th>
         </tr>
@@ -454,6 +462,14 @@
 
                 <td>
                     {{ $ligne->depot?->name ?: '—' }}
+                </td>
+
+                <td>
+                    {{ $ligne->rayon_nom ?: '—' }}
+                </td>
+
+                <td>
+                    {{ $ligne->emplacement_nom ?: '—' }}
                 </td>
 
                 <td class="text-right">
@@ -496,7 +512,7 @@
 
             <tr>
                 <td
-                    colspan="7"
+                    colspan="9"
                     class="text-center"
                 >
                     Aucune pièce dans ce bon de transfert.

@@ -17,14 +17,7 @@
     |
     */
 
-    $canEditSupplier = $user && in_array(
-        $user->role,
-        [
-            'admin',
-            'chef_magasinier',
-        ],
-        true
-    );
+    $canEditSupplier = $user && $user->hasPermission('modifier_fournisseurs');
 
 @endphp
 

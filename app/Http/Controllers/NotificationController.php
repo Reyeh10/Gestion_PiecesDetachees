@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\DatabaseNotification;
 
@@ -123,5 +125,45 @@ class NotificationController extends Controller
             'success',
             'Les notifications lues ont été supprimées.'
         );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | NOUVELLES NOTIFICATIONS (interrogée toutes les 20 s par la page)
+    |--------------------------------------------------------------------------
+    |
+    | Comme l'app Atelier : renvoie les notifications arrivées depuis
+    | « depuis » (horodatage en millisecondes), le nombre de non lues et
+    | l'horodatage de la plus récente. La page joue alors le son, affiche
+    | une fenêtre en bas à droite et met la cloche à jour.
+    |
+    */
+    public function nouvelles(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $depuis = (int) $request->query('depuis', 0);
+
+        $nouvelles = $user->notifications()
+            ->when($depuis > 0, fn ($q) => $q->where('created_at', '>', Carbon::createFromTimestampMs($depuis)))
+            ->latest()
+            ->limit(20)
+            ->get()
+            ->reverse()
+            ->values()
+            ->map(fn (DatabaseNotification $n) => [
+                'id'    => $n->id,
+                'ms'    => $n->created_at->getTimestampMs(),
+                'titre' => $n->data['title'] ?? 'Notification',
+                'corps' => $n->data['message'] ?? '',
+                'url'   => route('notifications.open', $n->id),
+            ]);
+
+        $derniere = $user->notifications()->latest()->value('created_at');
+
+        return response()->json([
+            'nouvelles' => $nouvelles,
+            'non_lues'  => $user->unreadNotifications()->count(),
+            'dernier'   => $derniere ? Carbon::parse($derniere)->getTimestampMs() : 0,
+        ]);
     }
 }

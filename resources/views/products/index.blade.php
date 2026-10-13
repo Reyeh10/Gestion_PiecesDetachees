@@ -1103,15 +1103,7 @@
                 @if(
                     !$hideButtons
                     &&
-                    in_array(
-                        auth()->user()->role,
-                        [
-                            'admin',
-                            'chef_magasinier',
-                            'magasinier'
-                        ],
-                        true
-                    )
+                    auth()->user()->hasPermission('creer_produits')
                 )
 
                     <form
@@ -2309,16 +2301,7 @@
 
                                             {{-- MODIFIER / SUPPRIMER --}}
 
-                                            @if(
-                                                in_array(
-                                                    auth()->user()->role,
-                                                    [
-                                                        'admin',
-                                                        'chef_magasinier'
-                                                    ],
-                                                    true
-                                                )
-                                            )
+                                            @if(auth()->user()->hasPermission('modifier_produits') || auth()->user()->hasPermission('supprimer_referentiels'))
 
 
                                                 {{-- MODIFIER --}}
