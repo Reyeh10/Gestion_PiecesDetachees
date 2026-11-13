@@ -228,6 +228,32 @@
         border-bottom-right-radius: 14px;
     }
 
+    .badge-bt,
+    .badge-en-attente {
+        display: inline-block;
+        margin-bottom: 4px;
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 11.5px;
+        font-weight: 800;
+    }
+
+    .badge-bt { color: #155EEF; background: #e0eaff; }
+
+    .badge-commandee {
+        display: inline-block;
+        margin-bottom: 4px;
+        padding: 3px 10px;
+        color: #6d28d9;
+        background: #ede9fe;
+        border-radius: 12px;
+        font-size: 11.5px;
+        font-weight: 800;
+    }
+
+    .badge-commandee a { color: inherit; text-decoration: underline; }
+    .badge-en-attente { color: #b45309; background: #fef3c7; }
+
     .badge-dispo {
         background: rgba(34,197,94,.12);
         color: #16a34a;
@@ -276,14 +302,16 @@
                     <i class="bx bx-receipt"></i> Voir la facture
                 </a>
 
-            {{-- Nouveau workflow : bon de transfert déjà créé --}}
+            {{-- V6 : un ou plusieurs BT (le premier + les BT du reste -R1, -R2…) --}}
             @elseif($commande->bon_transfert_id)
 
-                <a href="{{ route('bons-transfert.show', $commande->bon_transfert_id) }}" class="btn btn-success">
-                    <i class="bx bx-transfer"></i> Voir le bon de transfert
-                </a>
+                @foreach($commande->bonsTransfert as $btBc)
+                    <a href="{{ route('bons-transfert.show', $btBc) }}" class="btn btn-success">
+                        <i class="bx bx-transfer"></i> {{ $btBc->numero }}
+                    </a>
+                @endforeach
 
-                @if(!$commande->bonTransfertAJour() && $commande->toutesPiecesDisponibles())
+                @if(!$commande->bonTransfertAJour())
                     <form
                         method="POST"
                         action="{{ route('fournisseur-commandes.mettre-a-jour-bon-transfert', $commande) }}"
@@ -294,7 +322,7 @@
                         <button
                             type="submit"
                             class="btn btn-warning"
-                            onclick="return confirm('Voulez-vous mettre à jour le bon de transfert et le renvoyer au garage ?')"
+                            onclick="return confirm('Mettre à jour les bons de transfert et les renvoyer au garage ?')"
                         >
                             <i class="bx bx-refresh"></i>
                             Mettre à jour le BT
@@ -302,8 +330,32 @@
                     </form>
                 @endif
 
-            {{-- Nouveau workflow : création du bon de transfert --}}
-            @elseif($commande->toutesPiecesDisponibles())
+                @if($commande->lignesPretesAEnvoyer()->isNotEmpty())
+                    <form
+                        method="POST"
+                        action="{{ route('fournisseur-commandes.creer-bon-transfert-reste', $commande) }}"
+                        class="m-0"
+                    >
+                        @csrf
+
+                        <button
+                            type="submit"
+                            class="btn btn-primary"
+                            onclick="return confirm('Créer le bon de transfert du reste ({{ $commande->lignesPretesAEnvoyer()->count() }} pièce(s) prête(s)) et l\'envoyer au garage ?')"
+                        >
+                            <i class="bx bx-transfer-alt"></i>
+                            Créer le BT du reste
+                        </button>
+                    </form>
+                @endif
+
+            {{-- Création du premier BT : possible dès qu'une pièce est prête (BT partiel) --}}
+            @elseif($commande->lignesPretesAEnvoyer()->isNotEmpty())
+
+                @php
+                    $nbPretes = $commande->lignesPretesAEnvoyer()->count();
+                    $nbAttente = $commande->lignes->count() - $nbPretes;
+                @endphp
 
                 <form
                     method="POST"
@@ -315,22 +367,31 @@
                     <button
                         type="submit"
                         class="btn btn-success"
-                        onclick="return confirm('Voulez-vous créer le bon de transfert et envoyer les pièces au garage ?')"
+                        onclick="return confirm('{{ $nbAttente > 0
+                            ? "Créer un bon de transfert PARTIEL avec les {$nbPretes} pièce(s) prête(s) ? Les {$nbAttente} autre(s) resteront en attente (BT du reste)."
+                            : "Voulez-vous créer le bon de transfert et envoyer les pièces au garage ?" }}')"
                     >
                         <i class="bx bx-transfer"></i>
-                        Créer le bon de transfert
+                        {{ $nbAttente > 0 ? "Créer le BT partiel ({$nbPretes}/" . $commande->lignes->count() . ')' : 'Créer le bon de transfert' }}
                     </button>
                 </form>
 
             @endif
 
 
-            @if(auth()->user()->isAdmin() && ! $commande->estFacture())
+            @if($peutCommander && $aCommander->isNotEmpty())
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#commanderFournisseurModal">
+                    <i class="bx bx-cart-add"></i> Commander au fournisseur ({{ $aCommander->count() }})
+                </button>
+            @endif
+
+            @if(auth()->user()?->isAdmin() && ! $commande->estFacture())
                 <button type="button" class="btn btn-outline-danger"
                         data-bs-toggle="modal" data-bs-target="#supprimerBcModal">
                     <i class="bx bx-trash"></i> Supprimer
                 </button>
             @endif
+
 
             <a href="{{ route('fournisseur-commandes.index') }}" class="fc-btn-back">
                 <i class="bx bx-arrow-back"></i>
@@ -363,11 +424,22 @@
             <div class="alert alert-warning">
                 <i class="bx bx-error"></i>
                 Ce bon de commande a été modifié après le bon de transfert
-                <strong>{{ $commande->bonTransfert->numero }}</strong> :
-                @if($commande->toutesPiecesDisponibles())
-                    cliquez sur « Mettre à jour le BT ».
+                <strong>{{ $commande->bonsTransfert->pluck('numero')->implode(', ') }}</strong> :
+                cliquez sur « Mettre à jour le BT ». Les pièces ajoutées au devis restent en attente
+                et partiront dans un BT du reste.
+            </div>
+        @endif
+
+        {{-- V6 : pièces en attente (BT partiel) --}}
+        @if(! $commande->vente_id && $commande->bon_transfert_id && $commande->lignesEnAttente()->isNotEmpty())
+            <div class="alert alert-info">
+                <i class="bx bx-time-five"></i>
+                <strong>{{ $commande->lignesEnAttente()->count() }} pièce(s) en attente</strong>
+                (pas encore dans un bon de transfert).
+                @if($commande->lignesPretesAEnvoyer()->isNotEmpty())
+                    {{ $commande->lignesPretesAEnvoyer()->count() }} sont prêtes : cliquez sur « Créer le BT du reste ».
                 @else
-                    vérifiez les pièces et les dépôts, cliquez sur « Tout valider », puis mettez le BT à jour.
+                    Elles partiront dans un BT du reste dès qu'elles seront disponibles (réapprovisionnement).
                 @endif
             </div>
         @endif
@@ -375,6 +447,13 @@
         {{-- INFOS VÉHICULE / CLIENT --}}
         <div class="fc-info-grid">
 
+            @if($commande->equipement)
+            <div class="fc-info-box">
+                <div class="fc-info-label">Équipement (consommation atelier)</div>
+                <div class="fc-info-value">{{ $commande->equipement }}</div>
+                <div class="fc-info-sub">Pièces pour le garage, pas pour un véhicule</div>
+            </div>
+            @else
             <div class="fc-info-box">
                 <div class="fc-info-label">Véhicule</div>
                 <div class="fc-info-value">{{ $commande->vehicule_marque }} {{ $commande->vehicule_modele }}</div>
@@ -383,6 +462,7 @@
                 <div class="fc-info-sub">VIN : {{ $commande->vehicule_vin }}</div>
                 @endif
             </div>
+            @endif
 
             <div class="fc-info-box">
                 <div class="fc-info-label">Client</div>
@@ -476,6 +556,22 @@
                                 @endif
 
                                 <div class="mt-2 ligne-statut">
+                                    {{-- V6 : pièce déjà partie dans un BT, ou en attente --}}
+                                    @if($ligne->bon_transfert_id && $ligne->bonTransfert)
+                                        <span class="badge-bt">Transférée — {{ $ligne->bonTransfert->numero }}</span>
+                                    @elseif($commande->bon_transfert_id)
+                                        <span class="badge-en-attente">En attente — BT du reste</span>
+                                    @endif
+
+                                    {{-- V6 : pièce commandée au fournisseur depuis ce BC --}}
+                                    @php $bcf = $ligne->demandePiece?->latestSupplierOrderItem?->supplierOrder; @endphp
+                                    @if($bcf && $bcf->status !== \App\Models\SupplierOrder::STATUS_CANCELLED && ! $ligne->bon_transfert_id)
+                                        <span class="badge-commandee">
+                                            Commandée chez {{ $ligne->demandePiece->supplier?->name ?? 'fournisseur' }} —
+                                            <a href="{{ route('supplier-orders.show', $bcf) }}">{{ $bcf->order_number }}</a>
+                                        </span>
+                                    @endif
+
                                     @if($ligne->product_id)
                                         @if($ligne->disponible)
                                             <span class="badge-dispo">Disponible</span>
@@ -643,6 +739,117 @@
         }, 6000);
     });
 </script>
+
+{{-- ================================================================
+     V6 — COMMANDER AU FOURNISSEUR les pièces non disponibles
+     (crée les demandes de pièces spéciales + le BC fournisseur en
+     brouillon, approuvé ensuite par l'administrateur)
+================================================================ --}}
+@if($peutCommander && $aCommander->isNotEmpty())
+    <div class="modal fade" id="commanderFournisseurModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <form method="POST" action="{{ route('fournisseur-commandes.commander-fournisseur', $commande) }}" class="modal-content">
+                @csrf
+
+                <div class="modal-header">
+                    <h5 class="modal-title">Commander au fournisseur — {{ $commande->numero }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                </div>
+
+                <div class="modal-body">
+
+                    <p class="text-muted mb-3">
+                        @if($commande->equipement)
+                        Consommation atelier : <strong>{{ $commande->equipement }}</strong>.
+                        @else
+                        Véhicule : <strong>{{ trim($commande->vehicule_marque . ' ' . $commande->vehicule_modele) ?: '—' }}</strong>
+                        {{ $commande->vehicule_immatriculation }} — client {{ $commande->client_nom ?: '—' }}.
+                        @endif
+                        Ces informations sont reprises automatiquement dans la commande.
+                    </p>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Fournisseur <span class="text-danger">*</span></label>
+                            <select name="supplier_id" class="form-select" required>
+                                <option value="">Choisir le fournisseur…</option>
+                                @foreach($suppliers as $s)
+                                    <option value="{{ $s->id }}" @selected(old('supplier_id') == $s->id)>{{ $s->name }}{{ $s->currency ? ' (' . $s->currency . ')' : '' }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Dépôt de réception <span class="text-danger">*</span></label>
+                            <select name="depot_id" class="form-select" required>
+                                @foreach($depots as $d)
+                                    <option value="{{ $d->id }}" @selected(old('depot_id', $depotParDefaut) == $d->id)>{{ $d->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <table class="table align-middle no-cartes cmd-table">
+                        <thead>
+                            <tr>
+                                <th style="width:40px;"></th>
+                                <th>Pièce du garage</th>
+                                <th style="width:190px;">Référence magasin <span class="text-danger">*</span></th>
+                                <th>Désignation</th>
+                                <th style="width:100px;">Quantité</th>
+                                <th style="width:140px;">Prix d'achat</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($aCommander as $l)
+                                @php $ref = $l->product?->reference ?? $l->reference; @endphp
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input" name="lignes[{{ $l->id }}][commander]" value="1" checked>
+                                    </td>
+                                    <td>
+                                        <strong>{{ $l->reference ?: '—' }}</strong>
+                                        <div class="text-muted small">{{ $l->designation }}</div>
+                                    </td>
+                                    <td>
+                                        <input type="text" name="lignes[{{ $l->id }}][reference]" class="form-control form-control-sm"
+                                               value="{{ old("lignes.{$l->id}.reference", $ref) }}" maxlength="100" placeholder="Référence au magasin">
+                                        @if(! $l->product_id)
+                                            <div class="small text-muted mt-1">Absente du catalogue : fiche créée à la réception.</div>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <input type="text" name="lignes[{{ $l->id }}][designation]" class="form-control form-control-sm"
+                                               value="{{ old("lignes.{$l->id}.designation", $l->product?->designation ?? $l->designation) }}" maxlength="255">
+                                    </td>
+                                    <td>
+                                        <input type="number" name="lignes[{{ $l->id }}][quantite]" class="form-control form-control-sm"
+                                               value="{{ old("lignes.{$l->id}.quantite", (float) $l->quantite_demandee) }}" min="0.01" step="0.01">
+                                    </td>
+                                    <td>
+                                        <input type="number" name="lignes[{{ $l->id }}][prix]" class="form-control form-control-sm"
+                                               value="{{ old("lignes.{$l->id}.prix", $l->product?->purchase_price) }}" min="0" step="0.0001" placeholder="Si connu">
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+
+                    <p class="small text-muted mb-0">
+                        Le bon de commande est créé en <strong>brouillon</strong> : il doit être approuvé par l'administrateur.
+                        À la réception, les pièces entrent en stock et redeviennent disponibles sur ce BC : il suffira de créer le BT du reste.
+                    </p>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bx bx-cart-add"></i> Créer le bon de commande
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+@endif
 
 {{-- ================================================================
      SUPPRESSION MANUELLE DU BC (administrateur uniquement)

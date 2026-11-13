@@ -22,6 +22,15 @@
         background: #fff;
     }
 
+    .bt-lien-reste {
+        margin-top: 4px;
+        color: #64748b;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .bt-lien-reste a { font-weight: 800; }
+
     .bt-show-title {
         margin: 0;
         font-size: 24px;
@@ -296,6 +305,22 @@
                     {{ $bt->numero }}
                 </div>
 
+                {{-- V6 : lien entre le BT d'origine et ses BT du reste --}}
+                @if($bt->parent)
+                    <div class="bt-lien-reste">
+                        BT du reste de
+                        <a href="{{ route('bons-transfert.show', $bt->parent) }}">{{ $bt->parent->numero }}</a>
+                    </div>
+                @endif
+                @if($bt->restes->isNotEmpty())
+                    <div class="bt-lien-reste">
+                        Suite :
+                        @foreach($bt->restes as $suite)
+                            <a href="{{ route('bons-transfert.show', $suite) }}">{{ $suite->numero }}</a>{{ $loop->last ? '' : ', ' }}
+                        @endforeach
+                    </div>
+                @endif
+
             </div>
 
             <div class="col-lg-7">
@@ -310,7 +335,21 @@
                         Retour
                     </a>
 
-                    @if($bc)
+                    @if($bc?->estBus())
+                        @if(auth()->user()->hasPermission('gerer_bt_bus'))
+                            <a href="{{ route('bus.edit', $bt) }}" class="btn btn-outline-primary bt-btn">
+                                <i class="bx bx-edit"></i>
+                                Modifier
+                            </a>
+                        @endif
+                    @elseif($bc?->estBtDirect())
+                        @if(auth()->user()->hasPermission('gerer_consommations_atelier'))
+                            <a href="{{ route('bt-direct.edit', $bt) }}" class="btn btn-outline-primary bt-btn">
+                                <i class="bx bx-edit"></i>
+                                Modifier
+                            </a>
+                        @endif
+                    @elseif($bc)
                         <a
                             href="{{ route('fournisseur-commandes.show', $bc) }}"
                             class="btn btn-outline-primary bt-btn"
@@ -338,6 +377,7 @@
                         Imprimer
                     </button>
 
+                    @unless($bc?->estInterne())
                     <form
                         method="POST"
                         action="{{ route('bons-transfert.envoyer', $bt) }}"
@@ -358,8 +398,9 @@
                         </button>
 
                     </form>
+                    @endunless
 
-                    @if(auth()->user()->isAdmin())
+                    @if(auth()->user()->isAdmin() || ($bc?->estBus() && auth()->user()->hasPermission('gerer_bt_bus')) || ($bc?->estBtDirect() && auth()->user()->hasPermission('gerer_consommations_atelier')))
                         <button type="button" class="btn btn-outline-danger bt-btn"
                                 data-bs-toggle="modal" data-bs-target="#supprimerBtModal">
                             <i class="bx bx-trash"></i>
@@ -465,7 +506,7 @@
             <div class="bt-info-box">
 
                 <div class="bt-info-label">
-                    Client
+                    {{ $bc?->estInterne() ? 'Bénéficiaire' : 'Client' }}
                 </div>
 
                 <div class="bt-info-value">
@@ -480,6 +521,55 @@
 
             </div>
 
+            @if($bc?->estConsommation())
+            <div class="bt-info-box">
+
+                <div class="bt-info-label">
+                    Équipement (consommation atelier)
+                </div>
+
+                <div class="bt-info-value">
+                    {{ $bc->equipement ?: '—' }}
+                </div>
+
+            </div>
+
+            <div class="bt-info-box">
+
+                <div class="bt-info-label">
+                    Demandé par
+                </div>
+
+                <div class="bt-info-value">
+                    {{ $bc->demande_par ?: '—' }}
+                </div>
+
+            </div>
+            @elseif($bc?->estInterne())
+            <div class="bt-info-box">
+
+                <div class="bt-info-label">
+                    Motif (BT interne)
+                </div>
+
+                <div class="bt-info-value">
+                    {{ $bc->libelleMotif() ?: '—' }}
+                </div>
+
+            </div>
+
+            <div class="bt-info-box">
+
+                <div class="bt-info-label">
+                    Demandé par
+                </div>
+
+                <div class="bt-info-value">
+                    {{ $bc->demande_par ?: '—' }}
+                </div>
+
+            </div>
+            @else
             <div class="bt-info-box">
 
                 <div class="bt-info-label">
@@ -509,6 +599,7 @@
                 </div>
 
             </div>
+            @endif
 
             <div class="bt-info-box">
 
@@ -666,8 +757,9 @@
         </div>
 
         {{-- ============================================================
-             ÉTAT DE L'ENVOI VERS APP-ATELIER
+             ÉTAT DE L'ENVOI VERS APP-ATELIER (pas pour un BT interne)
              ============================================================ --}}
+        @unless($bc?->estInterne())
         <div class="bt-status-box">
 
             <div class="bt-info-label">
@@ -715,6 +807,7 @@
             @endif
 
         </div>
+        @endunless
 
     </div>
 
@@ -723,11 +816,11 @@
 {{-- ================================================================
      SUPPRESSION MANUELLE DU BT (administrateur uniquement)
 ================================================================ --}}
-@if(auth()->user()->isAdmin())
+@if(auth()->user()->isAdmin() || ($bc?->estBus() && auth()->user()->hasPermission('gerer_bt_bus')) || ($bc?->estBtDirect() && auth()->user()->hasPermission('gerer_consommations_atelier')))
     <div class="modal fade" id="supprimerBtModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
-                <form method="POST" action="{{ route('bons-transfert.destroy', $bt) }}">
+                <form method="POST" action="{{ $bc?->estBus() ? route('bus.destroy', $bt) : ($bc?->estBtDirect() ? route('bt-direct.destroy', $bt) : route('bons-transfert.destroy', $bt)) }}">
                     @csrf
                     @method('DELETE')
 
@@ -739,8 +832,14 @@
                     <div class="modal-body">
                         <div class="alert alert-danger small">
                             Le BT sera <strong>définitivement supprimé</strong> du magasin.
-                            @if($bc) Le bon de commande {{ $bc->numero }} sera gardé, sans BT. @endif
-                            Le garage n'est pas prévenu : supprimez aussi le BT côté Atelier si besoin.
+                            @if($bc?->estBus() || $bc?->estConsommationDirecte())
+                                Il est aussi annulé dans l'Atelier (suppression refusée si l'Atelier ne l'accepte pas).
+                            @elseif($bc?->estInterne())
+                                BT interne : l'Atelier n'est pas concerné.
+                            @else
+                                @if($bc) Le bon de commande {{ $bc->numero }} sera gardé, sans BT. @endif
+                                Le garage n'est pas prévenu : supprimez aussi le BT côté Atelier si besoin.
+                            @endif
                         </div>
 
                         <div class="form-check">

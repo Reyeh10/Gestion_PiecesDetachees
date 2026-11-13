@@ -6,15 +6,8 @@
 
 @php
 
-    $statusLabels = [
-        'draft' => 'Brouillon',
-        'approved' => 'Approuvé',
-        'sent' => 'Envoyé',
-        'partial_received' => 'Réception partielle',
-        'received' => 'Reçu',
-        'cancelled' => 'Annulé',
-        'rejected' => 'Rejeté',
-    ];
+    // V7 : libellés du circuit (à valider par le chef, à approuver par l'admin, soldé)
+    $statusLabels = \App\Models\SupplierOrder::statuts();
 
 @endphp
 
@@ -179,6 +172,45 @@
         color: #c44751;
     }
 
+    /* V7 */
+    .orders-status-draft {
+        background: #fff5dd;
+        color: #ad7718;
+    }
+
+    .orders-status-validated {
+        background: #e8f5fb;
+        color: #2680a3;
+    }
+
+    .orders-status-closed {
+        background: #eceef3;
+        color: #4b5263;
+    }
+
+    .orders-onglets {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+    }
+
+    .orders-onglet {
+        padding: 8px 14px;
+        border-radius: 20px;
+        background: #fff;
+        border: 1px solid #e6e9f1;
+        color: #4b5263;
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    .orders-onglet.actif {
+        background: #5f62dc;
+        border-color: #5f62dc;
+        color: #fff;
+    }
+
 
     /*
     |----------------------------------------------------------------------
@@ -326,6 +358,17 @@
 
         @endif
 
+
+        {{-- V7 : vues rapides --}}
+        @php $nombreASigner = \App\Http\Controllers\SupplierOrderController::nombreASigner(auth()->user()); @endphp
+        <div class="orders-onglets">
+            <a href="{{ route('supplier-orders.index') }}" class="orders-onglet {{ request('vue') ? '' : 'actif' }}">Tous</a>
+            <a href="{{ route('supplier-orders.index', ['vue' => 'a-signer']) }}" class="orders-onglet {{ request('vue') === 'a-signer' ? 'actif' : '' }}">
+                À signer par moi{{ $nombreASigner ? ' (' . $nombreASigner . ')' : '' }}
+            </a>
+            <a href="{{ route('supplier-orders.index', ['vue' => 'en-retard']) }}" class="orders-onglet {{ request('vue') === 'en-retard' ? 'actif' : '' }}">En retard de livraison</a>
+            <a href="{{ route('demandes.index') }}" class="orders-onglet">Demandes de pièces →</a>
+        </div>
 
         {{-- FILTRES --}}
 

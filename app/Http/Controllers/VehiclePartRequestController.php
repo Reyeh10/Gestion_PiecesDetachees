@@ -807,8 +807,13 @@ class VehiclePartRequestController extends Controller
 |--------------------------------------------------------------------------
 */
 
-public function create(Request $request): View
+public function create(Request $request): View|RedirectResponse
 {
+    // V7 : une saisie = une demande (plusieurs pièces, BC automatique)
+    if (! $request->boolean('ancien')) {
+        return redirect()->route('demandes.create', $request->only('vehicle_id', 'depot_id'));
+    }
+
     /*
     |--------------------------------------------------------------------------
     | VÉHICULES
@@ -1233,6 +1238,15 @@ public function create(Request $request): View
         |
         */
 
+        // V7 : pièce pas encore commandée → le fournisseur suit le circuit
+        // (la pièce va sur le BC de ce fournisseur, créé tout seul)
+        $parLeCircuit = in_array($vehiclePartRequest->status, [
+            VehiclePartRequest::STATUS_SEARCHING,
+            VehiclePartRequest::STATUS_TO_ORDER,
+            VehiclePartRequest::STATUS_NOT_FOUND,
+        ], true);
+        $ancienFournisseur = $vehiclePartRequest->supplier_id;
+
         $vehiclePartRequest->update([
 
             'vehicle_id' =>
@@ -1275,6 +1289,26 @@ public function create(Request $request): View
                 $request->notes,
         ]);
 
+        if ($parLeCircuit) {
+            $vehiclePartRequest->forceFill(['supplier_id' => $ancienFournisseur])->save();
+
+            try {
+                $nouveaux = app(\App\Services\CircuitAchatService::class)->definirFournisseur(
+                    $vehiclePartRequest,
+                    $request->filled('supplier_id') ? (int) $request->supplier_id : null,
+                    $request->filled('purchase_price') ? (float) $request->purchase_price : ($request->filled('estimated_price') ? (float) $request->estimated_price : null)
+                );
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                return back()->withInput()->with('error', collect($e->errors())->flatten()->first());
+            }
+
+            $bc = app(\App\Services\CircuitAchatService::class)->ligneActive($vehiclePartRequest->fresh())?->supplierOrder;
+
+            return redirect()
+                ->route('vehicle-part-requests.show', $vehiclePartRequest)
+                ->with('success', 'Les informations de la pièce ont été modifiées.'
+                    . ($bc ? ' Elle est sur le bon de commande ' . $bc->order_number . ($nouveaux->contains('id', $bc->id) ? ' (créé automatiquement, à valider par le chef magasinier).' : '.') : ''));
+        }
 
         return redirect()
             ->route(
@@ -1369,6 +1403,26 @@ public function create(Request $request): View
         }
 
 
+        // V7 : « À commander » (BC créé) et « Commandée » (BC envoyé) suivent le
+        // bon de commande ; on ne les choisit plus à la main.
+        if (
+            in_array(
+                $newStatus,
+                [
+                    VehiclePartRequest::STATUS_TO_ORDER,
+                    VehiclePartRequest::STATUS_ORDERED,
+                ],
+                true
+            )
+            &&
+            $newStatus !== $oldStatus
+        ) {
+            return back()->with(
+                'error',
+                'Ce statut suit le bon de commande : indiquez le fournisseur de la pièce (le bon de commande se crée tout seul), puis envoyez le BC une fois approuvé.'
+            );
+        }
+
         if (
             !$vehiclePartRequest
                 ->canChangeTo($newStatus)
@@ -1388,6 +1442,11 @@ public function create(Request $request): View
                 $oldStatus,
                 $newStatus
             ) {
+                // V7 : la pièce quitte son bon de commande pas encore approuvé
+                if ($oldStatus === VehiclePartRequest::STATUS_TO_ORDER) {
+                    app(\App\Services\CircuitAchatService::class)
+                        ->retirerDuBonCommande($vehiclePartRequest, 'Statut changé à la main.');
+                }
 
                 $updateData = [
 
@@ -1541,818 +1600,57 @@ public function create(Request $request): View
         VehiclePartRequest $vehiclePartRequest
     ): RedirectResponse {
 
-        /*
-        |--------------------------------------------------------------------------
-        | VALIDATION
-        |--------------------------------------------------------------------------
-        |
-        | received_now = quantité reçue dans CETTE livraison uniquement.
-        |
-        | Exemple :
-        |
-        | commandée        = 30
-        | déjà reçue       = 20
-        | reçue maintenant = 8
-        |
-        | total reçu après = 28
-        | reste après      = 2
-        |
-        */
-
         $request->validate(
             [
-                'received_now' => [
-                    'required',
-                    'numeric',
-                    'gt:0',
-                ],
-
-                /*
-                |--------------------------------------------------------------------------
-                | DÉPÔT
-                |--------------------------------------------------------------------------
-                |
-                | Facultatif.
-                |
-                | S'il est envoyé, le stock du dépôt reçoit seulement la quantité
-                | de cette nouvelle livraison.
-                |
-                */
-
-               'depot_id' => [
-                    'required',
-                    'integer',
-                    'exists:depots,id',
-                ],
-
-                'comment' => [
-                    'nullable',
-                    'string',
-                    'max:2000',
-                ],
+                'received_now' => ['required', 'numeric', 'gt:0'],
+                'depot_id'     => ['required', 'integer', 'exists:depots,id'],
+                'comment'      => ['nullable', 'string', 'max:2000'],
             ],
             [
-                'received_now.required' =>
-                    'La quantité reçue maintenant est obligatoire.',
-
-                'received_now.numeric' =>
-                    'La quantité reçue maintenant doit être un nombre.',
-
-                'received_now.gt' =>
-                    'La quantité reçue maintenant doit être supérieure à zéro.',
-
-                'depot_id.exists' =>
-                    'Le dépôt sélectionné est invalide.',
-
-                'depot_id.required' =>
-                    'Le dépôt de réception est obligatoire.',
-
-                'depot_id.integer' =>
-                    'Le dépôt sélectionné est invalide.',
+                'received_now.required' => 'La quantité reçue maintenant est obligatoire.',
+                'received_now.numeric'  => 'La quantité reçue maintenant doit être un nombre.',
+                'received_now.gt'       => 'La quantité reçue maintenant doit être supérieure à zéro.',
+                'depot_id.exists'       => 'Le dépôt sélectionné est invalide.',
+                'depot_id.required'     => 'Le dépôt de réception est obligatoire.',
+                'depot_id.integer'      => 'Le dépôt sélectionné est invalide.',
             ]
         );
 
-
         /*
         |--------------------------------------------------------------------------
-        | AUTORISER UNIQUEMENT UNE COMMANDE OU UNE RÉCEPTION PARTIELLE
+        | V7 — même réception que depuis le bon de commande
         |--------------------------------------------------------------------------
+        |
+        | Stock, CUMP, mouvement, historique, ligne du BC (quantité reçue,
+        | statut du BC) et Atelier : App\Services\ReceptionPieceService.
+        | Plus que le reste à recevoir : administrateur seulement.
+        |
         */
 
-        if (
-            !in_array(
-                $vehiclePartRequest->status,
-                [
-                    VehiclePartRequest::STATUS_ORDERED,
-                    VehiclePartRequest::STATUS_PARTIAL_RECEIVED,
-                ],
-                true
-            )
-        ) {
-            return back()->with(
-                'error',
-                'Cette pièce ne peut pas recevoir de quantité dans son statut actuel.'
+        try {
+            $resultat = app(\App\Services\ReceptionPieceService::class)->recevoir(
+                $vehiclePartRequest,
+                (float) $request->received_now,
+                (int) $request->depot_id,
+                null,
+                $request->filled('comment') ? $request->comment : null,
+                (bool) auth()->user()?->isAdmin()
             );
-        }
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | QUANTITÉS DE LA COMMANDE
-        |--------------------------------------------------------------------------
-        |
-        | quantity          = quantité commandée
-        | received_quantity = quantité cumulée déjà reçue
-        | received_now      = quantité reçue dans cette livraison
-        |
-        */
-
-        $orderedQuantity =
-            (float) $vehiclePartRequest->quantity;
-
-        $oldReceivedQuantity =
-            (float) ($vehiclePartRequest->received_quantity ?? 0);
-
-        $receivedNow =
-            (float) $request->received_now;
-
-        $remainingBeforeReception =
-            max(
-                0,
-                $orderedQuantity - $oldReceivedQuantity
-            );
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | INTERDIRE DE RECEVOIR PLUS QUE LE RESTE
-        |--------------------------------------------------------------------------
-        |
-        | Exemple :
-        |
-        | commandée   = 30
-        | déjà reçue  = 20
-        | reste       = 10
-        |
-        | received_now ne peut pas dépasser 10.
-        |
-        */
-
-        if ($receivedNow > $remainingBeforeReception) {
+        } catch (\Illuminate\Validation\ValidationException $e) {
             return back()
                 ->withInput()
-                ->with(
-                    'error',
-                    'Vous ne pouvez recevoir que '
-                    . number_format(
-                        $remainingBeforeReception,
-                        2,
-                        ',',
-                        ' '
-                    )
-                    . ' '
-                    . $vehiclePartRequest->unit
-                    . ' au maximum.'
-                );
+                ->with('error', collect($e->errors())->flatten()->first());
         }
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | NOUVEAU TOTAL REÇU
-        |--------------------------------------------------------------------------
-        */
-
-        $newReceivedQuantity =
-            $oldReceivedQuantity + $receivedNow;
-
-        $remainingAfterReception =
-            max(
-                0,
-                $orderedQuantity - $newReceivedQuantity
-            );
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | DIFFÉRENCE À APPLIQUER AU STOCK
-        |--------------------------------------------------------------------------
-        |
-        | Ici la différence est simplement la nouvelle livraison.
-        |
-        | Exemple :
-        |
-        | déjà reçue       = 20
-        | reçue maintenant = 8
-        |
-        | stock à ajouter  = +8
-        |
-        */
-
-        $quantityDifference =
-            $receivedNow;
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | STATUT AUTOMATIQUE
-        |--------------------------------------------------------------------------
-        */
-
-        $oldStatus =
-            $vehiclePartRequest->status;
-
-        if ($newReceivedQuantity >= $orderedQuantity) {
-
-            $newStatus =
-                VehiclePartRequest::STATUS_RECEIVED;
-
-        } else {
-
-            $newStatus =
-                VehiclePartRequest::STATUS_PARTIAL_RECEIVED;
-        }
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | TRANSACTION
-        |--------------------------------------------------------------------------
-        */
-
-        DB::transaction(
-            function () use (
-                $request,
-                $vehiclePartRequest,
-                $orderedQuantity,
-                $oldReceivedQuantity,
-                $receivedNow,
-                $newReceivedQuantity,
-                $quantityDifference,
-                $oldStatus,
-                $newStatus
-            ) {
-
-               /*
-                |--------------------------------------------------------------------------
-                | RETROUVER LE PRODUIT
-                |--------------------------------------------------------------------------
-                |
-                | Priorité :
-                |
-                | 1. product_id déjà lié à la demande
-                | 2. référence de la pièce
-                | 3. création automatique si le produit n'existe pas
-                |
-                */
-
-                $product = null;
-
-                if ($vehiclePartRequest->product_id) {
-                    $product = Product::query()
-                        ->lockForUpdate()
-                        ->find($vehiclePartRequest->product_id);
-                }
-
-                if (
-                    !$product
-                    &&
-                    !empty($vehiclePartRequest->reference)
-                ) {
-                    $product = Product::query()
-                        ->where(
-                            'reference',
-                            $vehiclePartRequest->reference
-                        )
-                        ->lockForUpdate()
-                        ->first();
-                }
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | CRÉATION AUTOMATIQUE DU PRODUIT
-                |--------------------------------------------------------------------------
-                |
-                | Si la pièce commandée n'existe pas encore dans le catalogue,
-                | elle est créée lors de sa première réception.
-                |
-                | IMPORTANT :
-                |
-                | La quantité est initialisée à zéro ici.
-                | L'entrée physique reçue sera ajoutée plus bas UNE SEULE FOIS.
-                |
-                */
-
-                if (!$product) {
-
-                    if (empty($vehiclePartRequest->reference)) {
-                        throw new \RuntimeException(
-                            'Impossible de créer automatiquement la pièce : '
-                            . 'la référence est obligatoire.'
-                        );
-                    }
-
-                    $product = new Product();
-
-                    $product->reference =
-                        trim($vehiclePartRequest->reference);
-
-                    $product->designation =
-                        $vehiclePartRequest->part_name
-                        ?: $vehiclePartRequest->reference;
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | QUANTITÉS INITIALES
-                    |--------------------------------------------------------------------------
-                    |
-                    | On démarre à zéro pour éviter de compter deux fois
-                    | la réception courante.
-                    |
-                    */
-
-                    $product->quantity = 0;
-
-                    $product->initial_quantity = 0;
-
-                    $product->received_quantity = 0;
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | UNITÉ
-                    |--------------------------------------------------------------------------
-                    |
-                    | On reprend l'unité de la demande lorsqu'elle existe.
-                    |
-                    | Si votre colonne unit_type utilise des valeurs spécifiques,
-                    | le modèle / la base conserve ici la valeur par défaut.
-                    |
-                    */
-
-                    if (!empty($vehiclePartRequest->unit)) {
-                        $product->unit_label =
-                            $vehiclePartRequest->unit;
-                    }
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | PRIX D'ACHAT INITIAL
-                    |--------------------------------------------------------------------------
-                    |
-                    | Pour un nouveau produit :
-                    |
-                    | stock avant = 0
-                    |
-                    | donc le CUMP initial est simplement le prix
-                    | de cette première réception.
-                    |
-                    */
-
-                    $incomingPrice =
-                        (float) ($vehiclePartRequest->purchase_price ?? 0);
-
-                    $product->purchase_price =
-                        round($incomingPrice, 4);
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | COEFFICIENTS
-                    |--------------------------------------------------------------------------
-                    |
-                    | Si le modèle / la base possède des valeurs par défaut,
-                    | elles seront utilisées.
-                    |
-                    */
-
-                    $coefPurchase =
-                        (float) ($product->coef_purchase ?? 0);
-
-                    $coefSale =
-                        (float) ($product->coef_sale ?? 0);
-
-                    $product->cost_price =
-                        round(
-                            $product->purchase_price * $coefPurchase,
-                            4
-                        );
-
-                    $product->sale_price =
-                        round(
-                            $product->cost_price * $coefSale,
-                            2
-                        );
-
-                    $product->status =
-                        'disponible';
-
-                    $product->save();
-                }
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | LIER LE PRODUIT À LA DEMANDE
-                |--------------------------------------------------------------------------
-                */
-
-                if (
-                    !$vehiclePartRequest->product_id
-                    ||
-                    (int) $vehiclePartRequest->product_id
-                        !== (int) $product->id
-                ) {
-                    $vehiclePartRequest->product_id =
-                        $product->id;
-                }
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | STOCK AVANT RÉCEPTION
-                |--------------------------------------------------------------------------
-                |
-                | IMPORTANT :
-                |
-                | quantity représente le stock actuellement disponible.
-                |
-                | C'est cette quantité qui doit être utilisée pour le CUMP.
-                |
-                | Le CUMP doit impérativement être calculé AVANT
-                | d'ajouter received_now au stock.
-                |
-                */
-
-                $oldQuantity =
-                    (float) ($product->quantity ?? 0);
-
-                $oldAveragePurchasePrice =
-                    (float) ($product->purchase_price ?? 0);
-
-                $currentProductReceivedQuantity =
-                    (float) ($product->received_quantity ?? 0);
-
-                $currentProductInitialQuantity =
-                    (float) ($product->initial_quantity ?? 0);
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | PRIX DE LA NOUVELLE RÉCEPTION
-                |--------------------------------------------------------------------------
-                */
-
-                $newPurchasePrice =
-                    (float) ($vehiclePartRequest->purchase_price ?? 0);
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | QUANTITÉ APRÈS RÉCEPTION
-                |--------------------------------------------------------------------------
-                */
-
-                $newProductAvailableQuantity =
-                    $oldQuantity + $quantityDifference;
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | CUMP - PRIX D'ACHAT MOYEN PONDÉRÉ
-                |--------------------------------------------------------------------------
-                |
-                | Même règle que ProductController :
-                |
-                | (stock actuel × ancien CUMP)
-                | +
-                | (quantité reçue × nouveau prix)
-                | ------------------------------------------------
-                | stock actuel + quantité reçue
-                |
-                */
-
-                if ($quantityDifference > 0) {
-
-                    if ($oldQuantity > 0) {
-
-                        $weightedPurchasePrice = (
-                            ($oldQuantity * $oldAveragePurchasePrice)
-                            +
-                            ($quantityDifference * $newPurchasePrice)
-                        ) / $newProductAvailableQuantity;
-
-                    } else {
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | STOCK AVANT = 0
-                        |--------------------------------------------------------------------------
-                        |
-                        | L'ancien prix ne participe pas au calcul.
-                        |
-                        */
-
-                        $weightedPurchasePrice =
-                            $newPurchasePrice;
-                    }
-
-                } else {
-
-                    $weightedPurchasePrice =
-                        $oldAveragePurchasePrice;
-                }
-
-                $weightedPurchasePrice =
-                    round(
-                        $weightedPurchasePrice,
-                        4
-                    );
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | QUANTITÉS HISTORIQUES DU PRODUIT
-                |--------------------------------------------------------------------------
-                |
-                | Cette réception représente une nouvelle entrée physique.
-                |
-                */
-
-                $newProductInitialQuantity =
-                    $currentProductInitialQuantity
-                    +
-                    $quantityDifference;
-
-                $newProductReceivedQuantity =
-                    $currentProductReceivedQuantity
-                    +
-                    $quantityDifference;
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | PRIX DE REVIENT PONDÉRÉ
-                |--------------------------------------------------------------------------
-                |
-                | Même règle que ProductController :
-                |
-                | prix de revient
-                | =
-                | CUMP × dernier coefficient d'achat
-                |
-                */
-
-                $coefPurchase =
-                    (float) ($product->coef_purchase ?? 0);
-
-                $weightedCostPrice =
-                    round(
-                        $weightedPurchasePrice * $coefPurchase,
-                        4
-                    );
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | PRIX DE VENTE
-                |--------------------------------------------------------------------------
-                */
-
-                $coefSale =
-                    (float) ($product->coef_sale ?? 0);
-
-                $salePrice =
-                    round(
-                        $weightedCostPrice * $coefSale,
-                        2
-                    );
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | MISE À JOUR DU PRODUIT
-                |--------------------------------------------------------------------------
-                */
-
-                $product->initial_quantity =
-                    $newProductInitialQuantity;
-
-                $product->received_quantity =
-                    $newProductReceivedQuantity;
-
-                $product->quantity =
-                    $newProductAvailableQuantity;
-
-                $product->purchase_price =
-                    $weightedPurchasePrice;
-
-                $product->cost_price =
-                    $weightedCostPrice;
-
-                $product->sale_price =
-                    $salePrice;
-
-                $product->status =
-                    'disponible';
-
-                $product->save();
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | STOCK DU DÉPÔT
-                |--------------------------------------------------------------------------
-                |
-                | depot_id est obligatoire dans le formulaire.
-                |
-                */
-
-                $depotStock =
-                    ProductDepotStock::query()
-                        ->where(
-                            'product_id',
-                            $product->id
-                        )
-                        ->where(
-                            'depot_id',
-                            $request->depot_id
-                        )
-                        ->lockForUpdate()
-                        ->first();
-
-                if (!$depotStock) {
-
-                    $depotStock =
-                        new ProductDepotStock();
-
-                    $depotStock->product_id =
-                        $product->id;
-
-                    $depotStock->depot_id =
-                        $request->depot_id;
-
-                    $depotStock->quantity =
-                        0;
-                }
-
-                $depotStock->quantity =
-                    (float) ($depotStock->quantity ?? 0)
-                    +
-                    $quantityDifference;
-
-                $depotStock->save();
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | MOUVEMENT DE STOCK
-                |--------------------------------------------------------------------------
-                */
-
-                $stockMovement =
-                    new StockMovement();
-
-                $stockMovement->product_id =
-                    $product->id;
-
-                $stockMovement->type =
-                    'in';
-
-                $stockMovement->quantity =
-                    $quantityDifference;
-
-                $stockMovement->source =
-                    'Réception commande véhicule';
-
-                $stockMovement->reference =
-                    $vehiclePartRequest->order_reference
-                    ??
-                    $vehiclePartRequest->reference;
-
-                $stockMovement->user_id =
-                    Auth::id();
-
-                $stockMovement->save();
-
-                /*
-                |--------------------------------------------------------------------------
-                | MISE À JOUR DE LA DEMANDE
-                |--------------------------------------------------------------------------
-                */
-
-                $vehiclePartRequest->received_quantity =
-                    $newReceivedQuantity;
-
-                $vehiclePartRequest->status =
-                    $newStatus;
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | DATE DE RÉCEPTION
-                |--------------------------------------------------------------------------
-                |
-                | On conserve la date de la première réception.
-                |
-                */
-
-                if (!$vehiclePartRequest->received_at) {
-                    $vehiclePartRequest->received_at =
-                        now();
-                }
-
-                $vehiclePartRequest->save();
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | HISTORIQUE
-                |--------------------------------------------------------------------------
-                */
-
-                $defaultComment =
-                    'Nouvelle réception : '
-                    . number_format(
-                        $receivedNow,
-                        2,
-                        ',',
-                        ' '
-                    )
-                    . ' '
-                    . $vehiclePartRequest->unit
-                    . '. Total reçu : '
-                    . number_format(
-                        $newReceivedQuantity,
-                        2,
-                        ',',
-                        ' '
-                    )
-                    . ' / '
-                    . number_format(
-                        $orderedQuantity,
-                        2,
-                        ',',
-                        ' '
-                    )
-                    . '.';
-
-                VehiclePartRequestHistory::create([
-                    'vehicle_part_request_id' =>
-                        $vehiclePartRequest->id,
-
-                    'old_status' =>
-                        $oldStatus,
-
-                    'new_status' =>
-                        $newStatus,
-
-                    'old_received_quantity' =>
-                        $oldReceivedQuantity,
-
-                    'new_received_quantity' =>
-                        $newReceivedQuantity,
-
-                    'comment' =>
-                        $request->filled('comment')
-                            ? $request->comment
-                            : $defaultComment,
-
-                    'changed_by' =>
-                        Auth::id(),
-
-                    'changed_at' =>
-                        now(),
-                ]);
-            }
-        );
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | MESSAGE DE SUCCÈS
-        |--------------------------------------------------------------------------
-        */
-
-        if (
-            $newStatus
-            ===
-            VehiclePartRequest::STATUS_RECEIVED
-        ) {
-
-            $message =
-                'Réception complète enregistrée avec succès.';
-
-        } else {
-
-            $message =
-                'Réception partielle enregistrée. Reste à recevoir : '
-                . number_format(
-                    $remainingAfterReception,
-                    2,
-                    ',',
-                    ' '
-                )
-                . ' '
-                . $vehiclePartRequest->unit
-                . '.';
-        }
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | REDIRECTION
-        |--------------------------------------------------------------------------
-        */
+        $message = $resultat['statut'] === VehiclePartRequest::STATUS_RECEIVED
+            ? 'Réception complète enregistrée avec succès.'
+            : 'Réception partielle enregistrée. Reste à recevoir : '
+                . number_format($resultat['reste'], 2, ',', ' ')
+                . ' ' . $vehiclePartRequest->unit . '.';
 
         return redirect()
-            ->route(
-                'vehicle-part-requests.show',
-                $vehiclePartRequest
-            )
-            ->with(
-                'success',
-                $message
-            );
+            ->route('vehicle-part-requests.show', $vehiclePartRequest)
+            ->with('success', $message);
     }
 
         /*

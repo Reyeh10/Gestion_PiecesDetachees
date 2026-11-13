@@ -23,8 +23,16 @@
             </div>
 
             <div class="d-flex flex-wrap gap-2 align-items-start">
+                <span class="badge bg-primary fs-6">
+                    Motif : {{ \App\Models\InventoryAdjustment::MOTIFS[$motif] ?? $motif }}
+                </span>
+
                 <span class="badge bg-success fs-6">
-                    {{ $validCount }} valide(s)
+                    {{ $ecartCount }} ajustement(s) à créer
+                </span>
+
+                <span class="badge bg-secondary fs-6">
+                    {{ $validCount - $ecartCount }} sans écart ni changement de place (ignorée(s))
                 </span>
 
                 <span class="badge {{ $errorCount > 0 ? 'bg-danger' : 'bg-secondary' }} fs-6">
@@ -42,8 +50,8 @@
                 </div>
             @else
                 <div class="alert alert-success">
-                    Toutes les lignes sont valides.
-                    Vous pouvez enregistrer les ajustements.
+                    Toutes les lignes sont valides. « Stock dépôt » = stock de la pièce dans ce dépôt seulement ;
+                    les autres dépôts ne changent pas. Les ajustements créés attendent la validation du chef magasinier / de l'admin.
                 </div>
             @endif
 
@@ -76,8 +84,9 @@
                                 Écart
                             </th>
 
+                            <th class="text-end">Valeur (FDJ)</th>
                             <th>Type</th>
-                            <th>Raison</th>
+                            <th>Remarque</th>
                             <th>Diagnostic</th>
                         </tr>
                     </thead>
@@ -171,6 +180,10 @@
                                     @endif
                                 </td>
 
+                                <td class="text-end">
+                                    {{ $row['valeur'] !== null ? number_format((float) $row['valeur'], 0, ',', ' ') : '-' }}
+                                </td>
+
                                 <td>
                                     @if($row['type'] === 'Entrée')
                                         <span class="badge bg-success">
@@ -180,9 +193,13 @@
                                         <span class="badge bg-danger">
                                             Sortie
                                         </span>
+                                    @elseif($row['type'] === 'Place seulement')
+                                        <span class="badge bg-info">
+                                            Rayon / emplacement
+                                        </span>
                                     @elseif($row['type'] === 'Aucun écart')
                                         <span class="badge bg-secondary">
-                                            Aucun écart
+                                            Aucun écart (ignorée)
                                         </span>
                                     @else
                                         -
@@ -236,7 +253,7 @@
                         type="submit"
                         class="btn btn-success"
                         @disabled($errorCount > 0)
-                        onclick="return confirm('Confirmer l’enregistrement de tous les ajustements ?')"
+                        onclick="return confirm('Enregistrer {{ $ecartCount }} ajustement(s) ?')"
                     >
                         <i class="bx bx-save me-1"></i>
                         Enregistrer les ajustements

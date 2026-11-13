@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 use App\Http\Controllers\DashboardController;
+use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductOptionController;
 use App\Http\Controllers\CategoryController;
@@ -73,6 +74,26 @@ Route::get('/', function () {
 |--------------------------------------------------------------------------
 */
 
+/*
+|--------------------------------------------------------------------------
+| SESSION EXPIRÉE (10 min sans utilisation)
+|--------------------------------------------------------------------------
+|
+| Appelée par la page quand le compte à rebours arrive à 0. Simple lien
+| (GET) : pas de jeton CSRF, donc jamais d'erreur 419 « Page expirée »,
+| même si la session a déjà été fermée par le serveur ou par un autre onglet.
+|
+*/
+Route::get('/session-expiree', function (\Illuminate\Http\Request $request) {
+    if (Auth::check()) {
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+    }
+
+    return redirect()->route('login')->with('timeout', "Votre session a expiré après 10 minutes d'inactivité. Veuillez vous reconnecter.");
+})->name('session.expiree');
+
 Route::middleware('auth')->group(function () {
     Route::get(
 
@@ -106,6 +127,12 @@ Route::middleware(['auth'])->group(function () {
         '/session/ping',
         fn () => response()->noContent()
     )->name('session.ping');
+
+    // Recherche globale de la barre du haut (design DreamsPOS)
+    Route::get(
+        '/recherche',
+        [\App\Http\Controllers\RechercheController::class, 'index']
+    )->name('recherche');
 
     // Nouvelles notifications (son + fenêtre), interrogée toutes les 20 s
     Route::get(
@@ -205,15 +232,22 @@ Route::middleware(['auth'])->group(function () {
 
 Route::middleware(['auth'])->group(function () {
 
+    // « Mon profil » (menu de l'avatar) : nom, e-mail, mot de passe.
+    // Avant : pointait vers UserController::profile, qui n'existait pas.
     Route::get(
         '/profile',
-        [UserController::class, 'profile']
+        [\App\Http\Controllers\ProfileController::class, 'edit']
     )->name('profile.edit');
 
     Route::put(
         '/profile',
-        [UserController::class, 'updateProfile']
+        [\App\Http\Controllers\ProfileController::class, 'update']
     )->name('profile.update');
+
+    Route::put(
+        '/profile/mot-de-passe',
+        [\App\Http\Controllers\ProfileController::class, 'updatePassword']
+    )->name('profile.password');
 
 });
 
@@ -966,8 +1000,8 @@ Route::middleware([
 |
 | - Import Excel : admin + chef_magasinier
 | - Création manuelle : admin + chef_magasinier
-| - Modification : admin uniquement
-| - Suppression : admin uniquement
+| - Validation / refus : chef magasinier + admin (V6)
+| - Plus de modification ni de suppression : contre-ajustement (V6)
 | - Consultation index/show : tous les rôles autorisés
 |
 | IMPORTANT :
@@ -1057,54 +1091,23 @@ Route::middleware([
 
 /*
 |--------------------------------------------------------------------------
-| MODIFICATION + SUPPRESSION
-| ADMIN UNIQUEMENT
+| V6 : VALIDATION / REFUS / ANNULATION / CORRECTION
 |--------------------------------------------------------------------------
+| Plus de modification ni de suppression d'un ajustement : une erreur se
+| corrige par un contre-ajustement (« Corriger »).
 */
 
-Route::middleware([
-    'auth'
-])->group(function () {
-
-    /*
-    |--------------------------------------------------------------------------
-    | EDIT
-    |--------------------------------------------------------------------------
-    */
-
-    Route::get(
-        '/inventory-adjustments/{inventoryAdjustment}/edit',
-        [InventoryAdjustmentController::class, 'edit']
-    )
-    ->whereNumber('inventoryAdjustment')
-    ->name('inventory-adjustments.edit');
-
-    /*
-    |--------------------------------------------------------------------------
-    | UPDATE
-    |--------------------------------------------------------------------------
-    */
-
-    Route::put(
-        '/inventory-adjustments/{inventoryAdjustment}',
-        [InventoryAdjustmentController::class, 'update']
-    )
-    ->whereNumber('inventoryAdjustment')
-    ->name('inventory-adjustments.update');
-
-    /*
-    |--------------------------------------------------------------------------
-    | DELETE
-    |--------------------------------------------------------------------------
-    */
-
-    Route::delete(
-        '/inventory-adjustments/{inventoryAdjustment}',
-        [InventoryAdjustmentController::class, 'destroy']
-    )
-    ->whereNumber('inventoryAdjustment')
-    ->name('inventory-adjustments.destroy');
-
+Route::middleware(['auth'])->group(function () {
+    Route::post('/inventory-adjustments/valider-selection', [InventoryAdjustmentController::class, 'validerLot'])
+        ->name('inventory-adjustments.valider-lot');
+    Route::patch('/inventory-adjustments/{inventoryAdjustment}/valider', [InventoryAdjustmentController::class, 'valider'])
+        ->whereNumber('inventoryAdjustment')->name('inventory-adjustments.valider');
+    Route::patch('/inventory-adjustments/{inventoryAdjustment}/refuser', [InventoryAdjustmentController::class, 'refuser'])
+        ->whereNumber('inventoryAdjustment')->name('inventory-adjustments.refuser');
+    Route::patch('/inventory-adjustments/{inventoryAdjustment}/annuler', [InventoryAdjustmentController::class, 'annuler'])
+        ->whereNumber('inventoryAdjustment')->name('inventory-adjustments.annuler');
+    Route::post('/inventory-adjustments/{inventoryAdjustment}/corriger', [InventoryAdjustmentController::class, 'corriger'])
+        ->whereNumber('inventoryAdjustment')->name('inventory-adjustments.corriger');
 });
 
 /*
@@ -1472,6 +1475,7 @@ Route::get(
             'type',
             [
                 'prepared',
+                'validated', // V7 : signature du chef magasinier
                 'approved',
             ]
         )
@@ -1649,6 +1653,12 @@ Route::middleware([
     |--------------------------------------------------------------------------
     */
 
+    // V6 : fiche de suivi de règlement (Excel) — récolte de la TVA
+    Route::get(
+        '/sales/export',
+        [SaleController::class, 'exporter']
+    )->name('sales.export');
+
     Route::get(
         '/sales/{sale}/invoice',
         [SaleController::class, 'invoice']
@@ -1721,6 +1731,87 @@ Route::middleware([
     | AVOIRS (annulation des factures, comme l'app Atelier)
     |--------------------------------------------------------------------------
     */
+
+    // V6 : bons de livraison (facultatifs, après la facture ; BL partiels possibles)
+    Route::get('/bons-livraison', [\App\Http\Controllers\BonLivraisonController::class, 'index'])->name('bons-livraison.index');
+    Route::get('/sales/{sale}/bons-livraison/create', [\App\Http\Controllers\BonLivraisonController::class, 'create'])
+        ->whereNumber('sale')->name('bons-livraison.create');
+    Route::post('/sales/{sale}/bons-livraison', [\App\Http\Controllers\BonLivraisonController::class, 'store'])
+        ->whereNumber('sale')->name('bons-livraison.store');
+    Route::get('/bons-livraison/{bonLivraison}', [\App\Http\Controllers\BonLivraisonController::class, 'show'])
+        ->whereNumber('bonLivraison')->name('bons-livraison.show');
+    Route::get('/bons-livraison/{bonLivraison}/pdf', [\App\Http\Controllers\BonLivraisonController::class, 'pdf'])
+        ->whereNumber('bonLivraison')->name('bons-livraison.pdf');
+    Route::get('/bons-livraison/{bonLivraison}/imprimer', [\App\Http\Controllers\BonLivraisonController::class, 'imprimer'])
+        ->whereNumber('bonLivraison')->name('bons-livraison.imprimer');
+
+    // V6 : bus leasing / bus du transport public — sorties de pièces faites au Magasin
+    Route::get('/bus', [\App\Http\Controllers\BusController::class, 'index'])->name('bus.index');
+    Route::post('/bus/synchroniser', [\App\Http\Controllers\BusController::class, 'synchroniser'])->name('bus.synchroniser');
+    Route::get('/bus/sorties/create', [\App\Http\Controllers\BusController::class, 'create'])->name('bus.create');
+    Route::post('/bus/sorties', [\App\Http\Controllers\BusController::class, 'store'])->name('bus.store');
+    Route::get('/bus/sorties/{bonTransfert}/edit', [\App\Http\Controllers\BusController::class, 'edit'])
+        ->whereNumber('bonTransfert')->name('bus.edit');
+    Route::put('/bus/sorties/{bonTransfert}', [\App\Http\Controllers\BusController::class, 'update'])
+        ->whereNumber('bonTransfert')->name('bus.update');
+    Route::delete('/bus/sorties/{bonTransfert}', [\App\Http\Controllers\BusController::class, 'destroy'])
+        ->whereNumber('bonTransfert')->name('bus.destroy');
+    Route::get('/bus/import/modele', [\App\Http\Controllers\BusController::class, 'modeleExcel'])->name('bus.import.modele');
+    Route::post('/bus/import/apercu', [\App\Http\Controllers\BusController::class, 'apercuImport'])->name('bus.import.apercu');
+    Route::post('/bus/import', [\App\Http\Controllers\BusController::class, 'importer'])->name('bus.import.store');
+
+    // V6 : « + BT » — BT direct pour tout usage interne (consommation atelier, intersociété, équipe commerciale…)
+    Route::get('/bons-transfert/direct/create', [\App\Http\Controllers\BtDirectController::class, 'create'])->name('bt-direct.create');
+    Route::post('/bons-transfert/direct', [\App\Http\Controllers\BtDirectController::class, 'store'])->name('bt-direct.store');
+    Route::post('/bons-transfert/direct/equipements', [\App\Http\Controllers\BtDirectController::class, 'synchroniserEquipements'])->name('bt-direct.equipements');
+    Route::get('/bons-transfert/direct/{bonTransfert}/edit', [\App\Http\Controllers\BtDirectController::class, 'edit'])
+        ->whereNumber('bonTransfert')->name('bt-direct.edit');
+    Route::put('/bons-transfert/direct/{bonTransfert}', [\App\Http\Controllers\BtDirectController::class, 'update'])
+        ->whereNumber('bonTransfert')->name('bt-direct.update');
+    Route::delete('/bons-transfert/direct/{bonTransfert}', [\App\Http\Controllers\BtDirectController::class, 'destroy'])
+        ->whereNumber('bonTransfert')->name('bt-direct.destroy');
+
+    // V7 : demandes de pièces (plusieurs pièces ; le BC de chaque fournisseur se crée tout seul)
+    Route::get('/demandes', [\App\Http\Controllers\DemandeController::class, 'index'])->name('demandes.index');
+    Route::get('/demandes/create', [\App\Http\Controllers\DemandeController::class, 'create'])->name('demandes.create');
+    Route::post('/demandes', [\App\Http\Controllers\DemandeController::class, 'store'])->name('demandes.store');
+    Route::get('/demandes/{demande}', [\App\Http\Controllers\DemandeController::class, 'show'])
+        ->whereNumber('demande')->name('demandes.show');
+    Route::post('/demandes/{demande}/pieces', [\App\Http\Controllers\DemandeController::class, 'ajouterPieces'])
+        ->whereNumber('demande')->name('demandes.pieces.store');
+    Route::patch('/demandes/{demande}/depot', [\App\Http\Controllers\DemandeController::class, 'depot'])
+        ->whereNumber('demande')->name('demandes.depot');
+    Route::patch('/demandes/pieces/{piece}/fournisseur', [\App\Http\Controllers\DemandeController::class, 'fournisseur'])
+        ->whereNumber('piece')->name('demandes.pieces.fournisseur');
+
+    // V7 : bon de commande — validation du chef magasinier, réception, solde
+    Route::patch('/supplier-orders/{supplierOrder}/validate', [SupplierOrderController::class, 'validateOrder'])
+        ->whereNumber('supplierOrder')->name('supplier-orders.validate');
+    Route::post('/supplier-orders/{supplierOrder}/receive', [SupplierOrderController::class, 'receive'])
+        ->whereNumber('supplierOrder')->name('supplier-orders.receive');
+    Route::post('/supplier-orders/{supplierOrder}/close', [SupplierOrderController::class, 'close'])
+        ->whereNumber('supplierOrder')->name('supplier-orders.close');
+
+    // V6 : fiches d'inventaire (imprimer un rayon, compter, saisir / importer, valider les écarts)
+    Route::get('/inventaires', [\App\Http\Controllers\InventaireController::class, 'index'])->name('inventaires.index');
+    Route::get('/inventaires/create', [\App\Http\Controllers\InventaireController::class, 'create'])->name('inventaires.create');
+    Route::post('/inventaires', [\App\Http\Controllers\InventaireController::class, 'store'])->name('inventaires.store');
+    Route::get('/inventaires/{inventaire}', [\App\Http\Controllers\InventaireController::class, 'show'])
+        ->whereNumber('inventaire')->name('inventaires.show');
+    Route::get('/inventaires/{inventaire}/pdf', [\App\Http\Controllers\InventaireController::class, 'pdf'])
+        ->whereNumber('inventaire')->name('inventaires.pdf');
+    Route::get('/inventaires/{inventaire}/imprimer', [\App\Http\Controllers\InventaireController::class, 'imprimer'])
+        ->whereNumber('inventaire')->name('inventaires.imprimer');
+    Route::get('/inventaires/{inventaire}/export', [\App\Http\Controllers\InventaireController::class, 'exportExcel'])
+        ->whereNumber('inventaire')->name('inventaires.export');
+    Route::post('/inventaires/{inventaire}/saisir', [\App\Http\Controllers\InventaireController::class, 'saisir'])
+        ->whereNumber('inventaire')->name('inventaires.saisir');
+    Route::post('/inventaires/{inventaire}/ajouter', [\App\Http\Controllers\InventaireController::class, 'ajouterLigne'])
+        ->whereNumber('inventaire')->name('inventaires.ajouter');
+    Route::post('/inventaires/{inventaire}/import', [\App\Http\Controllers\InventaireController::class, 'importExcel'])
+        ->whereNumber('inventaire')->name('inventaires.import');
+    Route::post('/inventaires/{inventaire}/valider', [\App\Http\Controllers\InventaireController::class, 'valider'])
+        ->whereNumber('inventaire')->name('inventaires.valider');
 
     Route::get('/avoirs', [AvoirController::class, 'index'])->name('avoirs.index');
 
@@ -1957,6 +2048,18 @@ Route::middleware([
     )
     ->whereNumber('fournisseurCommande')
     ->name('fournisseur-commandes.creer-bon-transfert');
+
+    // V6 : « BT du reste » (pièces en attente devenues disponibles)
+    Route::post(
+        '/fournisseur-commandes/{fournisseurCommande}/creer-bon-transfert-reste',
+        [FournisseurCommandeController::class, 'creerBonTransfertReste']
+    )->name('fournisseur-commandes.creer-bon-transfert-reste');
+
+    // V6 : commander au fournisseur les pièces non disponibles d'un BC garage
+    Route::post(
+        '/fournisseur-commandes/{fournisseurCommande}/commander-fournisseur',
+        [FournisseurCommandeController::class, 'commanderFournisseur']
+    )->name('fournisseur-commandes.commander-fournisseur');
 
     // Suppression manuelle (administrateur uniquement), ex. devis supprimé côté garage
     Route::delete(

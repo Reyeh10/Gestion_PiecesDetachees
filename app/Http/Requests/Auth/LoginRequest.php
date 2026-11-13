@@ -41,6 +41,9 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
+        // « Se souvenir de moi » : connexion gardée 30 jours au plus
+        Auth::guard()->setRememberDuration(60 * 24 * 30);
+
         if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey());
 

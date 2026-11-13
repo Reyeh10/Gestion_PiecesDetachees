@@ -9,565 +9,210 @@ use App\Models\Location;
 use App\Models\Product;
 use App\Models\ProductDepotStock;
 use App\Models\Rayon;
-use App\Models\StockMovement;
+use App\Services\AjustementStockService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Maatwebsite\Excel\Facades\Excel;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
+/**
+ * Ajustements d'inventaire (V6).
+ *
+ * Toutes les saisies (écran, import Excel, fiche d'inventaire, correction)
+ * passent par AjustementStockService : un produit dans un dépôt, écart
+ * « À valider », appliqué au stock à la validation du chef magasinier / de
+ * l'admin. Plus de modification ni de suppression : « Corriger » crée un
+ * contre-ajustement.
+ */
 class InventoryAdjustmentController extends Controller
 {
+    public function __construct(private AjustementStockService $ajustements)
+    {
+    }
+
     /*
     |--------------------------------------------------------------------------
-    | INDEX
+    | LISTE
     |--------------------------------------------------------------------------
     */
     public function index(Request $request): View
     {
         $query = InventoryAdjustment::query()
-            ->with([
-                'product.brand',
-                'product.model',
-                'product.rayon',
-                'product.location',
-                'depot',
-                'rayon',
-                'location',
-                'approver',
-            ]);
+            ->with(['product', 'depot', 'rayon', 'location', 'nouveauRayon', 'nouvelEmplacement', 'approver', 'creator', 'refuseur']);
 
         if ($request->filled('search')) {
             $search = trim((string) $request->search);
 
             $query->where(function ($q) use ($search) {
-                $q->whereHas('product', function ($productQuery) use ($search) {
-                    $productQuery
-                        ->where('reference', 'like', '%' . $search . '%')
-                        ->orWhere('designation', 'like', '%' . $search . '%');
-                })
-                ->orWhereHas('depot', function ($depotQuery) use ($search) {
-                    $depotQuery
-                        ->where('name', 'like', '%' . $search . '%')
-                        ->orWhere('code', 'like', '%' . $search . '%');
-                })
-                ->orWhereHas('rayon', function ($rayonQuery) use ($search) {
-                    $rayonQuery->where('name', 'like', '%' . $search . '%');
-                })
-                ->orWhereHas('location', function ($locationQuery) use ($search) {
-                    $locationQuery->where('name', 'like', '%' . $search . '%');
-                });
+                $q->whereHas('product', fn ($p) => $p->where('reference', 'like', "%{$search}%")->orWhere('designation', 'like', "%{$search}%"))
+                    ->orWhere('reason', 'like', "%{$search}%");
+
+                if (ctype_digit($search)) {
+                    $q->orWhere('id', (int) $search);
+                }
             });
         }
 
-        $adjustments = $query
-            ->latest()
-            ->paginate(20);
+        foreach (['statut', 'motif', 'source', 'depot_id'] as $filtre) {
+            if ($request->filled($filtre)) {
+                $query->where($filtre, $request->input($filtre));
+            }
+        }
 
-        $adjustments->appends(
-            $request->query()
-        );
+        if ($request->filled('du')) {
+            $query->whereDate('created_at', '>=', $request->du);
+        }
 
-        return view(
-            'inventory_adjustments.index',
-            compact('adjustments')
-        );
+        if ($request->filled('au')) {
+            $query->whereDate('created_at', '<=', $request->au);
+        }
+
+        // valeur des écarts validés du filtre (sorties négatives)
+        $totaux = (clone $query)->where('statut', InventoryAdjustment::VALIDE)
+            ->selectRaw('SUM(CASE WHEN valeur_ecart > 0 THEN valeur_ecart ELSE 0 END) entrees, SUM(CASE WHEN valeur_ecart < 0 THEN valeur_ecart ELSE 0 END) sorties')
+            ->reorder()
+            ->first();
+
+        $adjustments = $query->latest('id')->paginate(25)->withQueryString();
+        $nombreAValider = AjustementStockService::nombreAValider();
+        $peutValider = AjustementStockService::peutValider($request->user());
+        $depots = Depot::query()->orderBy('name')->get();
+
+        return view('inventory_adjustments.index', compact('adjustments', 'nombreAValider', 'peutValider', 'depots', 'totaux'));
     }
 
     /*
     |--------------------------------------------------------------------------
-    | CREATE - AJUSTEMENT UNITAIRE
+    | SAISIE À L'ÉCRAN
     |--------------------------------------------------------------------------
     */
-  public function create(): View
+    public function create(): View
     {
-        /*
-        |--------------------------------------------------------------------------
-        | DÉPÔTS ACTIFS
-        |--------------------------------------------------------------------------
-        */
-        $depots = Depot::query()
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get();
+        $depots = Depot::query()->where('is_active', true)->orderBy('name')->get();
 
-        /*
-        |--------------------------------------------------------------------------
-        | PRODUITS
-        |--------------------------------------------------------------------------
-        */
         $products = Product::query()
-            ->with([
-                'brand',
-                'model',
-                'rayon',
-                'location',
-            ])
+            ->with(['brand', 'model', 'rayon', 'location'])
             ->orderBy('designation')
             ->get();
 
-        /*
-        |--------------------------------------------------------------------------
-        | STOCKS PAR DÉPÔT
-        |--------------------------------------------------------------------------
-        |
-        | Structure envoyée à JavaScript :
-        |
-        | [
-        |     depot_id => [
-        |         product_id => quantity
-        |     ]
-        | ]
-        |
-        */
+        // [depot_id => [product_id => quantité]] pour le JavaScript du formulaire
         $depotStocks = ProductDepotStock::query()
-            ->select([
-                'depot_id',
-                'product_id',
-                'quantity',
-            ])
+            ->select(['depot_id', 'product_id', 'quantity'])
             ->get()
             ->groupBy('depot_id')
-            ->map(function ($stocks) {
-                return $stocks
-                    ->keyBy('product_id')
-                    ->map(function ($stock) {
-                        return round((float) $stock->quantity, 2);
-                    });
-            });
+            ->map(fn ($stocks) => $stocks->keyBy('product_id')->map(fn ($s) => round((float) $s->quantity, 2)));
 
-        return view(
-            'inventory_adjustments.create',
-            compact(
-                'products',
-                'depots',
-                'depotStocks'
-            )
-        );
+        return view('inventory_adjustments.create', compact('products', 'depots', 'depotStocks'));
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | STORE - AJUSTEMENT UNITAIRE
-    |--------------------------------------------------------------------------
-    |
-    | Ajustement manuel :
-    | - old_qty = products.quantity (quantité disponible actuelle)
-    | - new_qty = nouvelle quantité disponible
-    | - initial_quantity n'est JAMAIS modifiée
-    | - la localisation n'est pas modifiée
-    |
-    */
-   public function store(Request $request): RedirectResponse
+    public function store(Request $request): RedirectResponse
     {
-        /*
-        |--------------------------------------------------------------------------
-        | VALIDATION
-        |--------------------------------------------------------------------------
-        */
-        $request->validate(
-            [
-                'depot_id' => [
-                    'required',
-                    'exists:depots,id',
-                ],
-
-                'product_id' => [
-                    'required',
-                    'exists:products,id',
-                ],
-
-                'new_qty' => [
-                    'required',
-                    'numeric',
-                    'min:0',
-                ],
-
-                'reason' => [
-                    'required',
-                    'string',
-                    'max:1000',
-                ],
-            ],
-            [
-                'depot_id.required' =>
-                    'Veuillez sélectionner un dépôt.',
-
-                'depot_id.exists' =>
-                    'Le dépôt sélectionné est invalide.',
-
-                'product_id.required' =>
-                    'Veuillez sélectionner un produit.',
-
-                'product_id.exists' =>
-                    'Le produit sélectionné est invalide.',
-
-                'new_qty.required' =>
-                    'Veuillez saisir la nouvelle quantité.',
-
-                'new_qty.numeric' =>
-                    'La nouvelle quantité doit être numérique.',
-
-                'new_qty.min' =>
-                    'La quantité ne peut pas être négative.',
-
-                'reason.required' =>
-                    'Veuillez préciser la raison de l’ajustement.',
-
-                'reason.max' =>
-                    'La raison ne doit pas dépasser 1000 caractères.',
-            ]
-        );
+        $request->validate([
+            'depot_id'   => ['required', Rule::exists('depots', 'id')->where('is_active', true)],
+            'product_id' => ['required', 'exists:products,id'],
+            'new_qty'    => ['required', 'numeric', 'min:0'],
+            'motif'      => ['required', Rule::in(array_keys(InventoryAdjustment::MOTIFS))],
+            'reason'     => ['nullable', 'string', 'max:1000'],
+        ], [
+            'depot_id.required'   => 'Veuillez sélectionner un dépôt.',
+            'depot_id.exists'     => 'Le dépôt sélectionné est introuvable ou désactivé.',
+            'product_id.required' => 'Veuillez sélectionner un produit.',
+            'new_qty.required'    => 'Veuillez saisir la quantité comptée.',
+            'new_qty.min'         => 'La quantité ne peut pas être négative.',
+            'motif.required'      => 'Choisissez le motif de l\'ajustement.',
+        ]);
 
         try {
-
-            DB::transaction(function () use ($request) {
-
-                /*
-                |--------------------------------------------------------------------------
-                | PRODUIT
-                |--------------------------------------------------------------------------
-                */
-                $product = Product::query()
-                    ->where('id', $request->product_id)
-                    ->lockForUpdate()
-                    ->firstOrFail();
-
-                /*
-                |--------------------------------------------------------------------------
-                | DÉPÔT
-                |--------------------------------------------------------------------------
-                */
-                $depot = Depot::query()
-                    ->where('id', $request->depot_id)
-                    ->where('is_active', true)
-                    ->first();
-
-                if (!$depot) {
-                    throw new RuntimeException(
-                        'Le dépôt sélectionné est introuvable ou désactivé.'
-                    );
-                }
-
-                /*
-                |--------------------------------------------------------------------------
-                | STOCK ACTUEL DU PRODUIT DANS LE DÉPÔT
-                |--------------------------------------------------------------------------
-                */
-                $depotStock = ProductDepotStock::query()
-                    ->where('product_id', $product->id)
-                    ->where('depot_id', $depot->id)
-                    ->lockForUpdate()
-                    ->first();
-
-                /*
-                |--------------------------------------------------------------------------
-                | ANCIENNE QUANTITÉ
-                |--------------------------------------------------------------------------
-                |
-                | La quantité actuelle est maintenant celle du dépôt sélectionné.
-                |
-                */
-                $oldQty = round(
-                    (float) ($depotStock?->quantity ?? 0),
-                    2
-                );
-
-                /*
-                |--------------------------------------------------------------------------
-                | NOUVELLE QUANTITÉ
-                |--------------------------------------------------------------------------
-                */
-                $newQty = round(
-                    (float) $request->new_qty,
-                    2
-                );
-
-                /*
-                |--------------------------------------------------------------------------
-                | DIFFÉRENCE
-                |--------------------------------------------------------------------------
-                */
-                $difference = round(
-                    $newQty - $oldQty,
-                    2
-                );
-
-                /*
-                |--------------------------------------------------------------------------
-                | AJUSTEMENT
-                |--------------------------------------------------------------------------
-                */
-                $adjustment = InventoryAdjustment::create([
-                    'product_id' => $product->id,
-                    'depot_id' => $depot->id,
-
-                    'rayon_id' => $product->rayon_id,
-                    'location_id' => $product->location_id,
-
-                    'old_qty' => $oldQty,
-                    'new_qty' => $newQty,
-
-                    'reason' => trim(
-                        (string) $request->reason
-                    ),
-
-                    'approved_by' => auth()->id(),
-                ]);
-
-                /*
-                |--------------------------------------------------------------------------
-                | METTRE À JOUR LE STOCK DU DÉPÔT
-                |--------------------------------------------------------------------------
-                */
-                if ($depotStock) {
-
-                    $depotStock->quantity = $newQty;
-                    $depotStock->save();
-
-                } else {
-
-                    ProductDepotStock::create([
-                        'product_id' => $product->id,
-                        'depot_id' => $depot->id,
-                        'quantity' => $newQty,
-                    ]);
-                }
-
-                /*
-                |--------------------------------------------------------------------------
-                | QUANTITÉ GLOBALE DISPONIBLE DU PRODUIT
-                |--------------------------------------------------------------------------
-                |
-                | La quantité globale correspond à la somme de tous les dépôts.
-                |
-                */
-                $totalQuantity = ProductDepotStock::query()
-                    ->where('product_id', $product->id)
-                    ->sum('quantity');
-
-                $product->quantity = round(
-                    (float) $totalQuantity,
-                    2
-                );
-
-                $product->save();
-
-                /*
-                |--------------------------------------------------------------------------
-                | MOUVEMENT DE STOCK
-                |--------------------------------------------------------------------------
-                */
-                if (abs($difference) > 0.00001) {
-
-                    $source =
-                        'Ajustement inventaire'
-                        . ' | Dépôt: '
-                        . $depot->name;
-
-                    if ($product->rayon) {
-                        $source .=
-                            ' | Rayon: '
-                            . $product->rayon->name;
-                    }
-
-                    if ($product->location) {
-                        $source .=
-                            ' | Emplacement: '
-                            . $product->location->name;
-                    }
-
-                    StockMovement::create([
-                        'product_id' => $product->id,
-
-                        'type' =>
-                            $difference > 0
-                                ? 'in'
-                                : 'out',
-
-                        'quantity' =>
-                            abs($difference),
-
-                        'source' =>
-                            $source,
-
-                        'reference' =>
-                            'ADJ-' . $adjustment->id,
-
-                        'user_id' =>
-                            auth()->id(),
-                    ]);
-                }
-            });
-
-            return redirect()
-                ->route('inventory-adjustments.index')
-                ->with(
-                    'success',
-                    'Ajustement inventaire enregistré avec succès.'
-                );
-
-        } catch (\Throwable $e) {
-
-            report($e);
-
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'Une erreur est survenue : '
-                    . $e->getMessage()
-                );
+            $ajustement = $this->ajustements->creer([
+                'product_id'  => (int) $request->product_id,
+                'depot_id'    => (int) $request->depot_id,
+                'qte_comptee' => (float) $request->new_qty,
+                'motif'       => $request->motif,
+                'remarque'    => (string) $request->reason,
+                'source'      => 'manuel',
+            ], $request->user());
+        } catch (RuntimeException $e) {
+            return back()->withInput()->with('error', $e->getMessage());
         }
+
+        if (! $ajustement) {
+            return back()->withInput()->with('error', 'La quantité comptée est égale au stock du dépôt : aucun ajustement à faire.');
+        }
+
+        return redirect()->route('inventory-adjustments.show', $ajustement)->with('success', $this->messageCree($ajustement));
     }
 
     /*
     |--------------------------------------------------------------------------
-    | IMPORT EXCEL - FORMULAIRE
+    | IMPORT EXCEL
     |--------------------------------------------------------------------------
-    |
-    | L'utilisateur choisit d'abord le dépôt.
-    |
     */
     public function importForm(): View
     {
-        $depots = Depot::query()
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get();
+        $depots = Depot::query()->where('is_active', true)->orderBy('name')->get();
 
-        return view(
-            'inventory_adjustments.import',
-            compact('depots')
-        );
+        return view('inventory_adjustments.import', compact('depots'));
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | IMPORT EXCEL - MODELE
-    |--------------------------------------------------------------------------
-    */
     public function importTemplate(): BinaryFileResponse
     {
-        return Excel::download(
-            new InventoryAdjustmentTemplateExport(),
-            'modele-ajustement-inventaire.xlsx'
-        );
+        return Excel::download(new InventoryAdjustmentTemplateExport(), 'modele-ajustement-inventaire.xlsx');
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | IMPORT EXCEL - PREVISUALISATION
-    |--------------------------------------------------------------------------
-    |
-    | Colonnes :
-    | A Référence           obligatoire
-    | B Quantité comptée    obligatoire
-    | C Rayon               facultatif
-    | D Emplacement         facultatif
-    | E Raison              facultatif si raison globale
-    |
-    | Aucune donnée n'est modifiée ici.
-    |
-    */
+    /**
+     * Prévisualisation (rien n'est enregistré).
+     * Colonnes : A Référence, B Quantité comptée, C Rayon, D Emplacement, E Remarque.
+     * L'écart se calcule sur le stock DU DÉPÔT choisi ; une ligne sans écart est ignorée.
+     */
     public function importPreview(Request $request): View|RedirectResponse
     {
-        $validator = Validator::make(
-            $request->all(),
-            [
-                'depot_id' => [
-                    'required',
-                    'exists:depots,id',
-                ],
-                'file' => [
-                    'required',
-                    'file',
-                    'mimes:xlsx,xls,csv',
-                    'max:10240',
-                ],
-                'global_reason' => [
-                    'nullable',
-                    'string',
-                    'max:1000',
-                ],
-            ],
-            [
-                'depot_id.required' =>
-                    'Veuillez sélectionner le dépôt avant l’import.',
-                'depot_id.exists' =>
-                    'Le dépôt sélectionné est invalide.',
-                'file.required' =>
-                    'Veuillez sélectionner le fichier Excel.',
-                'file.mimes' =>
-                    'Le fichier doit être XLSX, XLS ou CSV.',
-            ]
-        );
+        $validator = Validator::make($request->all(), [
+            'depot_id'      => ['required', Rule::exists('depots', 'id')->where('is_active', true)],
+            'file'          => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
+            'motif'         => ['required', Rule::in(array_keys(InventoryAdjustment::MOTIFS))],
+            'global_reason' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'depot_id.required' => 'Veuillez sélectionner le dépôt avant l’import.',
+            'depot_id.exists'   => 'Le dépôt sélectionné est désactivé ou introuvable.',
+            'file.required'     => 'Veuillez sélectionner le fichier Excel.',
+            'file.mimes'        => 'Le fichier doit être XLSX, XLS ou CSV.',
+            'motif.required'    => 'Choisissez le motif des ajustements.',
+        ]);
 
         if ($validator->fails()) {
-            return back()
-                ->withErrors($validator)
-                ->withInput();
+            return back()->withErrors($validator)->withInput();
         }
 
-        $depot = Depot::query()
-            ->where('id', $request->depot_id)
-            ->where('is_active', true)
-            ->first();
-
-        if (!$depot) {
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'Le dépôt sélectionné est désactivé ou introuvable.'
-                );
-        }
+        $depot = Depot::findOrFail($request->depot_id);
+        $motif = (string) $request->motif;
 
         try {
-            $spreadsheet = IOFactory::load(
-                $request->file('file')->getRealPath()
-            );
-
-            $sheetRows = $spreadsheet
-                ->getActiveSheet()
-                ->toArray(
-                    null,
-                    true,
-                    true,
-                    false
-                );
+            $sheetRows = IOFactory::load($request->file('file')->getRealPath())->getActiveSheet()->toArray(null, true, true, false);
         } catch (\Throwable $e) {
             report($e);
 
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'Impossible de lire le fichier Excel : '
-                    . $e->getMessage()
-                );
+            return back()->withInput()->with('error', 'Impossible de lire le fichier Excel : ' . $e->getMessage());
         }
 
         if (count($sheetRows) <= 1) {
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'Le fichier ne contient aucune ligne de produit.'
-                );
+            return back()->withInput()->with('error', 'Le fichier ne contient aucune ligne de produit.');
         }
 
-        // Première ligne = en-têtes.
-        array_shift($sheetRows);
+        array_shift($sheetRows); // en-têtes
 
-        $globalReason = trim(
-            (string) $request->input('global_reason', '')
-        );
+        $globalReason = trim((string) $request->input('global_reason', ''));
+
+        $enAttente = InventoryAdjustment::query()
+            ->where('depot_id', $depot->id)
+            ->where('statut', InventoryAdjustment::EN_ATTENTE)
+            ->pluck('id', 'product_id');
 
         $rows = [];
         $seenReferences = [];
@@ -576,1375 +221,427 @@ class InventoryAdjustmentController extends Controller
         foreach ($sheetRows as $sheetRow) {
             $excelLine++;
 
-            $reference = $this->cellToString(
-                $sheetRow[0] ?? null
-            );
+            $reference = $this->cellToString($sheetRow[0] ?? null);
+            $quantityRaw = $this->cellToString($sheetRow[1] ?? null);
+            $excelRayonName = $this->cellToString($sheetRow[2] ?? null);
+            $excelLocationName = $this->cellToString($sheetRow[3] ?? null);
+            $lineReason = $this->cellToString($sheetRow[4] ?? null);
 
-            $quantityRaw = $this->cellToString(
-                $sheetRow[1] ?? null
-            );
-
-            $excelRayonName = $this->cellToString(
-                $sheetRow[2] ?? null
-            );
-
-            $excelLocationName = $this->cellToString(
-                $sheetRow[3] ?? null
-            );
-
-            $lineReason = $this->cellToString(
-                $sheetRow[4] ?? null
-            );
-
-            if (
-                $reference === ''
-                && $quantityRaw === ''
-                && $excelRayonName === ''
-                && $excelLocationName === ''
-                && $lineReason === ''
-            ) {
+            if ($reference === '' && $quantityRaw === '' && $excelRayonName === '' && $excelLocationName === '' && $lineReason === '') {
                 continue;
             }
 
             $error = null;
-            $warnings = [];
-
             $product = null;
-            $oldAvailableQty = 0.0;
-            $newDepotQty = null;
+            $stock = null;
+            $oldQty = 0.0;
+            $newQty = null;
             $difference = null;
             $type = null;
-
-            $currentRayonName = null;
-            $currentLocationName = null;
-
+            $changePlace = false;
             $locationAction = 'Conserver la localisation actuelle';
+            $referenceKey = mb_strtoupper($reference, 'UTF-8');
 
             if ($reference === '') {
                 $error = 'Référence vide.';
-            }
-
-            $referenceKey = mb_strtoupper(
-                trim($reference),
-                'UTF-8'
-            );
-
-            if (
-                $error === null
-                && isset($seenReferences[$referenceKey])
-            ) {
-                $error =
-                    'Référence en double dans le fichier. '
-                    . 'Première apparition à la ligne '
-                    . $seenReferences[$referenceKey]
-                    . '.';
-            }
-
-            if (
-                $error === null
-                && $referenceKey !== ''
-            ) {
+            } elseif (isset($seenReferences[$referenceKey])) {
+                $error = 'Référence en double dans le fichier. Première apparition à la ligne ' . $seenReferences[$referenceKey] . '.';
+            } else {
                 $seenReferences[$referenceKey] = $excelLine;
+                $product = Product::query()->with(['brand', 'model'])->where('reference', $reference)->first();
 
-                $product = Product::query()
-                    ->with([
-                        'brand',
-                        'model',
-                        'rayon',
-                        'location.rayon',
-                    ])
-                    ->where('reference', $reference)
-                    ->first();
-
-                if (!$product) {
-                    $error =
-                        'Produit introuvable pour la référence '
-                        . $reference
-                        . '.';
+                if (! $product) {
+                    $error = 'Produit introuvable pour la référence ' . $reference . '.';
                 }
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | QUANTITE
-            |--------------------------------------------------------------------------
-            */
-            $normalizedNumber = $this->normalizeNumber(
-                $quantityRaw
-            );
+            $normalizedNumber = $this->normalizeNumber($quantityRaw);
 
-            if (
-                $error === null
-                && $quantityRaw === ''
-            ) {
+            if ($error === null && $quantityRaw === '') {
                 $error = 'Quantité comptée vide.';
+            } elseif ($error === null && ! is_numeric($normalizedNumber)) {
+                $error = 'Quantité non numérique : ' . $quantityRaw . '.';
+            } elseif ($error === null && (float) $normalizedNumber < 0) {
+                $error = 'La quantité comptée ne peut pas être négative.';
             }
 
-            if (
-                $error === null
-                && !is_numeric($normalizedNumber)
-            ) {
-                $error =
-                    'Quantité non numérique : '
-                    . $quantityRaw
-                    . '.';
+            // « Non défini » dans l'Excel = pas de changement de place
+            if (Rayon::estNomVide($excelRayonName)) {
+                $excelRayonName = '';
             }
 
-            if (
-                $error === null
-                && (float) $normalizedNumber < 0
-            ) {
-                $error =
-                    'La quantité comptée ne peut pas être négative.';
+            if (Rayon::estNomVide($excelLocationName)) {
+                $excelLocationName = '';
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | LOCALISATION EXCEL
-            |--------------------------------------------------------------------------
-            |
-            | Rayon et emplacement sont facultatifs.
-            | Si emplacement est renseigné sans rayon : erreur.
-            |
-            */
-            if (
-                $error === null
-                && $excelLocationName !== ''
-                && $excelRayonName === ''
-            ) {
-                $error =
-                    'Le rayon doit être renseigné lorsque l’emplacement est renseigné.';
+            if ($error === null && $excelLocationName !== '' && $excelRayonName === '') {
+                $error = 'Le rayon doit être renseigné lorsque l’emplacement est renseigné.';
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | RAISON
-            |--------------------------------------------------------------------------
-            */
-            $reason = trim(
-                $lineReason !== ''
-                    ? $lineReason
-                    : $globalReason
-            );
+            // V6 : un rayon appartient à un seul dépôt
+            if ($error === null && $excelRayonName !== '') {
+                $rayonExcel = Rayon::query()->with('depot')->where('name', $excelRayonName)->first();
 
-            if (
-                $error === null
-                && $reason === ''
-            ) {
-                $error =
-                    'Aucune raison renseignée pour cette ligne.';
+                if ($rayonExcel && $rayonExcel->depot_id !== null && ! $rayonExcel->estDuDepot($depot->id)) {
+                    $error = "Le rayon {$rayonExcel->name} est dans le dépôt " . ($rayonExcel->depot?->name ?? '?') . ", pas dans {$depot->name}.";
+                }
+            }
+
+            $remarque = $lineReason !== '' ? $lineReason : $globalReason;
+
+            if ($error === null && $motif === 'autre' && $remarque === '') {
+                $error = 'Motif « Autre » : remarque obligatoire (colonne E ou remarque globale).';
             }
 
             if ($product) {
-                $currentRayonName =
-                    $product->rayon?->name;
+                $stock = ProductDepotStock::query()->with(['rayon', 'location'])
+                    ->where('product_id', $product->id)->where('depot_id', $depot->id)->first();
 
-                $currentLocationName =
-                    $product->location?->name;
+                $oldQty = round((float) ($stock?->quantity ?? 0), 2);
 
                 if ($excelRayonName !== '') {
-                    if ($excelLocationName !== '') {
-                        $locationAction =
-                            'Mettre à jour le rayon et l’emplacement';
-                    } else {
-                        if (
-                            $currentRayonName === null
-                            || mb_strtolower(
-                                trim($currentRayonName),
-                                'UTF-8'
-                            ) !== mb_strtolower(
-                                trim($excelRayonName),
-                                'UTF-8'
-                            )
-                        ) {
-                            $locationAction =
-                                'Mettre à jour le rayon ; emplacement vidé si incompatible';
-                        } else {
-                            $locationAction =
-                                'Rayon déjà identique ; conserver l’emplacement actuel';
-                        }
-                    }
+                    $locationAction = $excelLocationName !== ''
+                        ? 'Mettre à jour le rayon et l’emplacement'
+                        : (mb_strtolower(trim((string) $stock?->rayon?->name), 'UTF-8') === mb_strtolower($excelRayonName, 'UTF-8')
+                            ? 'Rayon déjà identique ; conserver l’emplacement actuel'
+                            : 'Mettre à jour le rayon ; emplacement vidé si incompatible');
                 }
 
-               /*
-                |--------------------------------------------------------------------------
-                | QUANTITÉ DISPONIBLE AVANT INVENTAIRE
-                |--------------------------------------------------------------------------
-                |
-                | IMPORTANT :
-                | La quantité avant inventaire est products.quantity,
-                | c'est-à-dire la quantité disponible actuelle affichée
-                | dans la liste des produits.
-                |
-                | initial_quantity ne doit jamais être utilisée ici.
-                |
-                */
-
-                $oldAvailableQty = round(
-                    (float) $product->quantity,
-                    2
-                );
-
                 if (is_numeric($normalizedNumber)) {
-                    $newDepotQty = round(
-                        (float) $normalizedNumber,
-                        2
-                    );
+                    $newQty = round((float) $normalizedNumber, 2);
+                    $difference = round($newQty - $oldQty, 2);
+                    $type = $difference > 0 ? 'Entrée' : ($difference < 0 ? 'Sortie' : 'Aucun écart');
+                }
 
-                    $difference = round(
-                        $newDepotQty - $oldAvailableQty,
-                        2
-                    );
+                $memeNom = fn ($a, $b) => mb_strtolower(trim((string) $a), 'UTF-8') === mb_strtolower(trim((string) $b), 'UTF-8');
+                $changePlace = $excelRayonName !== ''
+                    && (! $memeNom($stock?->rayon?->name, $excelRayonName)
+                        || ($excelLocationName !== '' && ! $memeNom($stock?->location?->name, $excelLocationName)));
 
-                    $type = $difference > 0
-                        ? 'Entrée'
-                        : (
-                            $difference < 0
-                                ? 'Sortie'
-                                : 'Aucun écart'
-                        );
+                if ($changePlace && $difference !== null && abs($difference) < 0.01) {
+                    $type = 'Place seulement';
+                }
+
+                if ($error === null && $difference !== null && (abs($difference) >= 0.01 || $changePlace) && $enAttente->has($product->id)) {
+                    $error = 'Un ajustement de cette pièce est déjà à valider dans ce dépôt (n° ' . $enAttente[$product->id] . ') : validez-le ou annulez-le d’abord.';
                 }
             }
 
             $rows[] = [
-                'excel_line' => $excelLine,
-                'product_id' => $product?->id,
-                'reference' => $reference,
-                'designation' => $product?->designation,
-                'brand_name' => $product?->brand?->name,
-                'model_name' => $product?->model?->name,
-
-                'current_rayon_name' =>
-                    $currentRayonName,
-
-                'current_location_name' =>
-                    $currentLocationName,
-
-                'excel_rayon_name' =>
-                    $excelRayonName,
-
-                'excel_location_name' =>
-                    $excelLocationName,
-
-                'location_action' =>
-                    $locationAction,
-
-                'old_qty' =>
-                    $oldAvailableQty,
-
-                'new_qty' =>
-                    $newDepotQty,
-
-                'difference' =>
-                    $difference,
-
-                'type' =>
-                    $type,
-
-                'reason' =>
-                    $reason,
-
-                'warnings' =>
-                    $warnings,
-
-                'error' =>
-                    $error,
+                'excel_line'            => $excelLine,
+                'product_id'            => $product?->id,
+                'reference'             => $reference,
+                'designation'           => $product?->designation,
+                'brand_name'            => $product?->brand?->name,
+                'model_name'            => $product?->model?->name,
+                'current_rayon_name'    => $stock?->rayon?->name,
+                'current_location_name' => $stock?->location?->name,
+                'excel_rayon_name'      => $excelRayonName,
+                'excel_location_name'   => $excelLocationName,
+                'location_action'       => $locationAction,
+                'change_place'          => $changePlace,
+                'old_qty'               => $oldQty,
+                'new_qty'               => $newQty,
+                'difference'            => $difference,
+                'valeur'                => $difference !== null && $product ? round($difference * (float) $product->purchase_price, 2) : null,
+                'type'                  => $type,
+                'reason'                => $remarque,
+                'error'                 => $error,
             ];
         }
 
         if (count($rows) === 0) {
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'Le fichier ne contient aucune ligne exploitable.'
-                );
+            return back()->withInput()->with('error', 'Le fichier ne contient aucune ligne exploitable.');
         }
 
-        $validCount = collect($rows)
-            ->whereNull('error')
-            ->count();
-
-        $errorCount = collect($rows)
-            ->whereNotNull('error')
-            ->count();
+        $collection = collect($rows);
+        $validCount = $collection->whereNull('error')->count();
+        $errorCount = $collection->whereNotNull('error')->count();
+        $ecartCount = $collection->whereNull('error')->filter(fn ($r) => abs((float) $r['difference']) >= 0.01 || ! empty($r['change_place']))->count();
 
         $token = (string) Str::uuid();
 
-        session()->put(
-            'inventory_adjustment_imports.' . $token,
-            [
-                'depot_id' =>
-                    $depot->id,
+        session()->put('inventory_adjustment_imports.' . $token, [
+            'depot_id'   => $depot->id,
+            'motif'      => $motif,
+            'rows'       => $rows,
+            'created_at' => now()->timestamp,
+        ]);
 
-                'rows' =>
-                    $rows,
-
-                'created_at' =>
-                    now()->timestamp,
-            ]
-        );
-
-        return view(
-            'inventory_adjustments.import_preview',
-            compact(
-                'token',
-                'depot',
-                'rows',
-                'validCount',
-                'errorCount'
-            )
-        );
+        return view('inventory_adjustments.import_preview', compact('token', 'depot', 'rows', 'validCount', 'errorCount', 'ecartCount', 'motif'));
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | IMPORT EXCEL - ENREGISTREMENT
-    |--------------------------------------------------------------------------
-    |
-    | 1. La quantité disponible AVANT = products.quantity.
-    | 2. La quantité comptée devient la nouvelle products.quantity.
-    | 3. initial_quantity n'est JAMAIS modifiée.
-    | 4. Le stock du dépôt sélectionné est synchronisé avec la quantité comptée.
-    | 5. Rayon/location ne sont modifiés QUE si le fichier les fournit.
-    |
-    */
+    /**
+     * Enregistrement : rayon / emplacement mis à jour sur le stock du dépôt,
+     * un ajustement « À valider » par ligne avec écart. Les autres dépôts ne
+     * sont jamais touchés.
+     */
     public function importStore(Request $request): RedirectResponse
     {
-        $request->validate([
-            'token' => [
-                'required',
-                'string',
-            ],
-        ]);
+        $request->validate(['token' => ['required', 'string']]);
 
-        $sessionKey =
-            'inventory_adjustment_imports.'
-            . $request->token;
+        $sessionKey = 'inventory_adjustment_imports.' . $request->token;
+        $payload = session()->get($sessionKey);
 
-        $payload = session()->get(
-            $sessionKey
-        );
+        if (! $payload || now()->timestamp - (int) ($payload['created_at'] ?? 0) > 3600) {
+            session()->forget($sessionKey);
 
-        if (!$payload) {
-            return redirect()
-                ->route(
-                    'inventory-adjustments.import'
-                )
-                ->with(
-                    'error',
-                    'La prévisualisation a expiré ou est introuvable.'
-                );
+            return redirect()->route('inventory-adjustments.import')->with('error', 'La prévisualisation a expiré. Veuillez recommencer.');
         }
 
-        $createdAt = (int) (
-            $payload['created_at']
-            ?? 0
-        );
+        $rows = $payload['rows'] ?? [];
 
-        if (
-            $createdAt <= 0
-            || now()->timestamp - $createdAt > 3600
-        ) {
-            session()->forget(
-                $sessionKey
-            );
-
-            return redirect()
-                ->route(
-                    'inventory-adjustments.import'
-                )
-                ->with(
-                    'error',
-                    'La prévisualisation a expiré. Veuillez recommencer.'
-                );
+        if (collect($rows)->whereNotNull('error')->isNotEmpty()) {
+            return redirect()->route('inventory-adjustments.import')->with('error', 'L’import contient encore des erreurs.');
         }
 
-        $rows =
-            $payload['rows']
-            ?? [];
+        $depot = Depot::query()->where('id', $payload['depot_id'] ?? null)->where('is_active', true)->first();
 
-        if (
-            collect($rows)
-                ->whereNotNull('error')
-                ->isNotEmpty()
-        ) {
-            return redirect()
-                ->route(
-                    'inventory-adjustments.import'
-                )
-                ->with(
-                    'error',
-                    'L’import contient encore des erreurs.'
-                );
+        if (! $depot) {
+            return redirect()->route('inventory-adjustments.import')->with('error', 'Le dépôt sélectionné est introuvable ou désactivé.');
         }
 
-        $depot = Depot::query()
-            ->where(
-                'id',
-                $payload['depot_id']
-                    ?? null
-            )
-            ->where(
-                'is_active',
-                true
-            )
-            ->first();
-
-        if (!$depot) {
-            return redirect()
-                ->route(
-                    'inventory-adjustments.import'
-                )
-                ->with(
-                    'error',
-                    'Le dépôt sélectionné est introuvable ou désactivé.'
-                );
-        }
+        $user = $request->user();
 
         try {
-            DB::transaction(
-                function () use (
-                    $rows,
-                    $depot
-                ) {
-                    foreach ($rows as $row) {
-                        /*
-                        |--------------------------------------------------------------------------
-                        | PRODUIT EXISTANT
-                        |--------------------------------------------------------------------------
-                        */
-                        $product = Product::query()
-                            ->with([
-                                'rayon',
-                                'location.rayon',
-                            ])
-                            ->where(
-                                'id',
-                                $row['product_id']
-                            )
-                            ->lockForUpdate()
-                            ->firstOrFail();
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | STOCK DEPOT - DEPOT UNIQUE
-                        |--------------------------------------------------------------------------
-                        |
-                        | REGLE METIER :
-                        | Après cet ajustement, ce produit ne doit exister
-                        | QUE dans le dépôt sélectionné pour cet import.
-                        |
-                        | Les anciens ajustements restent dans l'historique,
-                        | mais les anciennes lignes product_depot_stocks
-                        | sont supprimées.
-                        |
-                        */
-
-                        /*
-                        | Verrouiller toutes les présences actuelles
-                        | du produit dans les dépôts.
-                        */
-                        ProductDepotStock::query()
-                            ->where(
-                                'product_id',
-                                $product->id
-                            )
-                            ->lockForUpdate()
-                            ->get();
-
-                        /*
-                        | Supprimer le produit de TOUS les dépôts,
-                        | y compris une ancienne ligne du dépôt cible.
-                        */
-                        ProductDepotStock::query()
-                            ->where(
-                                'product_id',
-                                $product->id
-                            )
-                            ->delete();
-
-                        /*
-                        | Recréer UNE SEULE ligne :
-                        | le dernier dépôt sélectionné.
-                        |
-                        | La quantité réelle sera affectée plus bas
-                        | après validation complète de la ligne Excel.
-                        */
-                        $depotStock =
-                            ProductDepotStock::create([
-                                'product_id' =>
-                                    $product->id,
-
-                                'depot_id' =>
-                                    $depot->id,
-
-                                'quantity' =>
-                                    0,
-                            ]);
-
-                      /*
-                        |--------------------------------------------------------------------------
-                        | QUANTITÉ DISPONIBLE ACTUELLE
-                        |--------------------------------------------------------------------------
-                        */
-
-                        $currentDepotQty = round(
-                            (float) $product->quantity,
-                            2
-                        );
-
-                        $previewDepotQty = round(
-                            (float) $row['old_qty'],
-                            2
-                        );
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | PROTECTION CONTRE UNE MODIFICATION APRES LA PREVIEW
-                        |--------------------------------------------------------------------------
-                        */
-                        if (
-                            abs(
-                                $currentDepotQty
-                                - $previewDepotQty
-                            ) > 0.00001
-                        ) {
-                            throw new RuntimeException(
-                                'La quantité disponible du produit '
-                                . $product->reference
-                                . ' a changé depuis la prévisualisation. '
-                                . 'Veuillez relancer l’import.'
-                            );
-                        }
-
-                        $newDepotQty = round(
-                            (float) $row['new_qty'],
-                            2
-                        );
-
-                        $difference = round(
-                            $newDepotQty
-                            - $currentDepotQty,
-                            2
-                        );
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | LOCALISATION
-                        |--------------------------------------------------------------------------
-                        |
-                        | Excel vide :
-                        |   => conserver la localisation actuelle.
-                        |
-                        | Rayon fourni :
-                        |   => créer/récupérer le rayon et le mettre à jour.
-                        |
-                        | Rayon + emplacement fournis :
-                        |   => créer/récupérer les deux et mettre à jour les deux.
-                        |
-                        | Rayon fourni mais emplacement vide :
-                        |   => si le rayon change et que l'ancien emplacement
-                        |      appartient à un autre rayon, location_id = null.
-                        |
-                        */
-                        $excelRayonName = trim(
-                            (string) (
-                                $row['excel_rayon_name']
-                                ?? ''
-                            )
-                        );
-
-                        $excelLocationName = trim(
-                            (string) (
-                                $row['excel_location_name']
-                                ?? ''
-                            )
-                        );
-
-                        $finalRayonId =
-                            $product->rayon_id;
-
-                        $finalLocationId =
-                            $product->location_id;
-
-                        if ($excelRayonName !== '') {
-                            $rayon = Rayon::firstOrCreate([
-                                'name' =>
-                                    $excelRayonName,
-                            ]);
-
-                            $finalRayonId =
-                                $rayon->id;
-
-                            if ($excelLocationName !== '') {
-                                $location =
-                                    Location::firstOrCreate(
-                                        [
-                                            'name' =>
-                                                $excelLocationName,
-
-                                            'rayon_id' =>
-                                                $rayon->id,
-                                        ]
-                                    );
-
-                                $finalLocationId =
-                                    $location->id;
-                            } else {
-                                /*
-                                | Si l'ancien emplacement appartient à un autre
-                                | rayon, il ne peut pas être conservé.
-                                */
-                                if (
-                                    $product->location
-                                    && (int) $product->location->rayon_id
-                                        !== (int) $rayon->id
-                                ) {
-                                    $finalLocationId =
-                                        null;
-                                }
-                            }
-                        }
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | METTRE A JOUR LA LOCALISATION DU PRODUIT
-                        |--------------------------------------------------------------------------
-                        */
-                        $product->rayon_id =
-                            $finalRayonId;
-
-                        $product->location_id =
-                            $finalLocationId;
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | HISTORIQUE AJUSTEMENT
-                        |--------------------------------------------------------------------------
-                        |
-                        | On enregistre la localisation finale après application
-                        | éventuelle des données Excel.
-                        |
-                        */
-                        $adjustment =
-                            InventoryAdjustment::create([
-                                'product_id' =>
-                                    $product->id,
-
-                                'depot_id' =>
-                                    $depot->id,
-
-                                'rayon_id' =>
-                                    $finalRayonId,
-
-                                'location_id' =>
-                                    $finalLocationId,
-
-                                'old_qty' =>
-                                    $currentDepotQty,
-
-                                'new_qty' =>
-                                    $newDepotQty,
-
-                                'reason' =>
-                                    trim(
-                                        (string) $row['reason']
-                                    ),
-
-                                'approved_by' =>
-                                    auth()->id(),
-                            ]);
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | NOUVELLE QUANTITE DU DEPOT
-                        |--------------------------------------------------------------------------
-                        */
-                        $depotStock->quantity =
-                            $newDepotQty;
-
-                        $depotStock->save();
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | QUANTITÉ DISPONIBLE APRÈS INVENTAIRE
-                        |--------------------------------------------------------------------------
-                        |
-                        | IMPORTANT :
-                        |
-                        | - products.quantity = quantité disponible actuelle.
-                        | - La quantité comptée devient la nouvelle quantité disponible.
-                        | - initial_quantity ne doit JAMAIS être modifiée.
-                        | - received_quantity ne doit JAMAIS être modifiée.
-                        | - les quantités vendues ne doivent JAMAIS être modifiées.
-                        |
-                        */
-                        $product->quantity =
-                            $newDepotQty;
-
-                        $product->save();
-
-                        /*
-                        |--------------------------------------------------------------------------
-                        | MOUVEMENT STOCK
-                        |--------------------------------------------------------------------------
-                        */
-                        if (
-                            abs($difference)
-                            > 0.00001
-                        ) {
-                            $finalRayon =
-                                $finalRayonId
-                                    ? Rayon::find(
-                                        $finalRayonId
-                                    )
-                                    : null;
-
-                            $finalLocation =
-                                $finalLocationId
-                                    ? Location::find(
-                                        $finalLocationId
-                                    )
-                                    : null;
-
-                            $source =
-                                'Ajustement inventaire Excel'
-                                . ' | Dépôt: '
-                                . $depot->name;
-
-                            if ($finalRayon) {
-                                $source .=
-                                    ' | Rayon: '
-                                    . $finalRayon->name;
-                            }
-
-                            if ($finalLocation) {
-                                $source .=
-                                    ' | Emplacement: '
-                                    . $finalLocation->name;
-                            }
-
-                            StockMovement::create([
-                                'product_id' =>
-                                    $product->id,
-
-                                'type' =>
-                                    $difference > 0
-                                        ? 'in'
-                                        : 'out',
-
-                                'quantity' =>
-                                    abs($difference),
-
-                                'source' =>
-                                    $source,
-
-                                'reference' =>
-                                    'ADJ-'
-                                    . $adjustment->id,
-
-                                'user_id' =>
-                                    auth()->id(),
-                            ]);
-                        }
-                    }
-                }
-            );
-
-            session()->forget(
-                $sessionKey
-            );
-
-            return redirect()
-                ->route(
-                    'inventory-adjustments.index'
-                )
-                ->with(
-                    'success',
-                    count($rows)
-                    . ' ajustement(s) enregistré(s) avec succès dans le dépôt « '
-                    . $depot->name
-                    . ' ».'
-                );
-        } catch (\Throwable $e) {
-            report($e);
-
-            return redirect()
-                ->route(
-                    'inventory-adjustments.import'
-                )
-                ->with(
-                    'error',
-                    'L’import a été annulé. Aucune donnée n’a été modifiée. '
-                    . $e->getMessage()
-                );
-        }
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | SHOW
-    |--------------------------------------------------------------------------
-    */
-    public function show(
-        InventoryAdjustment $inventoryAdjustment
-    ): View {
-        $inventoryAdjustment->load([
-            'product.brand',
-            'product.model',
-            'product.rayon',
-            'product.location',
-            'depot',
-            'rayon',
-            'location',
-            'approver',
-        ]);
-
-        return view(
-            'inventory_adjustments.show',
-            compact(
-                'inventoryAdjustment'
-            )
-        );
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | EDIT
-    |--------------------------------------------------------------------------
-    |
-    | Seul l'administrateur doit pouvoir atteindre cette méthode via web.php.
-    | Le produit de l'ajustement reste inchangé afin de préserver la traçabilité.
-    |
-    */
-    public function edit(
-        InventoryAdjustment $inventoryAdjustment
-    ): View {
-        $inventoryAdjustment->load([
-            'product.brand',
-            'product.model',
-            'product.rayon',
-            'product.location',
-            'depot',
-            'rayon',
-            'location',
-            'approver',
-        ]);
-
-        $products = Product::query()
-            ->with([
-                'brand',
-                'model',
-                'rayon',
-                'location',
-            ])
-            ->orderBy('designation')
-            ->get();
-
-        $depots = Depot::query()
-            ->orderBy('name')
-            ->get();
-
-        $rayons = Rayon::query()
-            ->orderBy('name')
-            ->get();
-
-        $locations = Location::query()
-            ->orderBy('name')
-            ->get();
-
-        return view(
-            'inventory_adjustments.edit',
-            compact(
-                'inventoryAdjustment',
-                'products',
-                'depots',
-                'rayons',
-                'locations'
-            )
-        );
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | UPDATE
-    |--------------------------------------------------------------------------
-    |
-    | La correction d'un ajustement met à jour l'effet de cet ajustement
-    | sur le stock courant, sans toucher à initial_quantity.
-    |
-    */
-    public function update(
-        Request $request,
-        InventoryAdjustment $inventoryAdjustment
-    ): RedirectResponse {
-        $request->validate(
-            [
-                'depot_id' => [
-                    'required',
-                    'exists:depots,id',
-                ],
-                'new_qty' => [
-                    'required',
-                    'numeric',
-                    'min:0',
-                ],
-                'reason' => [
-                    'required',
-                    'string',
-                    'max:1000',
-                ],
-                'rayon_id' => [
-                    'nullable',
-                    'exists:rayons,id',
-                ],
-                'location_id' => [
-                    'nullable',
-                    'exists:locations,id',
-                ],
-            ],
-            [
-                'depot_id.required' =>
-                    'Veuillez sélectionner un dépôt.',
-                'depot_id.exists' =>
-                    'Le dépôt sélectionné est invalide.',
-                'new_qty.required' =>
-                    'Veuillez saisir la nouvelle quantité.',
-                'new_qty.numeric' =>
-                    'La nouvelle quantité doit être numérique.',
-                'new_qty.min' =>
-                    'La quantité ne peut pas être négative.',
-                'reason.required' =>
-                    'Veuillez préciser la raison.',
-                'rayon_id.exists' =>
-                    'Le rayon sélectionné est invalide.',
-                'location_id.exists' =>
-                    'L’emplacement sélectionné est invalide.',
-            ]
-        );
-
-        try {
-            DB::transaction(function () use (
-                $request,
-                $inventoryAdjustment
-            ) {
-                $adjustment = InventoryAdjustment::query()
-                    ->where('id', $inventoryAdjustment->id)
-                    ->lockForUpdate()
-                    ->firstOrFail();
-
-                $product = Product::query()
-                    ->where('id', $adjustment->product_id)
-                    ->lockForUpdate()
-                    ->firstOrFail();
-
-                $depot = Depot::query()
-                    ->where('id', $request->depot_id)
-                    ->firstOrFail();
-
-                $historicalOldQty = round(
-                    (float) $adjustment->old_qty,
-                    2
-                );
-
-                $previousNewQty = round(
-                    (float) $adjustment->new_qty,
-                    2
-                );
-
-                $previousDifference = round(
-                    $previousNewQty - $historicalOldQty,
-                    2
-                );
-
-                $newQty = round(
-                    (float) $request->new_qty,
-                    2
-                );
-
-                $newDifference = round(
-                    $newQty - $historicalOldQty,
-                    2
-                );
-
-                $stockCorrection = round(
-                    $newDifference - $previousDifference,
-                    2
-                );
-
-                $currentProductQty = round(
-                    (float) $product->quantity,
-                    2
-                );
-
-                $correctedProductQty = round(
-                    $currentProductQty + $stockCorrection,
-                    2
-                );
-
-                if ($correctedProductQty < 0) {
-                    throw new RuntimeException(
-                        'La modification rendrait la quantité disponible '
-                        . 'du produit négative.'
-                    );
-                }
-
-                $finalRayonId = $adjustment->rayon_id;
-                $finalLocationId = $adjustment->location_id;
-
-                if ($request->exists('rayon_id')) {
-                    $finalRayonId = $request->filled('rayon_id')
-                        ? (int) $request->rayon_id
-                        : null;
-                }
-
-                if ($request->exists('location_id')) {
-                    $finalLocationId = $request->filled('location_id')
-                        ? (int) $request->location_id
-                        : null;
-                }
-
-                if ($finalLocationId !== null) {
-                    $location = Location::query()
-                        ->findOrFail($finalLocationId);
-
-                    if (
-                        $finalRayonId !== null
-                        && (int) $location->rayon_id
-                            !== (int) $finalRayonId
-                    ) {
-                        throw new RuntimeException(
-                            'L’emplacement sélectionné n’appartient pas '
-                            . 'au rayon sélectionné.'
-                        );
-                    }
-
-                    if ($finalRayonId === null) {
-                        $finalRayonId = $location->rayon_id;
-                    }
-                }
-
-                /*
-                |--------------------------------------------------------------------------
-                | DEPOT UNIQUE APRES MODIFICATION
-                |--------------------------------------------------------------------------
-                */
-                ProductDepotStock::query()
-                    ->where('product_id', $product->id)
-                    ->lockForUpdate()
-                    ->get();
-
-                ProductDepotStock::query()
-                    ->where('product_id', $product->id)
-                    ->delete();
-
-                ProductDepotStock::create([
-                    'product_id' => $product->id,
-                    'depot_id' => $depot->id,
-                    'quantity' => $newQty,
-                ]);
-
-                /*
-                | Dans cette règle métier, products.quantity correspond
-                | exactement à la quantité du seul dépôt courant.
-                */
-                $product->quantity = $newQty;
-
-                if (
-                    $request->exists('rayon_id')
-                    || $request->exists('location_id')
-                ) {
-                    $product->rayon_id = $finalRayonId;
-                    $product->location_id = $finalLocationId;
-                }
-
-                $product->save();
-
-                $adjustment->depot_id = $depot->id;
-                $adjustment->new_qty = $newQty;
-                $adjustment->reason =
-                    trim((string) $request->reason);
-                $adjustment->rayon_id = $finalRayonId;
-                $adjustment->location_id = $finalLocationId;
-                $adjustment->approved_by = auth()->id();
-                $adjustment->save();
-
-                $movementReference =
-                    'ADJ-' . $adjustment->id;
-
-                $movement = StockMovement::query()
-                    ->where(
-                        'reference',
-                        $movementReference
-                    )
-                    ->first();
-
-                if (abs($newDifference) > 0.00001) {
-                    $source = 'Ajustement inventaire corrigé';
-
-                    if ($adjustment->depot_id !== null) {
-                        $depotName = Depot::query()
-                            ->where(
-                                'id',
-                                $adjustment->depot_id
-                            )
-                            ->value('name');
-
-                        if ($depotName) {
-                            $source .=
-                                ' | Dépôt: ' . $depotName;
-                        }
-                    }
-
-                    $movementData = [
-                        'product_id' => $product->id,
-                        'type' => $newDifference > 0
-                            ? 'in'
-                            : 'out',
-                        'quantity' => abs($newDifference),
-                        'source' => $source,
-                        'reference' => $movementReference,
-                        'user_id' => auth()->id(),
-                    ];
-
-                    if ($movement) {
-                        $movement->update(
-                            $movementData
-                        );
-                    } else {
-                        StockMovement::create(
-                            $movementData
-                        );
-                    }
-                } elseif ($movement) {
-                    $movement->delete();
-                }
-            });
-
-            return redirect()
-                ->route(
-                    'inventory-adjustments.index'
-                )
-                ->with(
-                    'success',
-                    'Ajustement inventaire modifié avec succès.'
-                );
-        } catch (\Throwable $e) {
-            report($e);
-
-            return back()
-                ->withInput()
-                ->with(
-                    'error',
-                    'La modification a été annulée : '
-                    . $e->getMessage()
-                );
-        }
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | DESTROY
-    |--------------------------------------------------------------------------
-    |
-    | La suppression annule l'effet quantitatif de l'ajustement
-    | avant de supprimer son historique et son mouvement de stock.
-    |
-    */
-    public function destroy(
-        InventoryAdjustment $inventoryAdjustment
-    ): RedirectResponse {
-        try {
-            DB::transaction(function () use (
-                $inventoryAdjustment
-            ) {
-                $adjustment = InventoryAdjustment::query()
-                    ->where('id', $inventoryAdjustment->id)
-                    ->lockForUpdate()
-                    ->firstOrFail();
-
-                $product = Product::query()
-                    ->where('id', $adjustment->product_id)
-                    ->lockForUpdate()
-                    ->firstOrFail();
-
-                $difference = round(
-                    (float) $adjustment->new_qty
-                    - (float) $adjustment->old_qty,
-                    2
-                );
-
-                $correctedProductQty = round(
-                    (float) $product->quantity
-                    - $difference,
-                    2
-                );
-
-                if ($correctedProductQty < 0) {
-                    throw new RuntimeException(
-                        'La suppression rendrait la quantité disponible '
-                        . 'du produit négative.'
-                    );
-                }
-
-                if ($adjustment->depot_id !== null) {
-                    $depotStock = ProductDepotStock::query()
-                        ->where(
-                            'product_id',
-                            $product->id
-                        )
-                        ->where(
-                            'depot_id',
-                            $adjustment->depot_id
-                        )
+            [$crees, $valides, $deplaces] = DB::transaction(function () use ($rows, $depot, $payload, $user) {
+                $crees = 0;
+                $valides = 0;
+                $deplaces = 0;
+
+                foreach ($rows as $row) {
+                    $product = Product::query()->lockForUpdate()->findOrFail($row['product_id']);
+
+                    $stock = ProductDepotStock::query()
+                        ->where('product_id', $product->id)
+                        ->where('depot_id', $depot->id)
                         ->lockForUpdate()
                         ->first();
 
-                    if ($depotStock) {
-                        $correctedDepotQty = round(
-                            (float) $depotStock->quantity
-                            - $difference,
-                            2
-                        );
+                    $actuel = round((float) ($stock?->quantity ?? 0), 2);
 
-                        if ($correctedDepotQty < 0) {
-                            throw new RuntimeException(
-                                'La suppression rendrait le stock du dépôt négatif.'
-                            );
-                        }
+                    if (abs($actuel - (float) $row['old_qty']) > 0.00001) {
+                        throw new RuntimeException("Le stock de {$product->reference} dans ce dépôt a changé depuis la prévisualisation ({$row['old_qty']} → {$actuel}). Relancez l’import.");
+                    }
 
-                        $depotStock->quantity =
-                            $correctedDepotQty;
+                    [$rayonId, $emplacementId] = $this->placeExcel($row, $depot);
 
-                        $depotStock->save();
+                    $ajustement = $this->ajustements->creer([
+                        'product_id'            => $product->id,
+                        'depot_id'              => $depot->id,
+                        'qte_comptee'           => (float) $row['new_qty'],
+                        'nouveau_rayon_id'      => $rayonId,
+                        'nouvel_emplacement_id' => $emplacementId,
+                        'motif'                 => $payload['motif'] ?? 'inventaire',
+                        'remarque'              => (string) $row['reason'],
+                        'source'                => 'import',
+                    ], $user);
+
+                    if ($ajustement) {
+                        $crees++;
+                        $ajustement->estValide() && $valides++;
+                        $ajustement->changeDePlace() && $deplaces++;
                     }
                 }
 
-                $product->quantity =
-                    $correctedProductQty;
-
-                $product->save();
-
-                StockMovement::query()
-                    ->where(
-                        'reference',
-                        'ADJ-' . $adjustment->id
-                    )
-                    ->delete();
-
-                $adjustment->delete();
+                return [$crees, $valides, $deplaces];
             });
-
-            return redirect()
-                ->route(
-                    'inventory-adjustments.index'
-                )
-                ->with(
-                    'success',
-                    'Ajustement inventaire supprimé avec succès. '
-                    . 'Son effet sur le stock a été annulé.'
-                );
         } catch (\Throwable $e) {
             report($e);
 
-            return redirect()
-                ->route(
-                    'inventory-adjustments.index'
-                )
-                ->with(
-                    'error',
-                    'La suppression a été annulée : '
-                    . $e->getMessage()
-                );
+            return redirect()->route('inventory-adjustments.import')
+                ->with('error', 'L’import a été annulé. Aucune donnée n’a été modifiée. ' . $e->getMessage());
         }
+
+        session()->forget($sessionKey);
+
+        $message = "Dépôt « {$depot->name} » : {$crees} ajustement(s) " . ($valides === $crees ? 'enregistré(s) et validé(s)' : 'enregistré(s), à valider par le chef magasinier / l’admin')
+            . ($deplaces ? ", dont {$deplaces} changement(s) de rayon / emplacement" : '')
+            . '. ' . (count($rows) - $crees) . ' ligne(s) sans écart ni changement de place ignorée(s).';
+
+        return redirect()->route('inventory-adjustments.index', $valides === $crees ? [] : ['statut' => InventoryAdjustment::EN_ATTENTE])
+            ->with('success', $message);
     }
 
     /*
     |--------------------------------------------------------------------------
-    | HELPERS
+    | FICHE
     |--------------------------------------------------------------------------
     */
-    /*
-    |--------------------------------------------------------------------------
-    | FORCE SINGLE DEPOT STOCK
-    |--------------------------------------------------------------------------
-    |
-    | Helper réutilisable si nécessaire :
-    | supprime toutes les anciennes présences du produit et conserve
-    | uniquement le dépôt fourni.
-    |
-    */
-    private function forceSingleDepotStock(
-        int $productId,
-        int $depotId,
-        float $quantity
-    ): void {
-        ProductDepotStock::query()
-            ->where('product_id', $productId)
-            ->lockForUpdate()
-            ->get();
+    public function show(Request $request, InventoryAdjustment $inventoryAdjustment): View
+    {
+        $inventoryAdjustment->load(['product', 'depot', 'rayon', 'location', 'nouveauRayon', 'nouvelEmplacement', 'approver', 'creator', 'refuseur', 'corrige', 'corrections.creator']);
 
-        ProductDepotStock::query()
-            ->where('product_id', $productId)
-            ->delete();
+        $peutValider = AjustementStockService::peutValider($request->user());
+        $peutAnnuler = $inventoryAdjustment->estEnAttente()
+            && ($peutValider || (int) $inventoryAdjustment->created_by === (int) $request->user()->id);
+        $peutCorriger = $inventoryAdjustment->estValide()
+            && $inventoryAdjustment->depot_id !== null
+            && $request->user()->hasPermission('gerer_ajustements');
 
-        ProductDepotStock::create([
-            'product_id' => $productId,
-            'depot_id' => $depotId,
-            'quantity' => round($quantity, 2),
+        return view('inventory_adjustments.show', [
+            'ajustement'   => $inventoryAdjustment,
+            'peutValider'  => $peutValider,
+            'peutAnnuler'  => $peutAnnuler,
+            'peutCorriger' => $peutCorriger,
+            // V6 : seulement les rayons du dépôt de l'ajustement ; emplacements groupés par rayon (id)
+            'rayons'       => $rayons = $peutCorriger
+                ? Rayon::query()->duDepot($inventoryAdjustment->depot_id)->orderBy('name')->get(['id', 'name'])
+                : collect(),
+            'emplacementsParRayon' => $peutCorriger
+                ? Location::query()->whereIn('rayon_id', $rayons->pluck('id'))->orderBy('name')->get(['id', 'name', 'rayon_id'])
+                    ->groupBy('rayon_id')->map(fn ($liste) => $liste->map(fn ($e) => [$e->id, $e->name])->values())->all()
+                : [],
         ]);
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATION / REFUS / ANNULATION
+    |--------------------------------------------------------------------------
+    */
+    public function valider(Request $request, InventoryAdjustment $inventoryAdjustment): RedirectResponse
+    {
+        try {
+            $this->ajustements->valider($inventoryAdjustment, $request->user());
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
-    private function cellToString(
-        mixed $value
-    ): string {
+        return back()->with('success', "Ajustement n° {$inventoryAdjustment->id} validé : le stock du dépôt est mis à jour.");
+    }
+
+    /** Validation de plusieurs ajustements cochés dans la liste. */
+    public function validerLot(Request $request): RedirectResponse
+    {
+        $request->validate(['ids' => ['required', 'array'], 'ids.*' => ['integer']], ['ids.required' => 'Cochez au moins un ajustement.']);
+
+        $valides = 0;
+        $erreurs = [];
+
+        foreach (InventoryAdjustment::query()->whereIn('id', $request->ids)->orderBy('id')->get() as $ajustement) {
+            try {
+                $this->ajustements->valider($ajustement, $request->user());
+                $valides++;
+            } catch (RuntimeException $e) {
+                $erreurs[] = $e->getMessage();
+            }
+        }
+
+        $retour = back()->with('success', "{$valides} ajustement(s) validé(s).");
+
+        return $erreurs ? $retour->with('error', count($erreurs) . ' non validé(s) : ' . implode(' | ', array_slice($erreurs, 0, 5))) : $retour;
+    }
+
+    public function refuser(Request $request, InventoryAdjustment $inventoryAdjustment): RedirectResponse
+    {
+        $request->validate(['motif_refus' => ['required', 'string', 'max:500']], ['motif_refus.required' => 'Indiquez pourquoi l’ajustement est refusé.']);
+
+        try {
+            $this->ajustements->refuser($inventoryAdjustment, $request->user(), $request->motif_refus);
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Ajustement n° {$inventoryAdjustment->id} refusé : le stock n’a pas changé.");
+    }
+
+    public function annuler(Request $request, InventoryAdjustment $inventoryAdjustment): RedirectResponse
+    {
+        try {
+            $this->ajustements->annuler($inventoryAdjustment, $request->user());
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Ajustement n° {$inventoryAdjustment->id} annulé : le stock n’a pas changé.");
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | CORRECTION (contre-ajustement)
+    |--------------------------------------------------------------------------
+    */
+    public function corriger(Request $request, InventoryAdjustment $inventoryAdjustment): RedirectResponse
+    {
+        $donnees = $request->validate([
+            'qte_correcte'          => ['nullable', 'numeric', 'min:0'],
+            'ecart_correct'         => ['nullable', 'numeric'],
+            'nouveau_rayon_id'      => ['nullable', 'integer', 'exists:rayons,id'],
+            'nouvel_emplacement_id' => ['nullable', 'integer', 'exists:locations,id'],
+            'remarque'              => ['nullable', 'string', 'max:500'],
+        ]);
+
+        if (($donnees['qte_correcte'] ?? null) === null && ($donnees['ecart_correct'] ?? null) === null
+            && empty($donnees['nouveau_rayon_id']) && empty($donnees['nouvel_emplacement_id'])) {
+            return back()->withInput()->with('error', 'Saisissez la quantité correcte, l’écart correct ou la bonne place.');
+        }
+
+        try {
+            $correction = $this->ajustements->corriger($inventoryAdjustment, $donnees, $request->user());
+        } catch (RuntimeException $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('inventory-adjustments.show', $correction)->with('success', $this->messageCree($correction));
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | OUTILS
+    |--------------------------------------------------------------------------
+    */
+    private function messageCree(InventoryAdjustment $ajustement): string
+    {
+        return $ajustement->estValide()
+            ? "Ajustement n° {$ajustement->id} enregistré et validé : le stock du dépôt est mis à jour."
+            : "Ajustement n° {$ajustement->id} enregistré : il attend la validation du chef magasinier / de l’admin (le stock ne change pas avant).";
+    }
+
+    /**
+     * Rayon / emplacement fournis par l'Excel → [rayon_id, emplacement_id]
+     * demandés pour l'ajustement (créés s'ils n'existent pas). La place n'est
+     * appliquée au stock du dépôt qu'à la validation de l'ajustement ; un
+     * emplacement qui n'est pas dans le nouveau rayon est alors vidé.
+     */
+    private function placeExcel(array $row, Depot $depot): array
+    {
+        $rayonNom = trim((string) ($row['excel_rayon_name'] ?? ''));
+        $emplacementNom = trim((string) ($row['excel_location_name'] ?? ''));
+
+        if ($rayonNom === '' || empty($row['change_place'])) {
+            return [null, null];
+        }
+
+        // V6 : rayon de ce dépôt (créé dans ce dépôt s'il n'existe pas)
+        [$rayon, $erreur] = Rayon::pourDepot($rayonNom, $depot->id);
+
+        if ($erreur) {
+            throw new RuntimeException("Ligne {$row['excel_line']} ({$row['reference']}) : {$erreur}.");
+        }
+
+        return [$rayon?->id, Location::pourRayon($emplacementNom, $rayon)?->id];
+    }
+
+    private function cellToString(mixed $value): string
+    {
         if ($value === null) {
             return '';
         }
 
         if (is_bool($value)) {
-            return $value
-                ? '1'
-                : '0';
+            return $value ? '1' : '0';
         }
 
-        return trim(
-            (string) $value
-        );
+        return trim((string) $value);
     }
 
-    private function normalizeNumber(
-        string $raw
-    ): string {
-        $value = trim(
-            $raw
-        );
+    private function normalizeNumber(string $raw): string
+    {
+        $value = str_replace(["\u{00A0}", "\u{202F}", ' '], '', trim($raw));
+        $value = str_replace(',', '.', $value);
 
-        $value = str_replace(
-            [
-                "\u{00A0}",
-                "\u{202F}",
-                ' ',
-            ],
-            '',
-            $value
-        );
-
-        $value = str_replace(
-            ',',
-            '.',
-            $value
-        );
-
-        if (
-            preg_match(
-                '/^[+-]?\d+(?:\.\d+)?/',
-                $value,
-                $matches
-            )
-        ) {
+        if (preg_match('/^[+-]?\d+(?:\.\d+)?/', $value, $matches)) {
             return $matches[0];
         }
 

@@ -335,11 +335,12 @@
 
     /* ============================================================
        ORDINATEUR / LAPTOP
-       >= 992px
+       >= 1200px (avant : 992px, ce qui laissait le menu ouvert par-dessus
+       la page sur tablette en paysage, entre 992 et 1199 px)
        SIDEBAR TOUJOURS VISIBLE
     ============================================================ */
 
-    @media (min-width: 992px) {
+    @media (min-width: 1200px) {
 
         html body #layout-menu {
 

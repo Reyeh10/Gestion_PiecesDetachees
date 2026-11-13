@@ -18,16 +18,20 @@ class BonTransfert extends Model
         'numero',
         'annee',
         'sequence',
+        'reste',
+        'parent_id',
         'external_bon_commande_id',
         'user_id',
         'total',
         'envoye_atelier_at',
         'envoi_atelier_erreur',
+        'atelier_bc_numero',
     ];
 
     protected $casts = [
         'annee'    => 'integer',
         'sequence' => 'integer',
+        'reste'    => 'integer',
         'total'    => 'decimal:2',
         'envoye_atelier_at' => 'datetime',
     ];
@@ -45,5 +49,22 @@ class BonTransfert extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** BT d'origine d'un « BT du reste » (BT-…-R1). */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_id');
+    }
+
+    /** BT du reste créés après celui-ci (R1, R2…). */
+    public function restes(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_id')->orderBy('reste');
+    }
+
+    public function estReste(): bool
+    {
+        return (int) $this->reste > 0;
     }
 }

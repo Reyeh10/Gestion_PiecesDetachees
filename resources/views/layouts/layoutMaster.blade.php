@@ -873,9 +873,26 @@
     {{-- THÈME STCD « ATELIER » : chargé en dernier pour passer devant les styles ci-dessus --}}
     <link rel="stylesheet" href="{{ asset('assets/css/stcd-theme.css') }}?v={{ filemtime(public_path('assets/css/stcd-theme.css')) }}">
 
+    {{-- DESIGN ACTIF (V6) : une seule valeur à changer.
+           'dreamspos' : style DreamsPOS (menu blanc, orange #FE9F43)
+           'wholesale' : style Wholesale (menu anthracite, vert)
+           'atelier'   : design de l'app Atelier (stcd-theme.css seul)
+         Chaque design est un fichier à part, chargé par-dessus stcd-theme.css. --}}
+    @php
+        $stcdDesign = 'dreamspos';
+        $stcdPolices = ['dreamspos' => 'Nunito:wght@400;500;600;700;800', 'wholesale' => 'Open+Sans:wght@400;500;600;700'];
+    @endphp
+    @if(isset($stcdPolices[$stcdDesign]))
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{ $stcdPolices[$stcdDesign] }}&display=swap">
+        <link rel="stylesheet" href="{{ asset('assets/css/stcd-theme-' . $stcdDesign . '.css') }}?v={{ filemtime(public_path('assets/css/stcd-theme-' . $stcdDesign . '.css')) }}">
+    @endif
+
 </head>
 
-<body class="stcd-theme" @if(request()->routeIs('dashboard')) data-route-dashboard="1" @endif>
+<body class="stcd-theme stcd-{{ $stcdDesign }}" @if(request()->routeIs('dashboard')) data-route-dashboard="1" @endif>
+<script>
+    try { if (localStorage.getItem('stcd-menu-ferme') === '1' && window.innerWidth >= 1200) document.body.classList.add('stcd-menu-ferme'); } catch (e) {}
+</script>
 
 {{-- ============================================================= --}}
 
@@ -940,7 +957,108 @@
                 <script>
                     try {
                         window.stcdPlacerTitre && window.stcdPlacerTitre();
+                        // Design DreamsPOS : le bloc du titre (titre, sous-titre, fil
+                        // d'Ariane) passe en tête du contenu ; la barre du haut garde
+                        // la recherche.
+                        if (document.body.classList.contains('stcd-dreamspos')) {
+                            var dpBloc = document.querySelector('.layout-navbar .stcd-ws-bandeau');
+                            var dpContenu = document.querySelector('.content-wrapper > .container-xxl');
+                            if (dpBloc && dpContenu) {
+                                dpBloc.classList.remove('me-3');
+                                dpBloc.classList.add('dp-entete-page');
+                                dpContenu.insertBefore(dpBloc, dpContenu.firstChild);
+                            }
+                        }
                         window.stcdAssombrir && window.stcdAssombrir(document.querySelector('.layout-page'));
+                        // Tableaux adaptatifs (sans défilement horizontal) : chaque
+                        // cellule reçoit le nom de sa colonne (data-label). Sur
+                        // tablette en portrait / téléphone, chaque ligne devient une
+                        // carte « colonne : valeur » (CSS dans stcd-theme.css).
+                        document.querySelectorAll('.content-wrapper table').forEach(function (t) {
+                            if (t.closest('.no-cartes, [class*="invoice"], .modal') || t.classList.contains('no-cartes')) return;
+                            var entetes = [];
+                            var ligneEntete = t.tHead && t.tHead.rows[t.tHead.rows.length - 1];
+                            if (!ligneEntete) return;
+                            Array.prototype.forEach.call(ligneEntete.cells, function (th) {
+                                var texte = (th.textContent || '').replace(/\s+/g, ' ').trim();
+                                for (var k = 0; k < (th.colSpan || 1); k++) entetes.push(texte);
+                            });
+                            t.classList.add('stcd-tableau-adaptatif');
+                            Array.prototype.forEach.call(t.tBodies, function (corps) {
+                                Array.prototype.forEach.call(corps.rows, function (tr) {
+                                    var col = 0;
+                                    Array.prototype.forEach.call(tr.cells, function (td) {
+                                        if ((td.colSpan || 1) >= entetes.length) { td.classList.add('stcd-cellule-pleine'); }
+                                        else if (!td.hasAttribute('data-label')) { td.setAttribute('data-label', entetes[col] || ''); }
+                                        col += td.colSpan || 1;
+                                    });
+                                });
+                            });
+
+                            // Grille de petites cartes (tablette portrait / téléphone) :
+                            // seulement pour les listes qui ont une page « voir ».
+                            // Carte = titre (1re colonne), sous-titre (2e), 2-3 infos
+                            // clés (statut, disponibilité…), actions et « Voir plus ».
+                            var lignes = Array.prototype.filter.call(t.tBodies.length ? t.tBodies[0].rows : [], function (tr) {
+                                return !tr.querySelector('.stcd-cellule-pleine');
+                            });
+                            var lienVoir = function (tr) {
+                                var derniere = tr.cells[tr.cells.length - 1];
+                                var liens = derniere ? derniere.querySelectorAll('a[href]') : [];
+                                for (var i = 0; i < liens.length; i++) {
+                                    var h = liens[i].getAttribute('href') || '';
+                                    if (h && h.charAt(0) !== '#' && h.indexOf('javascript') !== 0 && !/\/edit(\/|$|\?)|pdf|imprimer|download|print/i.test(h)) return h;
+                                }
+                                return null;
+                            };
+                            var avecVoir = lignes.filter(lienVoir);
+                            if (lignes.length && avecVoir.length >= lignes.length / 2) {
+                                t.classList.add('stcd-grille');
+                                // infos clés par ordre de priorité
+                                var priorites = [/statut|status/i, /r[oô]le/i, /^actif|activ/i, /disponib/i, /prix vente|total|montant/i, /date|reçu le/i, /^type/i, /client|fournisseur/i, /t[ée]l[ée]phone/i];
+                                // 1re colonne = simple numéro (#, N°, ID) : le titre prend la suivante
+                                var debut = /^(#|n°|no|id|)$/i.test((entetes[0] || '').trim()) ? 1 : 0;
+                                lignes.forEach(function (tr) {
+                                    var cells = tr.cells;
+                                    if (!cells.length) return;
+                                    if (cells.length <= debut + 1) return;
+                                    cells[debut].classList.add('stcd-c-titre');
+                                    if (cells.length > debut + 2) cells[debut + 1].classList.add('stcd-c-sous');
+                                    cells[cells.length - 1].classList.add('stcd-c-actions');
+                                    var n = 0;
+                                    priorites.forEach(function (motif) {
+                                        for (var i = debut + 2; i < cells.length - 1 && n < 3; i++) {
+                                            var c = cells[i];
+                                            if (!c.classList.contains('stcd-c-cle') && motif.test(c.getAttribute('data-label') || '')) {
+                                                c.classList.add('stcd-c-cle');
+                                                n++;
+                                                break;
+                                            }
+                                        }
+                                    });
+                                    // contenu des cellules regroupé dans un seul bloc : les
+                                    // éléments s'empilent au lieu de se serrer côte à côte
+                                    Array.prototype.forEach.call(cells, function (c) {
+                                        if (c.classList.contains('stcd-c-actions') || c.querySelector(':scope > .stcd-valeur')) return;
+                                        if (!(c.classList.contains('stcd-c-titre') || c.classList.contains('stcd-c-sous') || c.classList.contains('stcd-c-cle'))) return;
+                                        var bloc = document.createElement('span');
+                                        bloc.className = 'stcd-valeur';
+                                        while (c.firstChild) bloc.appendChild(c.firstChild);
+                                        c.appendChild(bloc);
+                                    });
+                                    var url = lienVoir(tr);
+                                    if (url && !tr.querySelector('.stcd-voir-plus')) {
+                                        var td = document.createElement('td');
+                                        td.className = 'stcd-voir-plus';
+                                        var a = document.createElement('a');
+                                        a.href = url;
+                                        a.innerHTML = 'Voir plus <span aria-hidden="true">→</span>';
+                                        td.appendChild(a);
+                                        tr.appendChild(td);
+                                    }
+                                });
+                            }
+                        });
                     }
                     finally { document.documentElement.classList.remove('stcd-prep'); }
                 </script>
@@ -982,6 +1100,21 @@
 {{-- ============================================================= --}}
 
 @include('sections.session-timeout')
+
+@include('sections.animations')
+
+{{-- Bouton rond « haut de page » (design Wholesale) --}}
+<button type="button" class="stcd-ws-haut" id="stcd-ws-haut" title="Haut de page" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })">
+    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19V5m-7 7l7-7 7 7"/></svg>
+</button>
+<script>
+    (function () {
+        var b = document.getElementById('stcd-ws-haut');
+        var maj = function () { b.classList.toggle('visible', window.scrollY > 300); };
+        window.addEventListener('scroll', maj, { passive: true });
+        maj();
+    })();
+</script>
 
 @include('sections.scripts')
 

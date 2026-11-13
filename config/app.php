@@ -19,6 +19,13 @@ return [
   'name' => env('APP_NAME', 'Laravel'),
 
   /*
+  | Version du Magasin, affichée en bas du menu : lue dans le fichier VERSION
+  | à la racine du projet. 6.0 = vague V6 ; 6.1, 6.2… à chaque mise à jour
+  | de la vague ; 7.0 à la vague suivante.
+  */
+  'version' => is_file(base_path('VERSION')) ? trim((string) file_get_contents(base_path('VERSION'))) : '—',
+
+  /*
     |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------

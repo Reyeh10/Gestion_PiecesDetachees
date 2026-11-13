@@ -19,6 +19,24 @@ class StockMovementController extends Controller
     | La recherche "reference" concerne maintenant la référence PRODUIT.
     |
     */
+    /* Nombre de mouvements par page (10, 25, 50 ou 100), mémorisé pour la session. */
+    public const PAR_PAGE = [10, 25, 50, 100];
+
+    private function mouvementsParPage(Request $request): int
+    {
+        $demande = (int) $request->query('par_page');
+
+        if (in_array($demande, self::PAR_PAGE, true)) {
+            session(['mouvements_par_page' => $demande]);
+
+            return $demande;
+        }
+
+        $memorise = (int) session('mouvements_par_page', 25);
+
+        return in_array($memorise, self::PAR_PAGE, true) ? $memorise : 25;
+    }
+
     public function index(Request $request): View
     {
         $query = $this->baseQuery();
@@ -31,12 +49,10 @@ class StockMovementController extends Controller
         if ($request->filled('reference')) {
             $reference = trim((string) $request->input('reference'));
 
-            $query->whereHas('product', function (Builder $productQuery) use ($reference) {
-                $productQuery->where(
-                    'reference',
-                    'like',
-                    '%' . $reference . '%'
-                );
+            $query->where(function (Builder $q) use ($reference) {
+                // référence de la pièce, ou n° du document (BT, facture, ajustement…)
+                $q->where('reference', 'like', '%' . $reference . '%')
+                    ->orWhereHas('product', fn (Builder $p) => $p->where('reference', 'like', '%' . $reference . '%'));
             });
         }
 
@@ -48,12 +64,10 @@ class StockMovementController extends Controller
         if ($request->filled('designation')) {
             $designation = trim((string) $request->input('designation'));
 
-            $query->whereHas('product', function (Builder $productQuery) use ($designation) {
-                $productQuery->where(
-                    'designation',
-                    'like',
-                    '%' . $designation . '%'
-                );
+            $query->where(function (Builder $q) use ($designation) {
+                // désignation de la pièce, ou origine du mouvement (« Transfert garage »…)
+                $q->where('source', 'like', '%' . $designation . '%')
+                    ->orWhereHas('product', fn (Builder $p) => $p->where('designation', 'like', '%' . $designation . '%'));
             });
         }
 
@@ -159,7 +173,8 @@ class StockMovementController extends Controller
         $movements = $query
             ->orderByDesc('created_at')
             ->orderByDesc('id')
-            ->get();
+            ->paginate($this->mouvementsParPage($request))
+            ->withQueryString();
 
         return view(
             'stock_movements.index',
@@ -284,7 +299,8 @@ class StockMovementController extends Controller
         $movements = $query
             ->orderByDesc('created_at')
             ->orderByDesc('id')
-            ->get();
+            ->paginate($this->mouvementsParPage($request))
+            ->withQueryString();
 
         return view(
             'stock_movements.index',
@@ -310,7 +326,8 @@ class StockMovementController extends Controller
         $movements = $query
             ->orderByDesc('created_at')
             ->orderByDesc('id')
-            ->get();
+            ->paginate($this->mouvementsParPage($request))
+            ->withQueryString();
 
         return view(
             'stock_movements.index',
@@ -373,16 +390,11 @@ class StockMovementController extends Controller
         if ($request->filled('reference')) {
             $reference = trim((string) $request->input('reference'));
 
-            $query->whereHas(
-                'product',
-                function (Builder $productQuery) use ($reference) {
-                    $productQuery->where(
-                        'reference',
-                        'like',
-                        '%' . $reference . '%'
-                    );
-                }
-            );
+            $query->where(function (Builder $q) use ($reference) {
+                // référence de la pièce, ou n° du document (BT, facture, ajustement…)
+                $q->where('reference', 'like', '%' . $reference . '%')
+                    ->orWhereHas('product', fn (Builder $p) => $p->where('reference', 'like', '%' . $reference . '%'));
+            });
         }
 
         /*
@@ -393,16 +405,11 @@ class StockMovementController extends Controller
         if ($request->filled('designation')) {
             $designation = trim((string) $request->input('designation'));
 
-            $query->whereHas(
-                'product',
-                function (Builder $productQuery) use ($designation) {
-                    $productQuery->where(
-                        'designation',
-                        'like',
-                        '%' . $designation . '%'
-                    );
-                }
-            );
+            $query->where(function (Builder $q) use ($designation) {
+                // désignation de la pièce, ou origine du mouvement (« Transfert garage »…)
+                $q->where('source', 'like', '%' . $designation . '%')
+                    ->orWhereHas('product', fn (Builder $p) => $p->where('designation', 'like', '%' . $designation . '%'));
+            });
         }
 
         /*

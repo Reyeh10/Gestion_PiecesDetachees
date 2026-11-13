@@ -15,7 +15,7 @@
 
     $canEditSupplier = $user && $user->hasPermission('modifier_fournisseurs');
 
-    $canDeleteSupplier = $user && $user->hasPermission('supprimer_referentiels');
+    $canDeleteSupplier = $user && $user->hasPermission('supprimer_fournisseurs');
 @endphp
 
 
