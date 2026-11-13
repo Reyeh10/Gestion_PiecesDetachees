@@ -17,6 +17,9 @@ class SupplierOrderSignature extends Model
 
     public const TYPE_APPROVED = 'approved';
 
+    /** V7 — signature du chef magasinier (validation avant l'admin). */
+    public const TYPE_VALIDATED = 'validated';
+
 
     /*
     |--------------------------------------------------------------------------

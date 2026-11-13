@@ -13,10 +13,13 @@ class SupplierOrder extends Model
 
     protected $fillable = [
         'order_number',
+        'demande_id',
         'supplier_id',
         'depot_id',
         'created_by',
         'approved_by',
+        'validated_by',
+        'validated_at',
         'rejected_by',
         'order_date',
         'expected_delivery_date',
@@ -24,6 +27,8 @@ class SupplierOrder extends Model
         'rejected_at',
         'rejection_reason',
         'sent_at',
+        'closed_by',
+        'closed_at',
         'status',
         'currency',
 
@@ -50,6 +55,8 @@ class SupplierOrder extends Model
         'approved_at' => 'datetime',
         'rejected_at' => 'datetime',
         'sent_at' => 'datetime',
+        'validated_at' => 'datetime',
+        'closed_at' => 'datetime',
 
         'subtotal' => 'decimal:2',
 
@@ -83,6 +90,80 @@ class SupplierOrder extends Model
     public const STATUS_RECEIVED = 'received';
 
     public const STATUS_CANCELLED = 'cancelled';
+
+    /*
+    | V7 — circuit des signatures :
+    | brouillon (enregistré par le vendeur / magasinier, « À valider »)
+    | → validé (signé par le chef magasinier, « À approuver »)
+    | → approuvé (signé par l'admin) → envoyé → reçu partiel → reçu.
+    | Soldé : le fournisseur ne livrera pas le reste.
+    */
+    public const STATUS_VALIDATED = 'validated';
+
+    public const STATUS_CLOSED = 'closed';
+
+    /** Statuts où le BC ne retient plus ses pièces (elles peuvent aller sur un autre BC). */
+    public const STATUTS_INACTIFS = [
+        self::STATUS_CANCELLED,
+        self::STATUS_CLOSED,
+    ];
+
+    /** Statuts où l'on peut réceptionner. */
+    public const STATUTS_RECEPTION = [
+        self::STATUS_SENT,
+        self::STATUS_PARTIAL_RECEIVED,
+    ];
+
+    public static function statuts(): array
+    {
+        return [
+            self::STATUS_DRAFT            => 'À valider (chef magasinier)',
+            self::STATUS_VALIDATED        => 'À approuver (admin)',
+            self::STATUS_APPROVED         => 'Approuvé',
+            self::STATUS_REJECTED         => 'Rejeté',
+            self::STATUS_SENT             => 'Envoyé',
+            self::STATUS_PARTIAL_RECEIVED => 'Réception partielle',
+            self::STATUS_RECEIVED         => 'Reçu',
+            self::STATUS_CLOSED           => 'Soldé',
+            self::STATUS_CANCELLED        => 'Annulé',
+        ];
+    }
+
+    public function libelleStatut(): string
+    {
+        return self::statuts()[$this->status] ?? $this->status;
+    }
+
+    /** Couleur Bootstrap du badge de statut. */
+    public function couleurStatut(): string
+    {
+        return match ($this->status) {
+            self::STATUS_DRAFT            => 'warning',
+            self::STATUS_VALIDATED        => 'info',
+            self::STATUS_APPROVED         => 'primary',
+            self::STATUS_SENT             => 'primary',
+            self::STATUS_PARTIAL_RECEIVED => 'info',
+            self::STATUS_RECEIVED         => 'success',
+            self::STATUS_REJECTED         => 'danger',
+            self::STATUS_CLOSED           => 'dark',
+            default                       => 'secondary',
+        };
+    }
+
+    /** Envoyé (ou reçu en partie) et la date de livraison prévue est passée. */
+    public function estEnRetard(): bool
+    {
+        return in_array($this->status, self::STATUTS_RECEPTION, true)
+            && $this->expected_delivery_date
+            && $this->expected_delivery_date->lt(today());
+    }
+
+    /** En attente de signature depuis plus de N jours (config magasin.relance_bc_jours). */
+    public function estARelancer(): bool
+    {
+        return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_VALIDATED], true)
+            && ($this->validated_at ?? $this->created_at)?->lt(now()->subDays((int) config('magasin.relance_bc_jours', 3)));
+    }
 
 
     /*
@@ -126,6 +207,21 @@ class SupplierOrder extends Model
     | le bon de commande.
     |
     */
+
+    public function validator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'validated_by');
+    }
+
+    public function closer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'closed_by');
+    }
+
+    public function demande(): BelongsTo
+    {
+        return $this->belongsTo(Demande::class);
+    }
 
     public function rejector(): BelongsTo
     {
@@ -187,6 +283,16 @@ class SupplierOrder extends Model
     | SIGNATURE DE L'APPROBATEUR
     |--------------------------------------------------------------------------
     */
+
+    public function validatedSignature()
+    {
+        return $this->hasOne(
+            SupplierOrderSignature::class
+        )->where(
+            'type',
+            SupplierOrderSignature::TYPE_VALIDATED
+        );
+    }
 
     public function approvedSignature()
     {

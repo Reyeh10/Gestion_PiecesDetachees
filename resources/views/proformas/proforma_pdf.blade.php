@@ -1,841 +1,233 @@
+{{-- V6 : même présentation que la facture (sales/invoice_pdf), sans les
+     paiements ; $sale est ici le proforma (ProformaController::download). --}}
 <!DOCTYPE html>
-<html lang="fr">
+<html>
 
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
 
-    <title>
-        Proforma {{ $proforma->proforma_number }}
-    </title>
+    <title>Proforma {{ $sale->proforma_number }}</title>
 
     <style>
-        @page {
-            margin: 20px;
+
+        @page{
+            margin:20px;
+            size:auto;
         }
 
-        body {
+        body{
             font-family: DejaVu Sans, sans-serif;
-            font-size: 11px;
-            color: #2c3e50;
-            margin: 0;
+            font-size:13px;
+            color:#000;
+            background:#fff;
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
+        *{
+            box-sizing:border-box;
         }
 
-        table th,
-        table td {
-            border: 1px solid #d9dee3;
-            padding: 7px;
-            vertical-align: middle;
+        table{
+            width:100%;
+            border-collapse:collapse;
         }
 
-        .no-border,
-        .no-border td,
-        .no-border th {
-            border: none !important;
+        td{
+            border:1px solid #000;
+            padding:6px;
+            vertical-align:top;
         }
 
-        .text-end {
-            text-align: right;
+        th{
+            background:#d9d9d9;
+            border:1px solid #000;
+            padding:8px;
+            font-size:12px;
+            text-transform:uppercase;
         }
 
-        .text-center {
-            text-align: center;
+        .no-border td{
+            border:none !important;
         }
 
-        .fw-bold {
-            font-weight: bold;
+        .invoice-box{
+            border:2px solid #000;
+            padding:12px;
+            min-height:auto;
         }
 
-        .header-table {
-            margin-bottom: 22px;
+        .invoice-title{
+            background:#d9d9d9;
+            padding:8px;
+            margin:-12px -12px 10px -12px;
+            border-bottom:2px solid #000;
+            font-weight:700;
         }
 
-        .company-name {
-            margin: 0;
-            font-size: 25px;
-            font-weight: 800;
-            color: #1f3a93;
+        .text-center{
+            text-align:center;
         }
 
-        .company-info {
-            margin-top: 8px;
-            line-height: 1.7;
-            color: #566a7f;
+        .text-end{
+            text-align:right;
         }
 
-        .title {
-            font-size: 40px;
-            font-weight: 800;
-            color: #1f3a93;
-            margin: 0;
+        .text-primary{
+            color:#1f3c88;
         }
 
-        .proforma-info {
-            margin-top: 12px;
-            line-height: 1.8;
+        .text-danger{
+            color:#dc3545;
         }
 
-        .section-title {
-            background: #eef1ff;
-            color: #344054;
-            padding: 8px;
-            font-weight: bold;
-            border: 1px solid #d9dee3;
+        .text-success{
+            color:#28a745;
         }
 
-        .box {
-            border: 1px solid #d9dee3;
-            padding: 12px;
-            min-height: 105px;
-            line-height: 1.7;
+        .fw-bold{
+            font-weight:700;
         }
 
-        .products-table {
-            margin-top: 10px;
+        .mt-4{
+            margin-top:20px;
         }
 
-        .products-table thead th {
-            background: #f4f6f8;
-            color: #566a7f;
-            font-size: 10px;
-            text-transform: uppercase;
+        .mt-5{
+            margin-top:25px;
         }
 
-        .products-table tbody td {
-            font-size: 10px;
+        .mb-3{
+            margin-bottom:10px;
         }
 
-        .depot-name {
-            font-weight: bold;
-            color: #566a7f;
+        .mb-5{
+            margin-bottom:25px;
         }
 
-        .unit-label {
-            color: #8592a3;
-            font-size: 9px;
+        .total-box td{
+            border-top:3px solid #000 !important;
+            font-size:24px;
+            font-weight:700;
         }
 
-        .total-box {
-            width: 340px;
-            margin-left: auto;
-            margin-top: 20px;
+        .small-line{
+            line-height:1.2;
+            margin:0;
         }
 
-        .total-box td {
-            padding: 7px 5px;
-        }
-
-        .grand-total-row {
-            border-top: 2px solid #696cff;
-        }
-
-        .footer-total {
-            font-size: 22px;
-            font-weight: 800;
-            color: #696cff;
-        }
-
-        .note {
-            margin-top: 25px;
-            padding: 10px 12px;
-            border: 1px solid #d9dee3;
-            background: #f8f9fa;
-            color: #566a7f;
-            font-size: 10px;
-            line-height: 1.6;
-        }
-
-        .status {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 10px;
-            background: #eef1ff;
-            color: #696cff;
-            font-weight: bold;
-        }
     </style>
+
 </head>
 
 <body>
 
-{{-- ============================================================
-     EN-TÊTE
-============================================================ --}}
-<table class="no-border header-table">
-    <tr>
+<div style="width:100%; max-width:1000px; margin:auto;">
 
-        {{-- LOGO --}}
-        <td
-            style="
-                width: 130px;
-                vertical-align: top;
-            "
-        >
-            @php
-                $logoPath = public_path(
-                    'assets/img/logo/stcd.jpg'
-                );
-            @endphp
+    {{-- HEADER --}}
+    <table class="no-border mb-5" style="width:100%; border-collapse:collapse;">
 
-            @if(file_exists($logoPath))
-                <img
-                    src="{{ $logoPath }}"
-                    style="width: 110px;"
-                    alt="STCD Motors"
-                >
-            @endif
-        </td>
+        <tr>
 
-        {{-- SOCIÉTÉ --}}
-        <td
-            style="
-                vertical-align: top;
-            "
-        >
-            <h1 class="company-name">
-                STCD MOTORS
-            </h1>
+            {{-- LEFT --}}
+            <td style="
+                width:65%;
+                border:none !important;
+                vertical-align:middle;
+                padding:0 !important;
+            ">
 
-            <div class="company-info">
-                Djibouti
-            </div>
-        </td>
-
-        {{-- PROFORMA --}}
-        <td
-            style="
-                width: 300px;
-                text-align: right;
-                vertical-align: top;
-            "
-        >
-            <div class="title">
-                PROFORMA
-            </div>
-
-            <div class="proforma-info">
-
-                <strong>
-                    N° Proforma :
-                </strong>
-
-                {{ $proforma->proforma_number }}
-
-                <br>
-
-                <strong>
-                    Date :
-                </strong>
-
-                {{
-                    optional($proforma->created_at)
-                        ->format('d/m/Y')
-                }}
-
-                <br>
-
-                <strong>
-                    Statut :
-                </strong>
-
-                <span class="status">
-                    {{ $proforma->status ?? 'Validé' }}
-                </span>
-
-            </div>
-        </td>
-
-    </tr>
-</table>
-
-
-{{-- ============================================================
-     CLIENT + DÉTAILS DU PROFORMA
-============================================================ --}}
-<table
-    class="no-border"
-    style="margin-bottom: 22px;"
->
-    <tr>
-
-        {{-- CLIENT --}}
-        <td
-            style="
-                width: 48%;
-                vertical-align: top;
-            "
-        >
-            <div class="section-title">
-                Client
-            </div>
-
-            <div class="box">
-
-                <strong>
-                    {{
-                        optional($proforma->customer)->name
-                        ?? 'Client non renseigné'
-                    }}
-                </strong>
-
-                <br><br>
-
-                Téléphone :
-
-                {{
-                    optional($proforma->customer)->phone
-                    ?? '-'
-                }}
-
-                <br>
-
-                Email :
-
-                {{
-                    optional($proforma->customer)->email
-                    ?? '-'
-                }}
-
-                <br>
-
-                Adresse :
-
-                {{
-                    optional($proforma->customer)->address
-                    ?? '-'
-                }}
-
-            </div>
-        </td>
-
-        <td style="width: 4%;"></td>
-
-        {{-- DÉTAILS --}}
-        <td
-            style="
-                width: 48%;
-                vertical-align: top;
-            "
-        >
-            <div class="section-title">
-                Détails du proforma
-            </div>
-
-            <div class="box">
-
-                <table class="no-border">
+                <table class="no-border" style="
+                    width:100%;
+                    border-collapse:collapse;
+                ">
 
                     <tr>
-                        <td class="fw-bold">
-                            Proforma :
+
+                        {{-- LOGO --}}
+                        <td style="
+                            width:170px;
+                            border:none !important;
+                            vertical-align:middle;
+                            padding:0 15px 0 0 !important;
+                        ">
+
+                            <img src="{{ public_path('assets/img/logo/stcd.jpg') }}"
+                                 alt="Logo"
+                                 style="
+                                    width:150px;
+                                    display:block;
+                                 ">
+
                         </td>
 
-                        <td>
-                            {{ $proforma->proforma_number }}
-                        </td>
-                    </tr>
+                        {{-- COMPANY --}}
+                        <td style="
+                            border:none !important;
+                            vertical-align:middle;
+                            padding:0 !important;
+                        ">
 
-                    <tr>
-                        <td class="fw-bold">
-                            Date :
-                        </td>
+                            <h1 style="
+                                font-size:28px;
+                                font-weight:800;
+                                margin:0 0 6px 0;
+                                line-height:1.1;
+                            ">
+                                STCD MOTORS
+                            </h1>
 
-                        <td>
-                            {{
-                                optional($proforma->created_at)
-                                    ->format('d/m/Y')
-                            }}
-                        </td>
-                    </tr>
+                            <div style="margin:0; line-height:1.25;">
+                                    1667 Guelleh-Batal, Djibouti-ville
+                                </div>
 
-                    <tr>
-                        <td class="fw-bold">
-                            Statut :
-                        </td>
+                                <div style="margin:0; line-height:1.25;">
+                                    Téléphone : +253 77 22 93 33
+                                </div>
 
-                        <td>
-                            {{ $proforma->status ?? 'Validé' }}
-                        </td>
-                    </tr>
+                                <div style="margin:0; line-height:1.25;">
+                                    Fax : +253 21 35 30 09
+                                </div>
 
-                    <tr>
-                        <td class="fw-bold">
-                            Paiement :
-                        </td>
+                                <div style="margin:0; line-height:1.25;">
+                                    Email : spareparts@stcd.dj
+                                </div>
 
-                        <td>
-                            {{
-                                !empty($proforma->payment_type)
-                                    ? ucfirst(
-                                        $proforma->payment_type
-                                    )
-                                    : '-'
-                            }}
-                        </td>
-                    </tr>
 
-                    <tr>
-                        <td class="fw-bold">
-                            Immatriculation :
                         </td>
 
-                        <td>
-                            {{
-                                optional($proforma->vehicle)
-                                    ->registration_number
-                                ??
-                                optional($proforma->vehicle)
-                                    ->immatriculation
-                                ??
-                                '-'
-                            }}
-                        </td>
                     </tr>
 
                 </table>
 
-            </div>
-        </td>
-
-    </tr>
-</table>
-
-
-{{-- ============================================================
-     PRODUITS
-============================================================ --}}
-<table class="products-table">
-
-    <thead>
-
-        <tr>
-
-            <th
-                style="
-                    width: 28px;
-                "
-                class="text-center"
-            >
-                #
-            </th>
-
-            <th>
-                Référence
-            </th>
-
-            <th>
-                Désignation
-            </th>
-
-            <th>
-                Dépôt
-            </th>
-
-            <th
-                style="width: 70px;"
-                class="text-end"
-            >
-                Quantité
-            </th>
-
-            <th
-                style="width: 90px;"
-                class="text-end"
-            >
-                Prix unitaire
-            </th>
-
-            <th
-                style="width: 95px;"
-                class="text-end"
-            >
-                Total
-            </th>
-
-        </tr>
-
-    </thead>
-
-    <tbody>
-
-        @forelse($proforma->items as $item)
-
-            @php
-                /*
-                |--------------------------------------------------------------------------
-                | INFORMATIONS À AFFICHER POUR LA LIGNE
-                |--------------------------------------------------------------------------
-                |
-                | Le PDF gère :
-                |
-                | 1. les produits du catalogue ;
-                | 2. les produits hors catalogue ;
-                | 3. les anciens produits réellement supprimés.
-                |
-                */
-
-                $isCustomProduct =
-                    is_null($item->product_id)
-                    && filled($item->designation_libre);
-
-                $unitLabel =
-                    optional($item->product)->unit_label
-                    ?? 'Pièce';
-
-                if ($item->product) {
-
-                    $displayReference =
-                        $item->product->reference
-                        ?? '-';
-
-                    $displayDesignation =
-                        $item->product->designation
-                        ?? '-';
-
-                } elseif ($isCustomProduct) {
-
-                    $displayReference =
-                        $item->reference_libre
-                        ?: '-';
-
-                    $displayDesignation =
-                        $item->designation_libre;
-
-                } else {
-
-                    $displayReference =
-                        '-';
-
-                    $displayDesignation =
-                        'Produit supprimé';
-                }
-
-                $lineTotal =
-                    (float) $item->quantity
-                    *
-                    (float) $item->price;
-            @endphp
-
-            <tr>
-
-                <td class="text-center">
-                    {{ $loop->iteration }}
-                </td>
-
-                <td>
-                    {{ $displayReference }}
-                </td>
-
-                <td>
-
-                    {{ $displayDesignation }}
-
-                    @if($isCustomProduct)
-
-                        <br>
-
-                        <span class="unit-label">
-                            Hors catalogue
-                        </span>
-
-                        @if(filled($item->description_libre))
-
-                            <br>
-
-                            <span class="unit-label">
-                                {{ $item->description_libre }}
-                            </span>
-
-                        @endif
-
-                    @endif
-
-                    <br>
-
-                    <span class="unit-label">
-                        Unité :
-                        {{ $unitLabel }}
-                    </span>
-
-                </td>
-
-                <td>
-
-                    @if($item->depot)
-
-                        <span class="depot-name">
-                            {{ $item->depot->name }}
-                        </span>
-
-                        @if(!empty($item->depot->code))
-
-                            <br>
-
-                            <span class="unit-label">
-                                {{ $item->depot->code }}
-                            </span>
-
-                        @endif
-
-                    @else
-
-                        <span class="unit-label">
-                            Non renseigné
-                        </span>
-
-                    @endif
-
-                </td>
-
-                <td class="text-end">
-
-                    {{
-                        number_format(
-                            (float) $item->quantity,
-                            2,
-                            ',',
-                            ' '
-                        )
-                    }}
-
-                    <br>
-
-                    <span class="unit-label">
-                        {{ $unitLabel }}
-                    </span>
-
-                </td>
-
-                <td class="text-end">
-
-                    {{
-                        number_format(
-                            (float) $item->price,
-                            2,
-                            ',',
-                            ' '
-                        )
-                    }}
-
-                    FDJ
-
-                </td>
-
-                <td class="text-end fw-bold">
-
-                    {{
-                        number_format(
-                            $lineTotal,
-                            2,
-                            ',',
-                            ' '
-                        )
-                    }}
-
-                    FDJ
-
-                </td>
-
-            </tr>
-
-        @empty
-
-            <tr>
-
-                <td
-                    colspan="7"
-                    class="text-center"
-                >
-                    Aucun produit dans ce proforma.
-                </td>
-
-            </tr>
-
-        @endforelse
-
-    </tbody>
-
-</table>
-
-
-{{-- ============================================================
-     TOTAUX
-============================================================ --}}
-@php
-    $subtotal =
-        (float) (
-            $proforma->subtotal
-            ?? $proforma->items->sum(
-                function ($item) {
-                    return
-                        (float) $item->quantity
-                        *
-                        (float) $item->price;
-                }
-            )
-        );
-
-    $discountRate =
-        max(
-            0,
-            min(
-                100,
-                (float) ($proforma->discount ?? 0)
-            )
-        );
-
-    $discountAmount =
-        (float) ($proforma->discount_amount ?? 0);
-
-    if (
-        $discountAmount <= 0
-        &&
-        $discountRate > 0
-    ) {
-        $discountAmount =
-            round(
-                $subtotal
-                *
-                $discountRate
-                /
-                100,
-                2
-            );
-    }
-
-    $taxableAmount =
-        max(
-            0,
-            $subtotal - $discountAmount
-        );
-
-    $tva =
-        (float) ($proforma->tva ?? 0);
-
-    if ($tva <= 0) {
-        $tva =
-            round(
-                $taxableAmount * 0.10,
-                2
-            );
-    }
-
-    $total =
-        (float) ($proforma->total ?? 0);
-
-    if ($total <= 0) {
-        $total =
-            round(
-                $taxableAmount + $tva,
-                2
-            );
-    }
-@endphp
-
-
-<div class="total-box">
-
-    <table class="no-border">
-
-        <tr>
-
-            <td class="fw-bold">
-                Sous-total :
             </td>
 
-            <td class="text-end">
+            {{-- RIGHT --}}
+            <td style="
+                width:35%;
+                border:none !important;
+                text-align:right;
+                vertical-align:middle;
+                padding:0 !important;
+            ">
 
-                {{
-                    number_format(
-                        $subtotal,
-                        2,
-                        ',',
-                        ' '
-                    )
-                }}
+                <h1 style="
+                    font-size:38px;
+                    font-weight:900;
+                    margin:0 0 10px 0;
+                    color:#1f3c88;
+                    letter-spacing:1px;
+                ">
+                    PROFORMA
+                </h1>
 
-                FDJ
+                <div class="small-line">
+                    <strong>N° Proforma :</strong>
+                    {{ $sale->proforma_number }}
+                </div>
 
-            </td>
-
-        </tr>
-
-        <tr>
-
-            <td class="fw-bold">
-                Remise ({{ number_format($discountRate, 2, ',', ' ') }} %) :
-            </td>
-
-            <td
-                class="text-end"
-                style="color: #dc3545;"
-            >
-
-                -
-
-                {{
-                    number_format(
-                        $discountAmount,
-                        2,
-                        ',',
-                        ' '
-                    )
-                }}
-
-                FDJ
-
-            </td>
-
-        </tr>
-
-        <tr>
-
-            <td class="fw-bold">
-                TVA (10 %) :
-            </td>
-
-            <td class="text-end">
-
-                {{
-                    number_format(
-                        $tva,
-                        2,
-                        ',',
-                        ' '
-                    )
-                }}
-
-                FDJ
-
-            </td>
-
-        </tr>
-
-        <tr class="grand-total-row">
-
-            <td
-                class="fw-bold"
-                style="font-size: 16px;"
-            >
-                TOTAL :
-            </td>
-
-            <td class="text-end footer-total">
-
-                {{
-                    number_format(
-                        $total,
-                        2,
-                        ',',
-                        ' '
-                    )
-                }}
-
-                FDJ
+                <div class="small-line">
+                    <strong>Date :</strong>
+                    {{ $sale->created_at->format('d/m/Y') }}
+                </div>
 
             </td>
 
@@ -843,27 +235,388 @@
 
     </table>
 
-</div>
+    {{-- CLIENT + DETAILS --}}
+    <table class="no-border mb-5">
 
+        <tr>
 
-{{-- ============================================================
-     NOTE
-============================================================ --}}
-<div class="note">
+            {{-- CLIENT --}}
+            <td style="
+                width:48%;
+                border:none;
+                vertical-align:top;
+            ">
 
-    <strong>Important :</strong>
+                <div class="invoice-box">
 
-    Ce document est un proforma et ne constitue pas encore
-    une vente définitive.
+                    <div class="invoice-title">
+                        Invoice To
+                    </div>
 
-    <br>
+                    <div style="
+                        font-size:20px;
+                        font-weight:700;
+                        margin-bottom:10px;
+                    ">
+                        {{ $sale->customer->name ?? 'Vente comptoir' }}
+                    </div>
 
-    La création du proforma ne diminue pas le stock.
-    Le stock sera prélevé dans le dépôt sélectionné
-    uniquement lors de la conversion du proforma en vente.
+                    <div style="line-height:1.5;">
+                        <strong>Téléphone :</strong>
+                        {{ $sale->customer->phone ?? '-' }}
+                    </div>
+
+                    <div style="line-height:1.5;">
+                        <strong>Email :</strong>
+                        {{ $sale->customer->email ?? '-' }}
+                    </div>
+
+                    <!--div style="line-height:1.5;">
+                        <strong>Adresse :</strong>
+                        { { $sale->customer->address ?? '-' }}
+                    </div-->
+
+                </div>
+
+            </td>
+
+            <td style="
+                width:4%;
+                border:none;
+            "></td>
+
+            {{-- DETAILS --}}
+            <td style="
+                width:48%;
+                border:none;
+                vertical-align:top;
+            ">
+
+                <div class="invoice-box">
+
+                    <div class="invoice-title">
+                        Invoice Details
+                    </div>
+
+                    <table class="no-border" style="
+                        width:100%;
+                        border-collapse:collapse;
+                    ">
+
+                        <tr>
+
+                            <td style="
+                                border:none;
+                                padding:2px 0;
+                                width:40%;
+                            ">
+                                <strong>Proforma</strong>
+                            </td>
+
+                            <td style="
+                                border:none;
+                                padding:2px 0;
+                            ">
+                                {{ $sale->proforma_number }}
+                            </td>
+
+                        </tr>
+
+                        <tr>
+
+                            <td style="
+                                border:none;
+                                padding:2px 0;
+                            ">
+                                <strong>Date</strong>
+                            </td>
+
+                            <td style="
+                                border:none;
+                                padding:2px 0;
+                            ">
+                                {{ $sale->created_at->format('d/m/Y') }}
+                            </td>
+
+                        </tr>
+
+                        <tr>
+
+                            <td style="
+                                border:none;
+                                padding:2px 0;
+                            ">
+                                <strong>Status</strong>
+                            </td>
+
+                            <td style="
+                                border:none;
+                                padding:2px 0;
+                            ">
+                                {{ ucfirst($sale->status) }}
+                            </td>
+
+                        </tr>
+
+                        <tr>
+
+                            <td style="
+                                border:none;
+                                padding:2px 0;
+                            ">
+                                <strong>Paiement</strong>
+                            </td>
+
+                            <td style="
+                                border:none;
+                                padding:2px 0;
+                            ">
+                                {{ $sale->payment_type ? ucfirst($sale->payment_type) : '-' }}
+                            </td>
+
+                        </tr>
+
+                    </table>
+
+                </div>
+
+            </td>
+
+        </tr>
+
+    </table>
+
+    {{-- PRODUITS --}}
+    <table>
+
+        <thead>
+
+            <tr>
+
+                <th class="text-center">
+                    #
+                </th>
+
+                <th class="text-center">
+                    Référence
+                </th>
+
+                <th>
+                    Désignation
+                </th>
+
+                <!--th class="text-center">
+                    Immatriculation
+                </th-->
+
+                <th class="text-center">
+                    Quantité
+                </th>
+
+                <th class="text-end">
+                    Prix Unitaire
+                </th>
+
+                <th class="text-end">
+                    TVA
+                </th>
+
+                <th class="text-end">
+                    Total
+                </th>
+
+            </tr>
+
+        </thead>
+
+        <tbody>
+
+            @foreach($sale->items as $index => $item)
+
+                @php
+                    $lineTotal =
+                        $item->quantity
+                        *
+                        $item->price;
+
+                    /*
+                    |--------------------------------------------------------------
+                    | AFFICHAGE PRODUIT
+                    |--------------------------------------------------------------
+                    */
+
+                    $isCustomProduct =
+                        empty($item->product_id)
+                        && filled($item->designation_libre);
+
+                    $reference =
+                        $isCustomProduct
+                            ? (
+                                $item->reference_libre
+                                ?: '-'
+                            )
+                            : (
+                                $item->product?->reference
+                                ?? '-'
+                            );
+
+                    $designation =
+                        $isCustomProduct
+                            ? $item->designation_libre
+                            : (
+                                $item->product?->designation
+                                ?? 'Produit supprimé'
+                            );
+
+                    $unitLabel =
+                        $item->product?->unit_label
+                        ?? 'Pièce';
+                @endphp
+
+                <tr>
+
+                    <td class="text-center">
+                        {{ $index + 1 }}
+                    </td>
+
+                    <td class="text-center">
+                        {{ $reference }}
+                    </td>
+
+                    <td>
+                        {{ $designation }}
+
+                        {{-- « Hors catalogue » : jamais sur le document remis au client --}}
+                    </td>
+
+                   <!--td class="text-center fw-bold">
+                        { { $item->vehicle?->plate_number ?? '-' }}
+                   </td-->
+
+                    <td class="text-center">
+
+                        {{ $item->quantity }}
+
+                        {{ $unitLabel }}
+
+                    </td>
+
+                    <td class="text-end">
+                      {{ number_format(round($item->price), 0, ',', ' ') }} FDJ
+                        / {{ $unitLabel }}
+                    </td>
+
+                   <td class="text-end">
+                        -
+                    </td>
+
+                    <td class="text-end fw-bold">
+                  {{ number_format(round($lineTotal), 0, ',', ' ') }} FDJ
+                    </td>
+
+                </tr>
+
+            @endforeach
+
+        </tbody>
+
+    </table>
+
+    {{-- TOTAL --}}
+    <div class="mt-4">
+
+        <table class="no-border">
+
+            <tr>
+
+                <td style="
+                    border:none;
+                    width:60%;
+                "></td>
+
+                <td style="
+                    border:none;
+                    width:40%;
+                ">
+
+                    <table class="no-border">
+
+                        <tr>
+
+                            <td style="border:none;">
+                                <strong>Sous-total :</strong>
+                            </td>
+
+                            <td class="text-end" style="border:none;">
+                             {{ number_format(round($sale->subtotal), 0, ',', ' ') }} FDJ
+                            </td>
+
+                        </tr>
+
+                        <tr>
+                            <td style="padding:8px 0;font-weight:bold;">
+                                Remise :
+                            </td>
+
+                            <td style="padding:8px 0;text-align:right;color:red;">
+
+                                - {{ number_format(round($sale->discount_amount), 0, ',', ' ') }} FDJ
+
+                                ({{ number_format($sale->discount, 2, ',', ' ') }}%)
+
+                            </td>
+                        </tr>
+
+                        <tr>
+
+                            <td style="border:none;">
+                                <strong>TVA (10%) :</strong>
+                            </td>
+
+                            <td class="text-end" style="border:none;">
+                               {{ number_format(round($sale->tva), 0, ',', ' ') }} FDJ
+                            </td>
+
+                        </tr>
+
+                        <tr class="total-box">
+
+                            <td>
+                                TOTAL :
+                            </td>
+
+                            <td class="text-end text-primary">
+                               {{ number_format(round($sale->total), 0, ',', ' ') }} FDJ
+                            </td>
+
+                        </tr>
+
+                    </table>
+
+                </td>
+
+            </tr>
+
+        </table>
+
+    </div>
+
+    {{-- MONTANT LETTRES --}}
+    <div style="
+        border:2px solid #000;
+        padding:12px;
+        margin-top:20px;
+        font-weight:700;
+    ">
+
+        Montant en lettres :
+
+        *********************
+
+        {{ $totalInWords }}
+    </div>
 
 </div>
 
 </body>
-
 </html>

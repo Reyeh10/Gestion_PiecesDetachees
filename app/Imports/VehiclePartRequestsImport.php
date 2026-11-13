@@ -88,6 +88,9 @@ protected ?int $depotId = null;
 |
 */
 
+/** V7 : la demande créée par l'import. */
+public ?\App\Models\Demande $demande = null;
+
 public function __construct(
     ?int $vehicleId = null,
     ?int $depotId = null
@@ -576,6 +579,16 @@ public function __construct(
 
         DB::transaction(function () use ($validatedRows) {
 
+            // V7 : un import = une demande ; les pièces qui ont un fournisseur
+            // reçoivent leur bon de commande automatiquement (fin de l'import)
+            $this->demande = \App\Models\Demande::create([
+                'numero'     => \App\Models\Demande::prochainNumero(),
+                'source'     => \App\Models\Demande::SOURCE_IMPORT,
+                'vehicle_id' => $this->vehicleId,
+                'depot_id'   => $this->depotId,
+                'created_by' => Auth::id(),
+            ]);
+
             foreach ($validatedRows as $data) {
 
                 /*
@@ -685,12 +698,12 @@ public function __construct(
                         |
                         */
 
+                        'demande_id' =>
+                            $this->demande->id,
                         'vehicle_id' =>
                             $this->vehicleId,
-
                         'depot_id' =>
                             $this->depotId,
-
                         'product_id' =>
                             $productId,
 
@@ -801,6 +814,8 @@ public function __construct(
 
                 $this->importedCount++;
             }
+
+            app(\App\Services\CircuitAchatService::class)->genererBonsCommande($this->demande);
         });
     }
 

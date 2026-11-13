@@ -568,9 +568,10 @@
                         @foreach($rayons as $rayon)
                             <option
                                 value="{{ $rayon->id }}"
+                                data-depot="{{ $rayon->depot_id }}"
                                 {{ (string) old('rayon_id', $product->rayon_id ?? '') === (string) $rayon->id ? 'selected' : '' }}
                             >
-                                {{ $rayon->name }}
+                                {{ $rayon->name }}{{ $isEdit && $rayon->depot ? ' — ' . $rayon->depot->name : '' }}
                             </option>
                         @endforeach
                     </select>
@@ -1622,6 +1623,25 @@
                     autocomplete="off"
                 >
 
+                {{-- V6 : un rayon appartient à un seul dépôt --}}
+                <label
+                    for="new_rayon_depot_id"
+                    class="form-label mt-3"
+                >
+                    Dépôt du rayon
+                    <span class="text-danger">*</span>
+                </label>
+
+                <select
+                    id="new_rayon_depot_id"
+                    class="form-select"
+                >
+                    <option value="">Sélectionner un dépôt</option>
+                    @foreach(($depots ?? \App\Models\Depot::where('is_active', true)->orderBy('name')->get()) as $depotRayon)
+                        <option value="{{ $depotRayon->id }}">{{ $depotRayon->name }}</option>
+                    @endforeach
+                </select>
+
             </div>
 
             <div class="modal-footer">
@@ -2335,6 +2355,104 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         refreshSelect2(subfamilySelect);
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | V6 : FILTRER RAYONS SELON DÉPÔT (création : un rayon = un seul dépôt)
+    |--------------------------------------------------------------------------
+    */
+
+    const depotStockSelect =
+        document.getElementById('depot_id');
+
+    function filterRayonsByDepot(
+        preserveCurrentValue = false
+    ) {
+
+        if (!rayonSelect || !depotStockSelect) {
+            return;
+        }
+
+        const depotId =
+            String(depotStockSelect.value || '');
+
+        Array.from(
+            rayonSelect.options
+        ).forEach(function (option, index) {
+
+            if (index === 0) {
+                return;
+            }
+
+            const visible =
+                depotId !== ''
+                &&
+                String(option.dataset.depot || '') === depotId;
+
+            option.hidden = !visible;
+            option.disabled = !visible;
+        });
+
+        const selected =
+            rayonSelect.options[rayonSelect.selectedIndex];
+
+        if (
+            !preserveCurrentValue
+            ||
+            (selected && selected.disabled)
+        ) {
+            rayonSelect.value = '';
+            filterLocationsByRayon(false);
+        }
+
+        refreshSelect2(rayonSelect);
+    }
+
+    if (depotStockSelect) {
+
+        depotStockSelect.addEventListener(
+            'change',
+            function () {
+                filterRayonsByDepot(false);
+            }
+        );
+
+        if (
+            typeof window.jQuery !== 'undefined'
+        ) {
+            window
+                .jQuery(depotStockSelect)
+                .on(
+                    'select2:select select2:clear',
+                    function () {
+                        filterRayonsByDepot(false);
+                    }
+                );
+        }
+    }
+
+    // la modale « Nouveau rayon » propose le dépôt choisi pour le stock
+    const rayonModalElement =
+        document.getElementById('rayonModal');
+
+    if (rayonModalElement) {
+
+        rayonModalElement.addEventListener(
+            'show.bs.modal',
+            function () {
+
+                const select =
+                    document.getElementById(
+                        'new_rayon_depot_id'
+                    );
+
+                if (select && depotStockSelect && depotStockSelect.value) {
+                    select.value = depotStockSelect.value;
+                }
+            }
+        );
     }
 
 
@@ -3489,6 +3607,26 @@ document.addEventListener('DOMContentLoaded', function () {
                     return;
                 }
 
+                const rayonDepotSelect =
+                    document.getElementById(
+                        'new_rayon_depot_id'
+                    );
+
+                const rayonDepotId =
+                    String(
+                        rayonDepotSelect?.value || ''
+                    );
+
+                if (!rayonDepotId) {
+
+                    showAjaxError(
+                        errorBox,
+                        'Veuillez choisir le dépôt du rayon.'
+                    );
+
+                    return;
+                }
+
                 try {
 
                     setButtonLoading(
@@ -3500,7 +3638,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         await postJson(
                             ajaxUrls.rayon,
                             {
-                                name: name
+                                name: name,
+                                depot_id: rayonDepotId
                             }
                         );
 
@@ -3508,6 +3647,23 @@ document.addEventListener('DOMContentLoaded', function () {
                         rayonSelect,
                         data.item
                     );
+
+                    const nouvelleOptionRayon =
+                        Array.from(
+                            rayonSelect.options
+                        ).find(
+                            option =>
+                                String(option.value)
+                                ===
+                                String(data.item.id)
+                        );
+
+                    if (nouvelleOptionRayon) {
+                        nouvelleOptionRayon.dataset.depot =
+                            String(data.item.depot_id || '');
+                    }
+
+                    filterRayonsByDepot(true);
 
                     /*
                     | Ajouter aussi le rayon dans
@@ -3980,6 +4136,8 @@ document.addEventListener('DOMContentLoaded', function () {
     filterModelsByBrand(true);
 
     filterSubfamiliesByFamily(true);
+
+    filterRayonsByDepot(true);
 
     filterLocationsByRayon(true);
 

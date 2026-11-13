@@ -115,7 +115,7 @@
         </td>
         <td>
             <div class="info-label">Véhicule</div>
-            <div class="info-value">{{ $sale?->vehicle?->plate_number ?? '—' }}</div>
+            <div class="info-value">{{ $sale?->plaque ?? '—' }}</div>
             <div>Émis par : {{ $avoir->creePar->name ?? '—' }}</div>
         </td>
     </tr>

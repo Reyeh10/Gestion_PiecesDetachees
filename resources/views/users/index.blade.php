@@ -123,6 +123,7 @@
                                     </a>
                                 @endif
 
+                                @if(auth()->user()->hasPermission('supprimer_utilisateurs'))
                                 <form action="{{ route('users.destroy', $user->id) }}"
                                     method="POST"
                                     class="delete-form">
@@ -140,6 +141,7 @@
                                     </button>
 
                                 </form>
+                                @endif
 
                                 @endif
 

@@ -147,25 +147,47 @@
                                 @enderror
                             </div>
 
-                            <div class="col-12">
+                            <div class="col-md-4">
+                                <label for="motif" class="form-label fw-semibold">
+                                    3. Motif <span class="text-danger">*</span>
+                                </label>
+                                <select name="motif" id="motif" class="form-select @error('motif') is-invalid @enderror" required>
+                                    @foreach(\App\Models\InventoryAdjustment::MOTIFS as $cleMotif => $libelleMotif)
+                                        <option value="{{ $cleMotif }}" @selected(old('motif', 'inventaire') === $cleMotif)>{{ $libelleMotif }}</option>
+                                    @endforeach
+                                </select>
+                                @error('motif')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                            </div>
+
+                            <div class="col-md-8">
                                 <label
                                     for="global_reason"
                                     class="form-label fw-semibold"
                                 >
-                                    3. Raison globale
+                                    4. Remarque globale
                                 </label>
 
                                 <textarea
                                     name="global_reason"
                                     id="global_reason"
-                                    rows="3"
+                                    rows="2"
                                     maxlength="1000"
                                     class="form-control"
-                                    placeholder="Ex. Inventaire physique mensuel"
+                                    placeholder="Ex. Inventaire physique de novembre"
                                 >{{ old('global_reason') }}</textarea>
 
                                 <div class="form-text">
-                                    Utilisée lorsque la colonne « Raison » de la ligne Excel est vide.
+                                    Utilisée lorsque la colonne E « Remarque » de la ligne Excel est vide (obligatoire si motif « Autre »).
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                <div class="alert alert-info mb-0">
+                                    L'écart est calculé sur le stock <strong>de ce dépôt</strong> seulement ; les autres dépôts ne changent pas.
+                                    Les lignes sans écart ni changement de place sont ignorées. Les ajustements créés attendent la validation du chef magasinier / de l'admin
+                                    avant de toucher le stock <strong>et</strong> le rayon / l'emplacement.
                                 </div>
                             </div>
                         </div>
@@ -240,14 +262,14 @@
 
                                     <tr>
                                         <td>E</td>
-                                        <td>Raison</td>
+                                        <td>Remarque</td>
                                         <td>
                                             <span class="badge bg-secondary">
                                                 Non
                                             </span>
                                         </td>
                                         <td>
-                                            Facultatif si une raison globale est saisie.
+                                            Facultatif : sinon la remarque globale est utilisée (obligatoire si motif « Autre »).
                                         </td>
                                     </tr>
                                 </tbody>

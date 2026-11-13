@@ -172,6 +172,7 @@
                                         </a>
 
                                         {{-- DELETE --}}
+                                        @if(auth()->user()->hasPermission('supprimer_clients'))
                                         <form action="{{ route('customers.destroy', $customer) }}"
                                             method="POST"
                                             class="delete-form d-inline">
@@ -187,6 +188,7 @@
                                             </button>
 
                                         </form>
+                                        @endif
 
                                     @endif
 

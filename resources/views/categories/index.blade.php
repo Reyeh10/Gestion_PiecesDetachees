@@ -221,6 +221,7 @@
                                                 </a>
 
                                                 {{-- SUPPRIMER --}}
+                                                @if(auth()->user()->hasPermission('supprimer_categories'))
                                                 <form
                                                     action="{{ route('families.destroy', $family->id) }}"
                                                     method="POST"
@@ -238,6 +239,7 @@
                                                     </button>
 
                                                 </form>
+                                                @endif
 
                                             @endif
 

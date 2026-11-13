@@ -542,6 +542,10 @@
 
                                     </small>
 
+                                @elseif($proforma->immatriculation)
+
+                                    <div class="fw-semibold">{{ $proforma->immatriculation }}</div>
+
                                 @else
 
                                     <span class="text-muted">

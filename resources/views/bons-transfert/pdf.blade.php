@@ -338,7 +338,7 @@
     <tr>
         <td>
             <div class="info-label">
-                Client
+                {{ $bc?->estInterne() ? 'Bénéficiaire' : 'Client' }}
             </div>
 
             <div class="info-value">
@@ -352,6 +352,47 @@
             @endif
         </td>
 
+        @if($bc?->estConsommation())
+        <td>
+            <div class="info-label">
+                Équipement (consommation atelier)
+            </div>
+
+            <div class="info-value">
+                {{ $bc->equipement ?: '—' }}
+            </div>
+        </td>
+
+        <td>
+            <div class="info-label">
+                Demandé par
+            </div>
+
+            <div class="info-value">
+                {{ $bc->demande_par ?: '—' }}
+            </div>
+        </td>
+        @elseif($bc?->estInterne())
+        <td>
+            <div class="info-label">
+                Motif (BT interne)
+            </div>
+
+            <div class="info-value">
+                {{ $bc->libelleMotif() ?: '—' }}
+            </div>
+        </td>
+
+        <td>
+            <div class="info-label">
+                Demandé par
+            </div>
+
+            <div class="info-value">
+                {{ $bc->demande_par ?: '—' }}
+            </div>
+        </td>
+        @else
         <td>
             <div class="info-label">
                 Véhicule
@@ -377,6 +418,7 @@
                 </div>
             @endif
         </td>
+        @endif
 
         <td>
             <div class="info-label">
@@ -557,7 +599,7 @@
 <div class="notice">
     <strong>Important :</strong>
     ce bon de transfert matérialise la sortie des pièces du magasin
-    et leur transfert vers l'Atelier. Il ne constitue ni une facture
+    et leur remise {{ $bc?->estInterne() ? 'au bénéficiaire (usage interne)' : "à l'Atelier" }}. Il ne constitue ni une facture
     ni une preuve de paiement.
 </div>
 
@@ -582,7 +624,7 @@
 
             <td>
                 <div class="signature-title">
-                    Atelier / Réception
+                    {{ $bc?->estInterne() ? 'Bénéficiaire / Réception' : 'Atelier / Réception' }}
                 </div>
 
                 <div class="signature-space"></div>

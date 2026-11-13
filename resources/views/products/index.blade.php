@@ -847,10 +847,37 @@
 
     .products-pagination {
         display: flex;
-        justify-content: center;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px 20px;
 
         margin-top: 22px;
     }
+
+    .products-par-page {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+        font-size: 14px;
+    }
+
+    .products-par-page label { margin: 0; }
+
+    .products-par-page .form-select {
+        width: auto;
+        min-width: 76px;
+    }
+
+    .products-par-page-info {
+        color: var(--stcd-muted, #8a9198);
+        font-size: 14px;
+    }
+
+    .products-pagination-liens { margin-left: auto; }
+
+    .products-pagination-liens nav p { display: none; }
 
     .products-pagination svg,
     .products-pagination nav svg {
@@ -2301,11 +2328,12 @@
 
                                             {{-- MODIFIER / SUPPRIMER --}}
 
-                                            @if(auth()->user()->hasPermission('modifier_produits') || auth()->user()->hasPermission('supprimer_referentiels'))
+                                            @if(auth()->user()->hasPermission('modifier_produits') || auth()->user()->hasPermission('supprimer_produits'))
 
 
                                                 {{-- MODIFIER --}}
 
+                                                @if(auth()->user()->hasPermission('modifier_produits'))
                                                 <a
                                                     href="{{
                                                         route(
@@ -2329,10 +2357,12 @@
                                                     ></i>
 
                                                 </a>
+                                                @endif
 
 
                                                 {{-- SUPPRIMER --}}
 
+                                                @if(auth()->user()->hasPermission('supprimer_produits'))
                                                 <form
                                                     action="{{
                                                         route(
@@ -2372,6 +2402,7 @@
                                                     </button>
 
                                                 </form>
+                                                @endif
 
                                             @endif
 
@@ -2426,19 +2457,41 @@
                     PAGINATION
                 ==================================================== --}}
 
-                @if(
-                    method_exists($products, 'links')
-                    &&
-                    $products->hasPages()
-                )
+                @if(method_exists($products, 'links') && $products->total() > 0)
 
                     <div class="products-pagination">
 
-                        {{
-                            $products
-                                ->appends(request()->query())
-                                ->links()
-                        }}
+                        {{-- Nombre de produits par page : 10, 25, 50 ou 100 --}}
+                        <form method="GET" action="{{ url()->current() }}" class="products-par-page">
+                            @foreach(request()->except(['par_page', 'page']) as $cle => $valeur)
+                                @if(is_scalar($valeur))
+                                    <input type="hidden" name="{{ $cle }}" value="{{ $valeur }}">
+                                @endif
+                            @endforeach
+
+                            <label for="par_page">Afficher</label>
+                            <select id="par_page" name="par_page" class="form-select form-select-sm" onchange="this.form.submit()">
+                                @foreach(\App\Http\Controllers\ProductController::PAR_PAGE as $nombre)
+                                    <option value="{{ $nombre }}" @selected($products->perPage() === $nombre)>{{ $nombre }}</option>
+                                @endforeach
+                            </select>
+                            <span>par page</span>
+                        </form>
+
+                        <div class="products-par-page-info">
+                            {{ number_format($products->firstItem() ?? 0, 0, ',', ' ') }}–{{ number_format($products->lastItem() ?? 0, 0, ',', ' ') }}
+                            sur {{ number_format($products->total(), 0, ',', ' ') }} produits
+                        </div>
+
+                        @if($products->hasPages())
+                            <div class="products-pagination-liens">
+                                {{
+                                    $products
+                                        ->appends(request()->except('page'))
+                                        ->links()
+                                }}
+                            </div>
+                        @endif
 
                     </div>
 

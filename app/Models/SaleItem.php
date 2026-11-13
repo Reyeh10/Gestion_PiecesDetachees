@@ -52,6 +52,8 @@ class SaleItem extends Model
 
         'quantity',
         'price',
+        // V6 : prix avant majoration assurance
+        'prix_base',
         'total',
     ];
 

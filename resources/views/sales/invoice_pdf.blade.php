@@ -484,15 +484,7 @@
                     <td>
                         {{ $designation }}
 
-                        @if($isCustomProduct)
-
-                            <br>
-
-                            <span class="unit-label">
-                                Hors catalogue
-                            </span>
-
-                        @endif
+                        {{-- « Hors catalogue » : jamais sur le document remis au client --}}
                     </td>
 
                    <!--td class="text-center fw-bold">

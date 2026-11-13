@@ -2,7 +2,7 @@
 
 @section('content')
 
-<div class="dashboard-page">
+<div class="dashboard-page dp-dash-compact">
 
     {{-- ========================================================= --}}
     {{-- EN-TÊTE PRINCIPAL --}}
@@ -760,72 +760,6 @@
 
             </div>
 
-
-            {{-- TOP PIÈCES VENDUES --}}
-            <div class="col-12 col-xl-5">
-
-                <div class="card dashboard-panel h-100">
-
-                    <div class="card-header dashboard-panel-header">
-
-                        <div>
-
-                            <h5 class="dashboard-panel-title">
-                                Top pièces vendues
-                            </h5>
-
-                            <small class="dashboard-helper">
-                                Produits les plus vendus
-                            </small>
-
-                        </div>
-
-                    </div>
-
-                    <div class="card-body p-0">
-
-                        @forelse($topProducts as $item)
-
-                            <div class="top-product-item">
-
-                                <div class="top-product-info">
-
-                                    <strong class="top-product-reference">
-                                        {{ $item->product?->reference ?? '-' }}
-                                    </strong>
-
-                                    <div class="dashboard-helper">
-                                        {{ $item->product?->designation ?? 'Produit supprimé' }}
-                                    </div>
-
-                                </div>
-
-                                <span class="badge bg-label-primary">
-                                    {{ $item->total_qty }} vendues
-                                </span>
-
-                            </div>
-
-                        @empty
-
-                            <div class="p-4 text-center">
-
-                                <i class="bx bx-cart-alt empty-icon"></i>
-
-                                <p class="text-muted mb-0">
-                                    Aucune vente enregistrée.
-                                </p>
-
-                            </div>
-
-                        @endforelse
-
-                    </div>
-
-                </div>
-
-            </div>
-
         </div>
 
     </section>
@@ -850,7 +784,7 @@
                 </h5>
 
                 <p class="dashboard-section-subtitle">
-                    Dernières ventes et derniers mouvements enregistrés
+                    Sorties de pièces par destination et stock faible
                 </p>
 
             </div>
@@ -860,8 +794,8 @@
 
         <div class="row g-4">
 
-            {{-- DERNIÈRES VENTES --}}
-            <div class="col-12 col-xl-6">
+            {{-- V6 : SORTIES DE PIÈCES PAR DESTINATION, MOIS PAR MOIS --}}
+            <div class="col-12 col-xl-8 dashboard-col-sorties">
 
                 <div class="card dashboard-panel h-100">
 
@@ -870,128 +804,70 @@
                         <div>
 
                             <h5 class="dashboard-panel-title">
-                                Dernières ventes
+                                Sorties de pièces par destination
                             </h5>
 
                             <small class="dashboard-helper">
-                                Transactions commerciales récentes
+                                Valeur HT par mois : factures clients directs et bons de transfert (Atelier, bus, consommation, usage interne)
                             </small>
 
                         </div>
 
-                        <div class="dashboard-mini-icon bg-success-light">
-                            <i class="bx bx-receipt"></i>
-                        </div>
+                        <form method="GET" action="{{ url()->current() }}" class="m-0">
+                            <select name="annee" class="form-select form-select-sm" onchange="this.form.submit()">
+                                @for($a = now()->year; $a >= 2024; $a--)
+                                    <option value="{{ $a }}" @selected($anneeSorties === $a)>{{ $a }}</option>
+                                @endfor
+                            </select>
+                        </form>
 
                     </div>
 
-                    <div class="card-body p-0">
+                    <div class="card-body">
+
+
+                        @php
+                            $fmtSortie = fn ($v) => $v ? number_format($v, 0, ',', ' ') : '—';
+                            $totalMoisSorties = array_fill(1, 12, 0.0);
+                            foreach ($sortiesParDestination as $d) {
+                                foreach ($d['mois'] as $m => $v) { $totalMoisSorties[$m] += $v; }
+                            }
+                        @endphp
 
                         <div class="table-responsive">
-
-                            <table class="table table-hover align-middle dashboard-table mb-0">
-
+                            <table class="table table-sm table-hover align-middle mb-0 sorties-table">
                                 <thead>
-
                                     <tr>
-
-                                        <th>
-                                            Facture
-                                        </th>
-
-                                        <th>
-                                            Client
-                                        </th>
-
-                                        <th>
-                                            Total
-                                        </th>
-
-                                        <th>
-                                            Statut
-                                        </th>
-
+                                        <th>Destination</th>
+                                        @foreach($months as $m)
+                                            <th class="text-end">{{ $m }}</th>
+                                        @endforeach
+                                        <th class="text-end">Total {{ $anneeSorties }}</th>
                                     </tr>
-
                                 </thead>
-
                                 <tbody>
-
-                                    @forelse($latestSales as $sale)
-
+                                    @foreach($sortiesParDestination as $d)
                                         <tr>
-
-                                            <td>
-
-                                                <strong>
-                                                    {{ $sale->invoice_number }}
-                                                </strong>
-
-                                            </td>
-
-                                            <td>
-
-                                                {{ $sale->customer?->name ?? 'Vente comptoir' }}
-
-                                            </td>
-
                                             <td class="text-nowrap">
-
-                                                {{ number_format($sale->total, 2, ',', ' ') }}
-
+                                                <a href="{{ $d['lien'] }}">{{ $d['libelle'] }}</a>
                                             </td>
-
-                                            <td>
-
-                                                @if($sale->status == 'paid')
-
-                                                    <span class="badge bg-success">
-                                                        Payée
-                                                    </span>
-
-                                                @elseif($sale->status == 'partial')
-
-                                                    <span class="badge bg-warning text-dark">
-                                                        Partielle
-                                                    </span>
-
-                                                @elseif($sale->status == 'cancelled')
-
-                                                    <span class="badge bg-danger">
-                                                        Annulée
-                                                    </span>
-
-                                                @else
-
-                                                    <span class="badge bg-secondary">
-                                                        {{ ucfirst($sale->status) }}
-                                                    </span>
-
-                                                @endif
-
-                                            </td>
-
+                                            @foreach($d['mois'] as $m => $v)
+                                                <td class="text-end" title="{{ $d['nombre'][$m] }} document(s)">{{ $fmtSortie($v) }}</td>
+                                            @endforeach
+                                            <td class="text-end fw-semibold" title="{{ $d['nb'] }} document(s)">{{ $fmtSortie($d['total']) }}</td>
                                         </tr>
-
-                                    @empty
-
-                                        <tr>
-
-                                            <td colspan="4"
-                                                class="text-center text-muted py-4">
-
-                                                Aucune vente récente.
-
-                                            </td>
-
-                                        </tr>
-
-                                    @endforelse
-
+                                    @endforeach
                                 </tbody>
-
+                                <tfoot>
+                                    <tr class="fw-bold">
+                                        <td>Total sorties</td>
+                                        @foreach($totalMoisSorties as $v)
+                                            <td class="text-end">{{ $fmtSortie($v) }}</td>
+                                        @endforeach
+                                        <td class="text-end">{{ $fmtSortie(array_sum($totalMoisSorties)) }}</td>
+                                    </tr>
+                                </tfoot>
                             </table>
-
                         </div>
 
                     </div>
@@ -1000,9 +876,8 @@
 
             </div>
 
-
-            {{-- MOUVEMENTS DE STOCK --}}
-            <div class="col-12 col-xl-6">
+            {{-- STOCK FAIBLE (comme DreamsPOS) --}}
+            <div class="col-12 col-xl-4">
 
                 <div class="card dashboard-panel h-100">
 
@@ -1011,121 +886,48 @@
                         <div>
 
                             <h5 class="dashboard-panel-title">
-                                Derniers mouvements de stock
+                                Stock faible
                             </h5>
 
                             <small class="dashboard-helper">
-                                Entrées et sorties récentes
+                                Pièces à réapprovisionner en priorité
                             </small>
 
                         </div>
 
-                        <div class="dashboard-mini-icon bg-info-light">
-                            <i class="bx bx-transfer-alt"></i>
-                        </div>
+                        @if(Route::has('products.to-order'))
+                            <a href="{{ route('products.to-order') }}" class="dashboard-voir-tout">Tout voir</a>
+                        @endif
 
                     </div>
 
                     <div class="card-body p-0">
 
-                        <div class="table-responsive">
+                        <ul class="dashboard-stock-faible">
 
-                            <table class="table table-hover align-middle dashboard-table mb-0">
+                            @forelse($stockFaible ?? [] as $piece)
 
-                                <thead>
+                                <li>
+                                    <div class="min-w-0">
+                                        <a href="{{ route('products.show', $piece) }}" class="dashboard-stock-ref">{{ $piece->reference }}</a>
+                                        <span class="dashboard-stock-nom">{{ $piece->designation }}</span>
+                                    </div>
 
-                                    <tr>
+                                    <div class="text-end">
+                                        <span class="dashboard-stock-qte {{ (float) $piece->quantity <= 0 ? 'rupture' : '' }}">
+                                            {{ rtrim(rtrim(number_format((float) $piece->quantity, 2, ',', ' '), '0'), ',') }}
+                                        </span>
+                                        <small>{{ (float) $piece->quantity <= 0 ? 'En rupture' : 'Min. ' . rtrim(rtrim(number_format((float) $piece->min_stock, 2, ',', ' '), '0'), ',') }}</small>
+                                    </div>
+                                </li>
 
-                                        <th>
-                                            Produit
-                                        </th>
+                            @empty
 
-                                        <th>
-                                            Type
-                                        </th>
+                                <li class="dashboard-stock-vide">Aucune pièce en stock faible.</li>
 
-                                        <th>
-                                            Qté
-                                        </th>
+                            @endforelse
 
-                                        <th>
-                                            Date
-                                        </th>
-
-                                    </tr>
-
-                                </thead>
-
-                                <tbody>
-
-                                    @forelse($latestMovements as $movement)
-
-                                        <tr>
-
-                                            <td>
-
-                                                <strong>
-                                                    {{ $movement->product?->reference ?? '-' }}
-                                                </strong>
-
-                                                <div class="dashboard-helper">
-                                                    {{ $movement->product?->designation ?? '' }}
-                                                </div>
-
-                                            </td>
-
-                                            <td>
-
-                                                @if($movement->type == 'in')
-
-                                                    <span class="badge bg-success">
-                                                        Entrée
-                                                    </span>
-
-                                                @else
-
-                                                    <span class="badge bg-danger">
-                                                        Sortie
-                                                    </span>
-
-                                                @endif
-
-                                            </td>
-
-                                            <td>
-
-                                                {{ $movement->quantity }}
-
-                                            </td>
-
-                                            <td class="text-nowrap">
-
-                                                {{ $movement->created_at?->format('d/m/Y') }}
-
-                                            </td>
-
-                                        </tr>
-
-                                    @empty
-
-                                        <tr>
-
-                                            <td colspan="4"
-                                                class="text-center text-muted py-4">
-
-                                                Aucun mouvement récent.
-
-                                            </td>
-
-                                        </tr>
-
-                                    @endforelse
-
-                                </tbody>
-
-                            </table>
-
-                        </div>
+                        </ul>
 
                     </div>
 
@@ -1139,12 +941,230 @@
 
 </div>
 
+<style>
+    .dashboard-voir-tout {
+        color: var(--stcd-primary, #FE9F43);
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .dashboard-stock-faible {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .dashboard-stock-faible li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--stcd-border, #E6EAED);
+    }
+
+    .dashboard-stock-faible li:last-child { border-bottom: 0; }
+
+    .dashboard-stock-ref {
+        display: block;
+        font-size: 13.5px;
+        font-weight: 700;
+    }
+
+    .dashboard-stock-nom {
+        display: block;
+        overflow: hidden;
+        color: var(--stcd-muted, #8a9198);
+        font-size: 12.5px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .dashboard-stock-qte {
+        display: inline-block;
+        min-width: 42px;
+        padding: 3px 10px;
+        color: #b45309;
+        background: #fef3c7;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 800;
+        text-align: center;
+    }
+
+    .dashboard-stock-qte.rupture {
+        color: #b91c1c;
+        background: #fee2e2;
+    }
+
+    .dashboard-stock-faible small {
+        display: block;
+        margin-top: 2px;
+        color: var(--stcd-muted, #8a9198);
+        font-size: 11.5px;
+    }
+
+    .dashboard-stock-vide {
+        justify-content: center !important;
+        color: var(--stcd-muted, #8a9198);
+    }
+</style>
+
+
+<style>
+    /* ==========================================================
+       TABLEAU DE BORD SUR UN SEUL ÉCRAN (V6, ordinateur ≥ 1200 px)
+       4 rangées sur une grille de 8 colonnes :
+       1. stock (4) + pièces véhicules (4)
+       2. valorisation (2 × 2) + activité commerciale (4)
+       3. ventes par mois (3) + état du stock (2) + pièces vendues (3)
+       4. top pièces, dernières ventes, derniers mouvements,
+          stock faible (2 chacun)
+       Les titres de section sont masqués : chaque carte dit déjà
+       ce qu'elle montre. En dessous de 1200 px : disposition normale.
+    ========================================================== */
+    @media (min-width: 1200px) {
+        .dp-dash-compact {
+            display: grid;
+            grid-template-columns: repeat(8, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .dp-dash-compact > .dashboard-main-header,
+        .dp-dash-compact .dashboard-section-header { display: none !important; }
+
+        .dp-dash-compact > .dashboard-section,
+        .dp-dash-compact > .dashboard-section > .row { display: contents; }
+
+        .dp-dash-compact > .dashboard-section > .row > [class*="col"] {
+            grid-column: span 1;
+            width: auto;
+            max-width: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* rangée 2 : valorisation, 2 colonnes chacune (gros montants) */
+        .dp-dash-compact > .dashboard-section:nth-of-type(3) > .row > [class*="col"] { grid-column: span 2; }
+
+        /* rangée 3 : graphiques */
+        .dp-dash-compact > .dashboard-section:nth-of-type(5) > .row:nth-of-type(2) > :nth-child(1) { grid-column: span 3; }
+        .dp-dash-compact > .dashboard-section:nth-of-type(5) > .row:nth-of-type(2) > :nth-child(2) { grid-column: span 2; }
+        .dp-dash-compact > .dashboard-section:nth-of-type(5) > .row:nth-of-type(3) > :nth-child(1) { grid-column: span 3; }
+
+        /* rangée 4 : listes (top pièces + 3 listes d'activité) */
+        .dp-dash-compact > .dashboard-section:nth-of-type(5) > .row:nth-of-type(3) > :nth-child(2),
+        .dp-dash-compact > .dashboard-section:nth-of-type(6) > .row > [class*="col"] { grid-column: span 2; }
+
+        /* cartes chiffrées compactes */
+        .dp-dash-compact .dashboard-card .card-body { padding: 12px 14px !important; }
+        .dp-dash-compact .dashboard-label { margin: 0 0 2px !important; font-size: 12.5px !important; }
+        .dp-dash-compact .dashboard-value {
+            margin: 0 0 1px !important;
+            font-size: clamp(1.05rem, 1.25vw, 1.4rem) !important;
+            white-space: nowrap;
+        }
+        /* le texte d'aide des petites cartes est masqué (titre + chiffre suffisent) */
+        .dp-dash-compact > .dashboard-section > .row > [class*="col"] > .dashboard-card .dashboard-helper,
+        .dp-dash-compact > .dashboard-section > .row > [class*="col"] > a > .dashboard-card .dashboard-helper,
+        .dp-dash-compact > .dashboard-section > .row > [class*="col"] > a .dashboard-helper { display: none !important; }
+        .dp-dash-compact .dashboard-label {
+            display: -webkit-box;
+            overflow: hidden;
+            line-height: 1.25;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+
+        .dp-dash-compact .dashboard-icon {
+            flex-shrink: 0;
+            width: 32px !important;
+            height: 32px !important;
+            font-size: 16px !important;
+            border-radius: 9px !important;
+        }
+
+        .dp-dash-compact .dashboard-card .card-body > .d-flex { gap: 8px !important; }
+
+        /* panneaux (graphiques, listes) : hauteur fixe, liste qui défile */
+        .dp-dash-compact .dashboard-panel { height: 100%; }
+
+        .dp-dash-compact .dashboard-panel .card-header { padding: 10px 14px !important; }
+        .dp-dash-compact .dashboard-panel-title { margin: 0 !important; font-size: 14px !important; }
+        .dp-dash-compact .dashboard-panel .card-header .dashboard-helper { display: none; }
+        .dp-dash-compact .dashboard-mini-icon { width: 30px !important; height: 30px !important; font-size: 15px !important; }
+
+        .dp-dash-compact .dashboard-panel .card-body { padding: 6px 10px !important; }
+
+        .dp-dash-compact > .dashboard-section:nth-of-type(6) .dashboard-panel .card-body,
+        .dp-dash-compact > .dashboard-section:nth-of-type(5) > .row:nth-of-type(3) > :nth-child(2) .card-body {
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 0 !important;
+        }
+
+        .dp-dash-compact .dashboard-table th,
+        .dp-dash-compact .dashboard-table td {
+            padding: 7px 10px !important;
+            font-size: 12.5px !important;
+        }
+
+        .dp-dash-compact .dashboard-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .dp-dash-compact .dashboard-stock-faible li { padding: 7px 14px; }
+        .dp-dash-compact .dashboard-stock-ref { font-size: 12.5px; }
+        .dp-dash-compact .dashboard-stock-nom { font-size: 11.5px; }
+
+        .dp-dash-compact .chart-wrapper { min-height: 0 !important; height: auto !important; }
+
+        /* rangée 4 (V6) : sorties par destination (6 colonnes) + stock faible (2) */
+        .dp-dash-compact > .dashboard-section:nth-of-type(6) > .row > .dashboard-col-sorties { grid-column: span 6; }
+        .dp-dash-compact > .dashboard-section:nth-of-type(6) .dashboard-col-sorties .dashboard-panel .card-body {
+            max-height: 300px;   /* même hauteur que « Stock faible » ; le tableau défile si besoin */
+            overflow: auto;
+            padding: 0 6px !important;
+        }
+        .dp-dash-compact .dashboard-col-sorties .table-responsive { overflow: visible; }
+        .dp-dash-compact .dashboard-panel .table-responsive { overflow-x: hidden; }
+    }
+</style>
+
 @endsection
 
 
 {{-- ============================================================= --}}
 {{-- STYLES --}}
 {{-- ============================================================= --}}
+
+@push('styles')
+<style>
+    .sorties-table { font-size: 12px; }
+    .sorties-table > :not(caption) > * > * {
+        padding: 3px 7px !important;
+        line-height: 1.25;
+        white-space: nowrap;
+    }
+    .sorties-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #f8f9fa;
+        font-size: 11.5px;
+        text-transform: none;
+    }
+    .sorties-table tfoot td {
+        position: sticky;
+        bottom: 0;
+        background: #fff;
+        border-top: 2px solid #d9dee3;
+    }
+</style>
+@endpush
 
 @push('styles')
 
@@ -1560,7 +1580,7 @@ document.addEventListener('DOMContentLoaded', function () {
             {
                 chart: {
                     type: 'area',
-                    height: 330,
+                    height: 190,
                     toolbar: {
                         show: false
                     },
@@ -1636,7 +1656,7 @@ document.addEventListener('DOMContentLoaded', function () {
             {
                 chart: {
                     type: 'donut',
-                    height: 320
+                    height: 190
                 },
 
                 series: [
@@ -1683,7 +1703,7 @@ document.addEventListener('DOMContentLoaded', function () {
             {
                 chart: {
                     type: 'bar',
-                    height: 320,
+                    height: 190,
                     toolbar: {
                         show: false
                     }

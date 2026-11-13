@@ -842,7 +842,7 @@
 
                                 <option
 
-                                    value="{{ $customer->id }}"
+                                    value="{{ $customer->id }}" data-taux="{{ $customer->tauxMajoration() }}" data-assurance="{{ $customer->est_assurance ? 1 : 0 }}"
 
                                     @selected(
 
@@ -863,6 +863,9 @@
                             @endforeach
 
                         </select>
+
+                        <div id="badge-assurance" class="badge bg-label-warning mt-2 d-none"></div>
+
 
                         @error('customer_id')
 
@@ -890,6 +893,7 @@
 
                         </label>
 
+                        <div id="bloc-vehicule-client">
                         <select
 
                             name="vehicle_id"
@@ -940,6 +944,8 @@
 
                         </div>
 
+                        </div>
+
                         @error('vehicle_id')
 
                             <div class="text-danger small mt-1">
@@ -949,6 +955,21 @@
                             </div>
 
                         @enderror
+
+                        {{-- V6 : client assurance → immatriculation libre et facultative (véhicule de n'importe quel client) --}}
+                        <div id="bloc-immatriculation-libre" class="d-none">
+                            <input type="text" name="immatriculation" id="immatriculation_libre" class="form-control"
+                                   list="liste-immatriculations" maxlength="30" disabled
+                                   value="{{ old('immatriculation') }}"
+                                   placeholder="Facultatif — saisir ou choisir une immatriculation">
+                            <datalist id="liste-immatriculations">
+                                @foreach(\App\Models\Vehicle::query()->whereNotNull('plate_number')->orderBy('plate_number')->pluck('plate_number')->unique() as $plaque)
+                                    <option value="{{ $plaque }}"></option>
+                                @endforeach
+                            </datalist>
+                            <div class="small text-muted mt-1">Assurance : véhicule facultatif, il peut appartenir à un autre client.</div>
+                        </div>
+
 
                     </div>
 
@@ -1509,6 +1530,58 @@ document.addEventListener(
 
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | V6 : MAJORATION ASSURANCE (comme l'Atelier)
+        |--------------------------------------------------------------------------
+        |
+        | Client = assurance : chaque prix unitaire est majoré de son taux et
+        | arrondi au franc. Le serveur refait le même calcul à l'enregistrement.
+        |
+        */
+        function tauxMajoration() {
+            const option = customerSelect.options[customerSelect.selectedIndex];
+
+            return option ? (parseFloat(option.dataset.taux) || 0) : 0;
+        }
+
+        function prixMajore(prixBase) {
+            const taux = tauxMajoration();
+            const base = parseFloat(prixBase) || 0;
+
+            return taux > 0 ? Math.round(base * (1 + taux / 100)) : base;
+        }
+
+        function appliquerMajoration() {
+            const taux = tauxMajoration();
+            const badge = document.getElementById('badge-assurance');
+
+            if (badge) {
+                badge.classList.toggle('d-none', taux <= 0);
+                badge.textContent = taux > 0
+                    ? 'Assurance : prix majorés de ' + formatNumber(taux).replace(/[,.]00$/, '') + ' %'
+                    : '';
+            }
+
+            document.querySelectorAll('input[id^="price_"][data-base]').forEach(function (input) {
+                const index = input.id.slice('price_'.length);
+                const prix = prixMajore(input.dataset.base);
+                const display = document.getElementById('price_display_' + index);
+
+                input.value = prix.toFixed(2);
+                if (display) display.textContent = formatNumber(prix);
+                calculateRow(index);
+            });
+
+            // lignes hors catalogue : le prix saisi est le prix de base
+            document.querySelectorAll('input.custom-price').forEach(function (input) {
+                input.dispatchEvent(new Event('input'));
+            });
+        }
+
+        // client déjà choisi (retour d'erreur, proforma depuis un véhicule) : badge et prix à jour
+        setTimeout(appliquerMajoration, 0);
+
         function formatNumber(value) {
 
             return new Intl.NumberFormat(
@@ -1645,24 +1718,8 @@ document.addEventListener(
 
                         function (product) {
 
-                            if (
-
-                                parseFloat(
-
-                                    product.stock
-
-                                )
-
-                                <=
-
-                                0
-
-                            ) {
-
-                                return false;
-
-                            }
-
+                            // Les produits à 0 restent cherchables : un proforma
+                            // peut contenir une pièce à approvisionner.
                             const haystack =
 
                                 normalize([
@@ -2125,6 +2182,7 @@ document.addEventListener(
                 if (!product) {
                     stockElement.textContent = '0.00';
                     unitElement.textContent = 'Pièce';
+                    delete priceInput.dataset.base;
                     priceInput.value = '0';
                     priceDisplay.textContent = '0.00';
                     quantityInput.removeAttribute('max');
@@ -2136,8 +2194,9 @@ document.addEventListener(
 
                 stockElement.textContent = formatNumber(product.stock);
                 unitElement.textContent = product.unit;
-                priceInput.value = parseFloat(product.price || 0).toFixed(2);
-                priceDisplay.textContent = formatNumber(product.price);
+                priceInput.dataset.base = parseFloat(product.price || 0);
+                priceInput.value = prixMajore(product.price).toFixed(2);
+                priceDisplay.textContent = formatNumber(prixMajore(product.price));
 
                 const depots = product.depots || [];
                 depotSelect.disabled = false;
@@ -2395,10 +2454,11 @@ document.addEventListener(
 
             function calculateCustomRow() {
 
+                // prix saisi = prix de base ; majoré si le client est une assurance
                 const price =
-                    parseFloat(
+                    prixMajore(
                         priceInput.value || 0
-                    ) || 0;
+                    );
 
                 const quantity =
                     parseFloat(
@@ -2779,6 +2839,25 @@ document.addEventListener(
 
         }
 
+
+        /* V6 : client assurance → immatriculation libre au lieu de la liste des véhicules du client */
+        function estAssurance() {
+            const option = customerSelect.options[customerSelect.selectedIndex];
+
+            return !!(option && option.dataset.assurance === '1');
+        }
+
+        function basculerVehicule() {
+            const assurance = estAssurance();
+
+            document.getElementById('bloc-vehicule-client').classList.toggle('d-none', assurance);
+            document.getElementById('bloc-immatriculation-libre').classList.toggle('d-none', !assurance);
+            document.getElementById('immatriculation_libre').disabled = !assurance;
+            vehicleSelect.required = !assurance;
+
+            return assurance;
+        }
+
         async function loadVehicles(
 
             customerId,
@@ -2786,6 +2865,12 @@ document.addEventListener(
             selectedVehicleId = null
 
         ) {
+            // assurance : pas de liste des véhicules du client
+            if (basculerVehicule()) {
+                vehicleSelect.disabled = true;
+                return;
+            }
+
 
             vehicleErrorMessage.classList.add(
 
@@ -3113,6 +3198,8 @@ document.addEventListener(
 
                         );
 
+                        appliquerMajoration();
+
                     }
 
                 );
@@ -3130,6 +3217,8 @@ document.addEventListener(
                         this.value
 
                     );
+
+                    appliquerMajoration();
 
                 }
 
@@ -3468,7 +3557,7 @@ document.addEventListener(
 
                 }
 
-                if (!vehicleSelect.value) {
+                if (!vehicleSelect.value && !estAssurance()) {
 
                     event.preventDefault();
 

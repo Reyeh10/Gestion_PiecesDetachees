@@ -19,6 +19,12 @@ class VehiclePartRequest extends Model
 
     public const STATUS_FOUND = 'found';
 
+    /*
+    | V7 — À COMMANDER : fournisseur trouvé, bon de commande créé (en cours de
+    | signature) mais pas encore envoyé. Passe à COMMANDÉE à l'envoi du BC.
+    */
+    public const STATUS_TO_ORDER = 'to_order';
+
     public const STATUS_ORDERED = 'ordered';
 
     /*
@@ -49,12 +55,13 @@ class VehiclePartRequest extends Model
     */
 
     protected $fillable = [
-
+        'demande_id',
         'vehicle_id',
         'depot_id',
 
         'product_id',
         'supplier_id',
+        'external_bon_commande_ligne_id',
         'created_by',
 
         'reference',
@@ -164,6 +171,12 @@ class VehiclePartRequest extends Model
     }
 
 
+    /** Ligne du BC garage pour laquelle la pièce a été commandée (V6). */
+    public function externalBonCommandeLigne()
+    {
+        return $this->belongsTo(ExternalBonCommandeLigne::class);
+    }
+
     public function supplier()
     {
         return $this->belongsTo(
@@ -202,6 +215,9 @@ class VehiclePartRequest extends Model
 
             self::STATUS_SEARCHING =>
                 'En recherche',
+
+            self::STATUS_TO_ORDER =>
+                'À commander',
 
             self::STATUS_ORDERED =>
                 'Commandée',
@@ -246,6 +262,9 @@ class VehiclePartRequest extends Model
 
             self::STATUS_SEARCHING =>
                 'warning',
+
+            self::STATUS_TO_ORDER =>
+                'secondary',
 
             self::STATUS_ORDERED =>
                 'primary',
@@ -365,6 +384,8 @@ class VehiclePartRequest extends Model
 
             self::STATUS_SEARCHING => [
 
+                self::STATUS_TO_ORDER,
+
                 self::STATUS_ORDERED,
 
                 self::STATUS_NOT_FOUND,
@@ -401,6 +422,15 @@ class VehiclePartRequest extends Model
                 self::STATUS_PARTIAL_RECEIVED,
 
                 self::STATUS_RECEIVED,
+
+                self::STATUS_CANCELLED,
+            ],
+
+            self::STATUS_TO_ORDER => [
+
+                self::STATUS_SEARCHING,
+
+                self::STATUS_ORDERED,
 
                 self::STATUS_CANCELLED,
             ],
@@ -481,6 +511,19 @@ public function latestSupplierOrderItem()
 | depot_id   = ID du dépôt
 |
 */
+
+public function demande()
+{
+    return $this->belongsTo(Demande::class);
+}
+
+/** Ligne du bon de commande actif de la pièce (hors annulé / soldé). */
+public function ligneBcActive()
+{
+    return $this->hasOne(SupplierOrderItem::class)
+        ->whereHas('supplierOrder', fn ($q) => $q->whereNotIn('status', SupplierOrder::STATUTS_INACTIFS))
+        ->latestOfMany();
+}
 
 public function depot()
 {

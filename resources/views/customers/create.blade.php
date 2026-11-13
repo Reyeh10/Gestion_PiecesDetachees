@@ -203,6 +203,27 @@
                 </div>
 
 
+                {{-- V6 : ASSURANCE (prix des ventes / proformas majorés, comme l'Atelier) --}}
+                <div class="col-md-6 mb-3">
+                    <div class="form-check mt-md-4">
+                        <input type="hidden" name="est_assurance" value="0">
+                        <input class="form-check-input" type="checkbox" name="est_assurance" value="1" id="est_assurance"
+                               @checked(old('est_assurance', null?->est_assurance))
+                               onchange="document.getElementById('bloc_taux_majoration').classList.toggle('d-none', !this.checked)">
+                        <label class="form-check-label" for="est_assurance">
+                            Ce client est une <strong>assurance</strong>
+                        </label>
+                    </div>
+                    <small class="text-muted">Ses ventes et proformas sont majorés (seuls les prix unitaires montent).</small>
+                </div>
+
+                <div class="col-md-6 mb-3 {{ old('est_assurance', null?->est_assurance) ? '' : 'd-none' }}" id="bloc_taux_majoration">
+                    <label for="taux_majoration" class="form-label">Taux de majoration (%)</label>
+                    <input type="number" id="taux_majoration" name="taux_majoration" class="form-control" step="0.01" min="0" max="300"
+                           value="{{ old('taux_majoration', null?->taux_majoration) }}"
+                           placeholder="Vide = {{ rtrim(rtrim(number_format(config('magasin.taux_majoration_assurance', 35), 2, ',', ''), '0'), ',') }} % (taux par défaut)">
+                </div>
+
                 {{-- LIMITE DE CREDIT --}}
                 {{--
                 <div class="col-md-6 mb-3">

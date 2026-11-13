@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ExternalBonCommandeLigne extends Model
 {
     protected $fillable = [
-        'external_bon_commande_id', 'product_id', 'depot_id', 'position',
+        'external_bon_commande_id', 'product_id', 'depot_id', 'bon_transfert_id', 'position',
         'reference', 'designation',
         'quantite_demandee', 'quantite_disponible', 'disponible',
         'prix_unitaire', 'note',
@@ -29,6 +29,24 @@ class ExternalBonCommandeLigne extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    /** BT qui a transféré la pièce ; vide = pièce en attente (V6). */
+    public function bonTransfert(): BelongsTo
+    {
+        return $this->belongsTo(BonTransfert::class);
+    }
+
+    /** Demande de pièce spéciale créée par « Commander au fournisseur » (V6). */
+    public function demandePiece(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(VehiclePartRequest::class)->latestOfMany();
+    }
+
+    /** Pièce prête à partir : identifiée, avec un dépôt, et disponible. */
+    public function estPrete(): bool
+    {
+        return $this->disponible === true && $this->product_id !== null && $this->depot_id !== null;
     }
 
     /** Dépôt dans lequel la pièce sera prélevée pour la vente. */

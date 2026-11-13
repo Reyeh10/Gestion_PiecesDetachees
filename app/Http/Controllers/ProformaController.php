@@ -275,12 +275,8 @@ class ProformaController extends Controller
              * Proforma possible même si la pièce est à 0 : c'est un devis.
              * La transformation en facture, elle, attend que la pièce soit
              * disponible dans le dépôt choisi (voir convertToSale).
+             * Pas de filtre sur status : « vendu » signifie seulement stock à 0.
              */
-            ->where(
-                'status',
-                '!=',
-                'vendu'
-            )
             ->orderBy('designation')
             ->get();
 
@@ -329,12 +325,8 @@ class ProformaController extends Controller
              * Proforma possible même si la pièce est à 0 : c'est un devis.
              * La transformation en facture, elle, attend que la pièce soit
              * disponible dans le dépôt choisi (voir convertToSale).
+             * Pas de filtre sur status : « vendu » signifie seulement stock à 0.
              */
-            ->where(
-                'status',
-                '!=',
-                'vendu'
-            )
             ->orderBy('designation')
             ->get();
 
@@ -418,6 +410,11 @@ class ProformaController extends Controller
     public function store(
     Request $request
 ): RedirectResponse {
+    // V6 : client assurance → véhicule facultatif (immatriculation libre)
+    $assurance = (bool) Customer::query()
+        ->whereKey($request->input('customer_id'))
+        ->value('est_assurance');
+
     /*
     |--------------------------------------------------------------------------
     | VALIDATION GÉNÉRALE
@@ -441,8 +438,15 @@ class ProformaController extends Controller
                 'exists:customers,id',
             ],
 
+            'immatriculation' => [
+                'nullable',
+                'string',
+                'max:30',
+            ],
+
             'vehicle_id' => [
-                'required',
+                Rule::requiredIf(! $assurance),
+                'nullable',
                 'integer',
                 Rule::exists(
                     'vehicles',
@@ -678,11 +682,25 @@ class ProformaController extends Controller
     DB::beginTransaction();
 
     try {
-        $vehicle = Vehicle::query()
-            ->whereKey($validated['vehicle_id'])
-            ->where('customer_id', $validated['customer_id'])
-            ->lockForUpdate()
-            ->firstOrFail();
+        $immatriculation = null;
+
+        if ($assurance) {
+            // V6 : assurance — immatriculation libre et facultative, rattachée au
+        // véhicule s'il existe (même celui d'un autre client)
+        $immatriculation = filled($request->input('immatriculation'))
+            ? strtoupper(preg_replace('/\s+/', '', (string) $request->input('immatriculation')))
+            : null;
+
+            $vehicle = $immatriculation
+                ? Vehicle::query()->whereRaw("REPLACE(UPPER(plate_number), ' ', '') = ?", [$immatriculation])->first()
+                : null;
+        } else {
+            $vehicle = Vehicle::query()
+                ->whereKey($validated['vehicle_id'])
+                ->where('customer_id', $validated['customer_id'])
+                ->lockForUpdate()
+                ->firstOrFail();
+        }
 
 
         /*
@@ -747,6 +765,9 @@ class ProformaController extends Controller
         $subtotal = 0.00;
         $validatedItems = [];
 
+        // V6 : proforma pour une assurance → prix majorés du taux de l'assurance
+        $tauxMajoration = Customer::findOrFail($validated['customer_id'])->tauxMajoration();
+
         foreach ($validated['items'] as $itemData) {
             $quantity = round(
                 (float) $itemData['quantity'],
@@ -772,10 +793,12 @@ class ProformaController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
-                $price = round(
+                $prixBase = round(
                     (float) $product->sale_price,
                     2
                 );
+
+                $price = Customer::prixMajore($prixBase, $tauxMajoration);
 
                 $lineTotal = round(
                     $quantity * $price,
@@ -795,6 +818,7 @@ class ProformaController extends Controller
 
                     'quantity' => $quantity,
                     'price' => $price,
+                    'prix_base' => $prixBase,
                     'total' => $lineTotal,
                 ];
 
@@ -812,10 +836,12 @@ class ProformaController extends Controller
             |
             */
 
-            $price = round(
+            $prixBase = round(
                 (float) $itemData['price'],
                 2
             );
+
+            $price = Customer::prixMajore($prixBase, $tauxMajoration);
 
             $lineTotal = round(
                 $quantity * $price,
@@ -849,6 +875,7 @@ class ProformaController extends Controller
 
                 'quantity' => $quantity,
                 'price' => $price,
+                'prix_base' => $prixBase,
                 'total' => $lineTotal,
             ];
         }
@@ -927,7 +954,10 @@ class ProformaController extends Controller
                 $validated['customer_id'],
 
             'vehicle_id' =>
-                $vehicle->id,
+                $vehicle?->id,
+
+            'immatriculation' =>
+                $immatriculation,
 
             'created_by' =>
                 auth()->id(),
@@ -937,6 +967,9 @@ class ProformaController extends Controller
 
             'subtotal' =>
                 $subtotal,
+
+            'taux_majoration' =>
+                $tauxMajoration,
 
             'discount' =>
                 $discountPercent,
@@ -994,6 +1027,9 @@ class ProformaController extends Controller
 
                 'price' =>
                     $item['price'],
+
+                'prix_base' =>
+                    $item['prix_base'],
 
                 'total' =>
                     $item['total'],
@@ -1149,10 +1185,17 @@ class ProformaController extends Controller
             $proforma->proforma_number
         );
 
+        // V6 : même gabarit que la facture ($sale = le proforma)
         return Pdf::loadView(
            'proformas.proforma_pdf',
             [
+                'sale' => $proforma,
                 'proforma' => $proforma,
+                'totalInWords' => strtoupper(
+                    (new \NumberToWords\NumberToWords())
+                        ->getNumberTransformer('fr')
+                        ->toWords((int) round((float) $proforma->total))
+                ) . ' FDJ',
                 'isPdf' => true,
             ]
         )
@@ -1420,9 +1463,11 @@ class ProformaController extends Controller
                     $sale = Sale::create([
                         'customer_id' => $locked->customer_id,
                         'vehicle_id' => $locked->vehicle_id,
+                        'immatriculation' => $locked->immatriculation,
                         'user_id' => auth()->id(),
                         'payment_type' => null,
                         'subtotal' => $locked->subtotal,
+                        'taux_majoration' => $locked->taux_majoration,
                         'discount' => $locked->discount,
                         'discount_amount' => $locked->discount_amount,
                         'tva' => $locked->tva,
@@ -1490,6 +1535,7 @@ class ProformaController extends Controller
 
                                 'quantity' => $quantity,
                                 'price' => $price,
+                                'prix_base' => $proformaItem->prix_base ?? $price,
                                 'total' => $lineTotal,
                             ]);
 
@@ -1528,6 +1574,7 @@ class ProformaController extends Controller
 
                             'quantity' => $quantity,
                             'price' => $price,
+                            'prix_base' => $allocation['proforma_item']->prix_base ?? $price,
                             'total' => $lineTotal,
                         ]);
 

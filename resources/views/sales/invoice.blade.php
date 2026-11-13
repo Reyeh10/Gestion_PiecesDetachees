@@ -115,6 +115,9 @@
         min-width: 120px;
     }
 
+    .invoice-toolbar .facture-bl-menu { min-width: 260px; }
+    .invoice-toolbar .facture-bl-menu .dropdown-item { white-space: nowrap; }
+
     .invoice-toolbar .btn-status-paid {
         cursor: default;
         opacity: 1;
@@ -375,6 +378,7 @@
        - Une seule page pour une facture normale
    ============================================================ */
     @media print {
+        .d-print-none { display: none !important; } /* ex. mention « Hors catalogue » */
         @page {
             size: A4 portrait;
             margin: 8mm;
@@ -717,6 +721,17 @@
 
 <div class="invoice-page">
 
+    {{-- LIVRAISON (V6) : bons de livraison, partiels possibles --}}
+    @php
+        $etatLivraison = \App\Http\Controllers\BonLivraisonController::etatLivraison($sale);
+        $totalFacture = $etatLivraison->sum('facture');
+        $totalLivre = $etatLivraison->sum('livre');
+        $resteALivrer = $etatLivraison->sum('reste');
+        $blsFacture = $sale->bonsLivraison->sortBy('id');
+        $peutGenererBl = ! $isCancelled && $resteALivrer > 0
+            && auth()->check() && auth()->user()->hasPermission('gerer_bons_livraison');
+    @endphp
+
     {{-- ============================================================
 **        ACTIONS — NAVIGATEUR UNIQUEMENT**
     ============================================================ --}}
@@ -756,6 +771,54 @@
                 <i class="bx bx-printer"></i>
                 Imprimer
             </button>
+
+
+            {{-- V6 : bons de livraison de la facture --}}
+            @if($blsFacture->isNotEmpty())
+
+                <div class="dropdown">
+                    <button
+                        type="button"
+                        class="btn btn-info text-white dropdown-toggle"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                    >
+                        <i class="bx bx-package"></i>
+                        Bons de livraison ({{ $blsFacture->count() }})
+                    </button>
+
+                    <ul class="dropdown-menu dropdown-menu-end facture-bl-menu">
+                        @foreach($blsFacture as $blF)
+                            <li class="d-flex align-items-center">
+                                <a class="dropdown-item flex-grow-1" href="{{ route('bons-livraison.show', $blF) }}">
+                                    <strong>{{ $blF->numero }}</strong>
+                                    <span class="text-muted small ms-1">{{ optional($blF->livre_le ?? $blF->created_at)->format('d/m/Y') }}</span>
+                                    @if($blF->estAnnule())
+                                        <span class="badge bg-label-danger ms-1">annulé</span>
+                                    @endif
+                                </a>
+                                <a class="dropdown-item w-auto px-3" href="{{ route('bons-livraison.imprimer', $blF) }}" target="_blank" title="Imprimer {{ $blF->numero }}">
+                                    <i class="bx bx-printer"></i>
+                                </a>
+                            </li>
+                        @endforeach
+                    </ul>
+                </div>
+
+            @endif
+
+
+            @if($peutGenererBl)
+
+                <a
+                    href="{{ route('bons-livraison.create', $sale) }}"
+                    class="btn btn-primary"
+                >
+                    <i class="bx bx-package"></i>
+                    Générer un BL
+                </a>
+
+            @endif
 
 
             @if(!$isCancelled && !$isPaid)
@@ -846,6 +909,29 @@
         @elseif($isCancelled)
             <div class="alert alert-warning no-print">
                 <strong>Facture annulée</strong> (annulation faite avant la mise en place des avoirs).
+            </div>
+        @endif
+
+        {{-- LIVRAISON (V6) : bandeau d'état ; boutons dans la barre du haut --}}
+        @if(! $isCancelled || $blsFacture->isNotEmpty())
+            <div class="alert {{ $resteALivrer <= 0 && $totalLivre > 0 ? 'alert-success' : 'alert-secondary' }} no-print d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div>
+                    <strong>Livraison :</strong>
+                    @if($totalLivre <= 0)
+                        non livrée
+                    @elseif($resteALivrer > 0)
+                        partiellement livrée ({{ rtrim(rtrim(number_format($totalLivre, 2, ',', ' '), '0'), ',') }} / {{ rtrim(rtrim(number_format($totalFacture, 2, ',', ' '), '0'), ',') }})
+                    @else
+                        entièrement livrée
+                    @endif
+                    @if($blsFacture->isNotEmpty())
+                        — BL :
+                        @foreach($blsFacture as $blF)
+                            <a href="{{ route('bons-livraison.show', $blF) }}">{{ $blF->numero }}</a>{{ $blF->estAnnule() ? ' (annulé)' : '' }}{{ $loop->last ? '' : ', ' }}
+                        @endforeach
+                    @endif
+                </div>
+
             </div>
         @endif
 
@@ -948,7 +1034,7 @@
 
                     <div>
                         <strong>Immatriculation :</strong>
-                        {{ $sale->vehicle->plate_number ?? '-' }}
+                        {{ $sale->plaque ?? '-' }}
                     </div>
 
                 </div>
@@ -1117,8 +1203,8 @@
 
                                 @if($isCustomProduct)
 
+                                    <span class="d-print-none">
                                     <br>
-
                                     <small
                                         style="
                                             color:#6366f1;
@@ -1127,6 +1213,7 @@
                                     >
                                         Hors catalogue
                                     </small>
+                                    </span>
 
                                 @endif
                             </td>

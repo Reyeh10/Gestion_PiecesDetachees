@@ -70,7 +70,7 @@
                     </div>
                     <div class="col-md-4">
                         <div class="text-muted small text-uppercase fw-bold">Véhicule</div>
-                        <div class="fw-bold">{{ $sale?->vehicle?->plate_number ?? '—' }}</div>
+                        <div class="fw-bold">{{ $sale?->plaque ?? '—' }}</div>
                     </div>
                 </div>
 

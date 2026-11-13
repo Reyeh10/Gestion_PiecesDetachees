@@ -5,8 +5,9 @@
     La dernière activité est partagée entre les onglets : un onglet oublié
     ne déconnecte pas celui qu'on utilise.
     Sécurité côté serveur : App\Http\Middleware\SessionTimeout.
+    « Se souvenir de moi » coché : rien de tout cela (connexion mémorisée).
 ============================================================ --}}
-@auth
+@if(auth()->check() && ! \App\Http\Middleware\SessionTimeout::connexionMemorisee(request()))
 <div id="stcd-idle-warning" class="stcd-idle" hidden>
     <div class="stcd-idle-fond"></div>
     <div class="stcd-idle-boite" role="alertdialog" aria-labelledby="stcd-idle-titre">
@@ -25,9 +26,6 @@
     </div>
 </div>
 
-<form id="stcd-idle-logout-form" method="POST" action="{{ route('logout') }}" hidden>
-    @csrf
-</form>
 
 <script>
 (function () {
@@ -88,13 +86,14 @@
         if (parti) return;
         parti = true;
         try { sessionStorage.setItem('session_expired', '1'); } catch (e) {}
-        document.getElementById('stcd-idle-logout-form').submit();
+        // Lien simple (GET) : pas de jeton CSRF, donc pas d'erreur 419.
+        window.location.href = @json(route('session.expiree'));
     }
     window.stcdSessionExpiree = function () {
         if (parti) return;
         parti = true;
         try { sessionStorage.setItem('session_expired', '1'); } catch (e) {}
-        window.location.href = @json(route('login'));
+        window.location.href = @json(route('session.expiree'));
     };
 
     ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(function (e) {
@@ -126,4 +125,4 @@
     }, 1000);
 })();
 </script>
-@endauth
+@endif

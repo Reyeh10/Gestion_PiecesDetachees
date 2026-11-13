@@ -105,6 +105,18 @@ class FournisseurBonCommandeController extends Controller
                         'max:100',
                     ],
 
+                    // V6 : BC « consommation atelier » (équipement, pas de véhicule)
+                    'equipement.id' => [
+                        'nullable',
+                        'integer',
+                    ],
+
+                    'equipement.nom' => [
+                        'nullable',
+                        'string',
+                        'max:150',
+                    ],
+
                     'pieces' => [
                         'required',
                         'array',
@@ -192,6 +204,20 @@ class FournisseurBonCommandeController extends Controller
 
                         'client_telephone' =>
                             $data['client']['telephone'] ?? null,
+
+                        'equipement' =>
+                            filled($data['equipement']['nom'] ?? null)
+                                ? trim($data['equipement']['nom'])
+                                : null,
+
+                        // équipement pas encore dans la copie locale : ajouté tout de suite
+                        'equipement_atelier_id' =>
+                            filled($data['equipement']['id'] ?? null) && filled($data['equipement']['nom'] ?? null)
+                                ? \App\Models\EquipementAtelier::query()->firstOrCreate(
+                                    ['atelier_id' => (int) $data['equipement']['id']],
+                                    ['nom' => trim($data['equipement']['nom']), 'actif' => true]
+                                )->id
+                                : null,
 
                         'statut' =>
                             'recu',

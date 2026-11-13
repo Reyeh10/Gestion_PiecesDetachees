@@ -21,10 +21,14 @@ class Proforma extends Model
         'proforma_number',
         'customer_id',
         'vehicle_id',
+        // V6 : immatriculation libre (vente / proforma à une assurance)
+        'immatriculation',
         'created_by',
         'payment_type',
 
         'subtotal',
+        // V6 : majoration assurance appliquée (0 = aucune)
+        'taux_majoration',
         'discount',
         'discount_amount',
         'tva',
@@ -183,5 +187,11 @@ class Proforma extends Model
     public function getIsCancelledAttribute(): bool
     {
         return $this->status === self::STATUS_CANCELLED;
+    }
+
+    /** V6 : immatriculation affichée (véhicule rattaché, sinon saisie libre d'une vente à une assurance) */
+    public function getPlaqueAttribute(): ?string
+    {
+        return $this->vehicle?->plate_number ?? $this->immatriculation;
     }
 }

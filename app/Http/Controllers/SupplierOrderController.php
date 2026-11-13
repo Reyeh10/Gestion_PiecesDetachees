@@ -113,6 +113,17 @@ class SupplierOrderController extends Controller
             );
         }
 
+        // V7 : « À signer » (ma signature attendue) et « En retard »
+        if ($request->query('vue') === 'a-signer' && auth()->user()) {
+            $query->whereIn('id', self::requeteASigner(auth()->user())->select('id'));
+        }
+
+        if ($request->query('vue') === 'en-retard') {
+            $query->whereIn('status', SupplierOrder::STATUTS_RECEPTION)
+                ->whereNotNull('expected_delivery_date')
+                ->whereDate('expected_delivery_date', '<', today());
+        }
+
         /*
         |--------------------------------------------------------------------------
         | PAGINATION
@@ -945,9 +956,11 @@ public function createFromPartRequests(Request $request): View|RedirectResponse
                         */
 
                         if (
-                            $partRequest->status
-                            !==
-                            VehiclePartRequest::STATUS_ORDERED
+                            ! in_array(
+                                $partRequest->status,
+                                [VehiclePartRequest::STATUS_ORDERED, VehiclePartRequest::STATUS_TO_ORDER],
+                                true
+                            )
                         ) {
 
                             throw ValidationException::withMessages([
@@ -1824,10 +1837,10 @@ public function createFromPartRequests(Request $request): View|RedirectResponse
     {
         return VehiclePartRequest::query()
             ->with(['vehicle.customer', 'product', 'supplier'])
-            ->where('status', VehiclePartRequest::STATUS_ORDERED)
+            ->whereIn('status', [VehiclePartRequest::STATUS_ORDERED, VehiclePartRequest::STATUS_TO_ORDER])
             ->whereDoesntHave('supplierOrderItems', function ($q) use ($supplierOrder) {
                 $q->where('supplier_order_id', '!=', $supplierOrder->id)
-                    ->whereHas('supplierOrder', fn ($o) => $o->where('status', '!=', SupplierOrder::STATUS_CANCELLED));
+                    ->whereHas('supplierOrder', fn ($o) => $o->whereNotIn('status', SupplierOrder::STATUTS_INACTIFS));
             })
             ->whereDoesntHave('supplierOrderItems', fn ($q) => $q->where('supplier_order_id', $supplierOrder->id))
             ->orderByDesc('id')
@@ -1962,7 +1975,7 @@ public function createFromPartRequests(Request $request): View|RedirectResponse
 
                     // Pièce ajoutée : doit être COMMANDÉE et libre
                     if (! $lignesActuelles->has($part->id)) {
-                        if ($part->status !== VehiclePartRequest::STATUS_ORDERED) {
+                        if (! in_array($part->status, [VehiclePartRequest::STATUS_ORDERED, VehiclePartRequest::STATUS_TO_ORDER], true)) {
                             throw ValidationException::withMessages([
                                 "items.$index.vehicle_part_request_id" => 'La pièce « ' . $nom . ' » n’est pas au statut COMMANDÉE.',
                             ]);
@@ -2142,750 +2155,293 @@ public function createFromPartRequests(Request $request): View|RedirectResponse
 
     'preparedSignature.user',
     'approvedSignature.user',
+
+    // V7 : chef magasinier, demande, réception
+    'validator',
+    'validatedSignature.user',
+    'demande',
+    'closer',
 ]);
+
+        $etapeSignature = self::etapeSignature($supplierOrder, auth()->user());
+        $peutRejeter = self::peutRejeter($supplierOrder, auth()->user());
+        $depots = Depot::query()->orderBy('name')->get(['id', 'name']);
 
         return view(
             'supplier-orders.show',
-            compact('supplierOrder')
+            compact('supplierOrder', 'etapeSignature', 'peutRejeter', 'depots')
         );
     }
 
 
     /*
     |--------------------------------------------------------------------------
-    | APPROUVER LE BC
-    |--------------------------------------------------------------------------
-    */
-
-    public function approve(
-    Request $request,
-    SupplierOrder $supplierOrder
-): RedirectResponse {
-
-    /*
-    |--------------------------------------------------------------------------
-    | AUTORISATION
+    | V7 — SIGNATURES : CHEF MAGASINIER (VALIDER) PUIS ADMIN (APPROUVER)
     |--------------------------------------------------------------------------
     |
-    | Seuls les administrateurs peuvent signer et approuver un BC.
+    | Le vendeur / magasinier enregistre (sans signer) → BC « À valider ».
+    | Le chef magasinier signe → « À approuver ». L'admin signe → « Approuvé ».
+    | Chacun saute les étapes inférieures à la sienne : un BC créé par l'admin
+    | est approuvé directement par sa signature. Une même personne ne signe
+    | pas deux fois le même BC.
     |
     */
 
-   abort_unless(
-    $this->utilisateurConnecte()
-        ->hasPermission('approuver_commandes_fournisseurs'),
-    403
-);
+    /** Étape de signature que l'utilisateur peut faire maintenant : 'valider', 'approuver' ou null. */
+    public static function etapeSignature(SupplierOrder $bc, ?User $user): ?string
+    {
+        if (! $user) {
+            return null;
+        }
 
-    /*
-    |--------------------------------------------------------------------------
-    | VALIDATION DE LA SIGNATURE
-    |--------------------------------------------------------------------------
-    |
-    | Le navigateur enverra la signature dessinée sous la forme :
-    |
-    | data:image/png;base64,xxxxxxxx...
-    |
-    | Nous limitons volontairement la taille reçue.
-    |
-    */
+        if ($user->isAdmin()) {
+            if ($bc->status === SupplierOrder::STATUS_VALIDATED) {
+                return 'approuver';
+            }
 
-    $validated = $request->validate([
+            return $bc->status === SupplierOrder::STATUS_DRAFT && $bc->creator?->isAdmin() ? 'approuver' : null;
+        }
 
-        'signature' => [
-            'required',
-            'string',
-            'max:3000000',
-            function (
-                string $attribute,
-                mixed $value,
-                \Closure $fail
-            ) {
+        if ($bc->status === SupplierOrder::STATUS_DRAFT && $user->hasPermission('valider_commandes_fournisseurs')) {
+            return 'valider';
+        }
 
-                if (
-                    !is_string($value)
-                    ||
-                    !str_starts_with(
-                        $value,
-                        'data:image/png;base64,'
-                    )
-                ) {
-                    $fail(
-                        'La signature électronique est invalide.'
-                    );
+        if (
+            $bc->status === SupplierOrder::STATUS_VALIDATED
+            && $user->hasPermission('approuver_commandes_fournisseurs')
+            && (int) $bc->validated_by !== (int) $user->id
+        ) {
+            return 'approuver';
+        }
 
-                    return;
-                }
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | EXTRAIRE LE BASE64
-                |--------------------------------------------------------------------------
-                */
-
-                $base64 =
-                    substr(
-                        $value,
-                        strlen(
-                            'data:image/png;base64,'
-                        )
-                    );
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | DÉCODAGE STRICT
-                |--------------------------------------------------------------------------
-                */
-
-                $binary =
-                    base64_decode(
-                        $base64,
-                        true
-                    );
-
-                if (
-                    $binary === false
-                    ||
-                    strlen($binary) < 100
-                ) {
-
-                    $fail(
-                        'La signature électronique est vide ou invalide.'
-                    );
-
-                    return;
-                }
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | VÉRIFIER QU'IL S'AGIT RÉELLEMENT D'UNE IMAGE PNG
-                |--------------------------------------------------------------------------
-                */
-
-                $pngSignature =
-                    "\x89PNG\r\n\x1a\n";
-
-                if (
-                    !str_starts_with(
-                        $binary,
-                        $pngSignature
-                    )
-                ) {
-
-                    $fail(
-                        'La signature doit être une image PNG valide.'
-                    );
-                }
-            },
-        ],
-    ]);
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | PRÉPARER LE FICHIER
-    |--------------------------------------------------------------------------
-    */
-
-    $base64 =
-        substr(
-            $validated['signature'],
-            strlen(
-                'data:image/png;base64,'
-            )
-        );
-
-    $signatureBinary =
-        base64_decode(
-            $base64,
-            true
-        );
-
-    if ($signatureBinary === false) {
-
-        return back()
-            ->withInput()
-            ->with(
-                'error',
-                'Impossible de décoder la signature.'
-            );
+        return null;
     }
 
+    /** Refus : le chef sur un BC à valider, l'admin sur un BC à valider ou à approuver. */
+    public static function peutRejeter(SupplierOrder $bc, ?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
 
-    /*
-    |--------------------------------------------------------------------------
-    | CHEMIN PRIVÉ
-    |--------------------------------------------------------------------------
-    |
-    | Le fichier n'est PAS enregistré dans public/storage.
-    |
-    | Exemple :
-    |
-    | storage/app/private/supplier-order-signatures/8/approved-....png
-    |
-    */
+        if ($bc->status === SupplierOrder::STATUS_VALIDATED) {
+            return $user->hasPermission('approuver_commandes_fournisseurs') && (int) $bc->validated_by !== (int) $user->id;
+        }
 
-    $signatureDirectory =
-        'supplier-order-signatures/'
-        .
-        $supplierOrder->id;
+        return $bc->status === SupplierOrder::STATUS_DRAFT
+            && ($user->hasPermission('valider_commandes_fournisseurs') || $user->hasPermission('approuver_commandes_fournisseurs'));
+    }
 
-    $signatureFileName =
-        'approved-'
-        .
-        now()->format('YmdHis')
-        .
-        '-'
-        .
-        bin2hex(
-            random_bytes(8)
-        )
-        .
-        '.png';
+    /** Nombre de BC qui attendent la signature de l'utilisateur (compteur du menu). */
+    public static function nombreASigner(?User $user): int
+    {
+        if (! $user) {
+            return 0;
+        }
 
-    $signaturePath =
-        $signatureDirectory
-        .
-        '/'
-        .
-        $signatureFileName;
+        return self::requeteASigner($user)->count();
+    }
 
+    private static function requeteASigner(User $user)
+    {
+        $q = SupplierOrder::query();
 
-    /*
-    |--------------------------------------------------------------------------
-    | PERMET DE SUPPRIMER LE FICHIER EN CAS D'ÉCHEC SQL
-    |--------------------------------------------------------------------------
-    */
+        if ($user->isAdmin()) {
+            return $q->where(fn ($w) => $w
+                ->where('status', SupplierOrder::STATUS_VALIDATED)
+                ->orWhere(fn ($d) => $d->where('status', SupplierOrder::STATUS_DRAFT)->whereHas('creator', fn ($u) => $u->where('role', 'admin'))));
+        }
 
-    $fileStored = false;
+        if ($user->hasPermission('valider_commandes_fournisseurs')) {
+            return $q->where('status', SupplierOrder::STATUS_DRAFT);
+        }
 
+        if ($user->hasPermission('approuver_commandes_fournisseurs')) {
+            return $q->where('status', SupplierOrder::STATUS_VALIDATED)->where('validated_by', '!=', $user->id);
+        }
 
-    try {
+        return $q->whereRaw('1 = 0');
+    }
 
-        DB::transaction(
-            function () use (
-                $request,
-                $supplierOrder,
-                $signatureBinary,
-                $signaturePath,
-                &$fileStored
-            ) {
+    /** Chef magasinier : signe et valide (le BC part chez l'admin). */
+    public function validateOrder(Request $request, SupplierOrder $supplierOrder): RedirectResponse
+    {
+        return $this->signerEtape($request, $supplierOrder, 'valider');
+    }
 
-                /*
-                |--------------------------------------------------------------------------
-                | RECHARGER ET VERROUILLER LE BC
-                |--------------------------------------------------------------------------
-                |
-                | Nous ne faisons pas confiance à l'état du modèle chargé avant
-                | le début de la transaction.
-                |
-                */
+    /** Admin : signe et approuve (le BC peut être envoyé au fournisseur). */
+    public function approve(Request $request, SupplierOrder $supplierOrder): RedirectResponse
+    {
+        return $this->signerEtape($request, $supplierOrder, 'approuver');
+    }
 
-                $lockedOrder =
-                    SupplierOrder::query()
-                        ->whereKey(
-                            $supplierOrder->id
-                        )
-                        ->lockForUpdate()
-                        ->firstOrFail();
+    private function signerEtape(Request $request, SupplierOrder $supplierOrder, string $etape): RedirectResponse
+    {
+        abort_unless(self::etapeSignature($supplierOrder, $this->utilisateurConnecte()) === $etape, 403);
 
+        $validated = $request->validate([
+            'signature' => \App\Services\SignatureBonCommandeService::regle(),
+        ]);
 
-                /*
-                |--------------------------------------------------------------------------
-                | LE BC DOIT TOUJOURS ÊTRE BROUILLON
-                |--------------------------------------------------------------------------
-                */
+        $service = app(\App\Services\SignatureBonCommandeService::class);
 
-                if (
-                    $lockedOrder->status
-                    !==
-                    SupplierOrder::STATUS_DRAFT
-                ) {
+        try {
+            $bc = DB::transaction(function () use ($request, $supplierOrder, $validated, $etape, $service) {
+                $bc = SupplierOrder::query()->lockForUpdate()->findOrFail($supplierOrder->id);
 
+                if (self::etapeSignature($bc, auth()->user()) !== $etape) {
                     throw ValidationException::withMessages([
-                        'signature' =>
-                            'Ce bon de commande n’est plus en brouillon et ne peut plus être approuvé.',
+                        'signature' => 'Ce bon de commande vient de changer de statut (' . $bc->libelleStatut() . ') : rechargez la page.',
                     ]);
                 }
 
+                if (! $bc->items()->exists()) {
+                    throw ValidationException::withMessages(['signature' => 'Ce bon de commande n\'a aucune ligne.']);
+                }
 
-                /*
-                |--------------------------------------------------------------------------
-                | EMPÊCHER UNE DEUXIÈME SIGNATURE D'APPROBATION
-                |--------------------------------------------------------------------------
-                */
-
-                $alreadySigned =
-                    SupplierOrderSignature::query()
-                        ->where(
-                            'supplier_order_id',
-                            $lockedOrder->id
-                        )
-                        ->where(
-                            'type',
-                            SupplierOrderSignature::TYPE_APPROVED
-                        )
-                        ->exists();
-
-                if ($alreadySigned) {
-
-                    throw ValidationException::withMessages([
-                        'signature' =>
-                            'Ce bon de commande possède déjà une signature d’approbation.',
+                if ($etape === 'valider') {
+                    $service->signer($bc, SupplierOrderSignature::TYPE_VALIDATED, $validated['signature'], $request);
+                    $bc->update([
+                        'status'       => SupplierOrder::STATUS_VALIDATED,
+                        'validated_by' => auth()->id(),
+                        'validated_at' => now(),
+                    ]);
+                } else {
+                    $service->signer($bc, SupplierOrderSignature::TYPE_APPROVED, $validated['signature'], $request);
+                    $bc->update([
+                        'status'      => SupplierOrder::STATUS_APPROVED,
+                        'approved_by' => auth()->id(),
+                        'approved_at' => now(),
                     ]);
                 }
 
-
-                /*
-                |--------------------------------------------------------------------------
-                | CHARGER LES LIGNES DANS UN ORDRE DÉTERMINISTE
-                |--------------------------------------------------------------------------
-                |
-                | L'ordre est important pour que le même document produise
-                | toujours la même empreinte.
-                |
-                */
-
-                $items =
-                    $lockedOrder
-                        ->items()
-                        ->orderBy('id')
-                        ->get();
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | CONSTRUIRE LE CONTENU À SIGNER
-                |--------------------------------------------------------------------------
-                |
-                | Nous n'incluons volontairement pas :
-                |
-                | - updated_at ;
-                | - approved_at ;
-                | - approved_by ;
-                | - status.
-                |
-                | Ces valeurs changent précisément pendant l'approbation.
-                |
-                */
-
-                $documentData = [
-
-                    'supplier_order' => [
-
-                        'id' =>
-                            (int) $lockedOrder->id,
-
-                        'order_number' =>
-                            (string) $lockedOrder->order_number,
-
-                        'supplier_id' =>
-                            (int) $lockedOrder->supplier_id,
-
-                        'depot_id' =>
-                            $lockedOrder->depot_id !== null
-                                ? (int) $lockedOrder->depot_id
-                                : null,
-
-                        'created_by' =>
-                            $lockedOrder->created_by !== null
-                                ? (int) $lockedOrder->created_by
-                                : null,
-
-                        'order_date' =>
-                            $lockedOrder->order_date
-                                ?->format('Y-m-d'),
-
-                        'expected_delivery_date' =>
-                            $lockedOrder
-                                ->expected_delivery_date
-                                ?->format('Y-m-d'),
-
-                        'currency' =>
-                            (string) $lockedOrder->currency,
-
-                        'subtotal' =>
-                            number_format(
-                                (float) $lockedOrder->subtotal,
-                                2,
-                                '.',
-                                ''
-                            ),
-
-                        'discount_rate' =>
-                            number_format(
-                                (float) $lockedOrder->discount_rate,
-                                2,
-                                '.',
-                                ''
-                            ),
-
-                        'discount' =>
-                            number_format(
-                                (float) $lockedOrder->discount,
-                                2,
-                                '.',
-                                ''
-                            ),
-
-                        'shipping_cost' =>
-                            number_format(
-                                (float) $lockedOrder->shipping_cost,
-                                2,
-                                '.',
-                                ''
-                            ),
-
-                        'tax_rate' =>
-                            number_format(
-                                (float) $lockedOrder->tax_rate,
-                                2,
-                                '.',
-                                ''
-                            ),
-
-                        'tax_amount' =>
-                            number_format(
-                                (float) $lockedOrder->tax_amount,
-                                2,
-                                '.',
-                                ''
-                            ),
-
-                        'total' =>
-                            number_format(
-                                (float) $lockedOrder->total,
-                                2,
-                                '.',
-                                ''
-                            ),
-
-                        'payment_terms' =>
-                            $lockedOrder->payment_terms,
-
-                        'delivery_terms' =>
-                            $lockedOrder->delivery_terms,
-
-                        'notes' =>
-                            $lockedOrder->notes,
-                    ],
-
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | LIGNES DU BC
-                    |--------------------------------------------------------------------------
-                    */
-
-                    'items' =>
-                        $items
-                            ->map(
-                                function (
-                                    SupplierOrderItem $item
-                                ) {
-
-                                    return [
-
-                                        'id' =>
-                                            (int) $item->id,
-
-                                        'vehicle_part_request_id' =>
-                                            $item
-                                                ->vehicle_part_request_id
-                                                !== null
-                                                ? (int) $item
-                                                    ->vehicle_part_request_id
-                                                : null,
-
-                                        'product_id' =>
-                                            $item->product_id !== null
-                                                ? (int) $item->product_id
-                                                : null,
-
-                                        'reference' =>
-                                            $item->reference,
-
-                                        'description' =>
-                                            $item->description,
-
-                                        'unit' =>
-                                            $item->unit,
-
-                                        'quantity_ordered' =>
-                                            number_format(
-                                                (float) $item
-                                                    ->quantity_ordered,
-                                                2,
-                                                '.',
-                                                ''
-                                            ),
-
-                                        'unit_price' =>
-                                            number_format(
-                                                (float) $item
-                                                    ->unit_price,
-                                                4,
-                                                '.',
-                                                ''
-                                            ),
-
-                                        'line_total' =>
-                                            number_format(
-                                                (float) $item
-                                                    ->line_total,
-                                                2,
-                                                '.',
-                                                ''
-                                            ),
-
-                                        'notes' =>
-                                            $item->notes,
-                                    ];
-                                }
-                            )
-                            ->values()
-                            ->all(),
-                ];
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | JSON CANONIQUE
-                |--------------------------------------------------------------------------
-                */
-
-                $documentJson =
-                    json_encode(
-                        $documentData,
-                        JSON_UNESCAPED_UNICODE
-                        |
-                        JSON_UNESCAPED_SLASHES
-                        |
-                        JSON_PRESERVE_ZERO_FRACTION
-                        |
-                        JSON_THROW_ON_ERROR
-                    );
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | EMPREINTE SHA-256
-                |--------------------------------------------------------------------------
-                */
-
-                $documentHash =
-                    hash(
-                        'sha256',
-                        $documentJson
-                    );
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | DATE UNIQUE DE SIGNATURE / APPROBATION
-                |--------------------------------------------------------------------------
-                */
-
-                $signedAt = now();
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | ENREGISTRER LE PNG SUR LE DISQUE PRIVÉ
-                |--------------------------------------------------------------------------
-                */
-
-                $stored =
-                    Storage::disk('local')
-                        ->put(
-                            $signaturePath,
-                            $signatureBinary
-                        );
-
-                if (!$stored) {
-
-                    throw new \RuntimeException(
-                        'Impossible d’enregistrer le fichier de signature.'
-                    );
-                }
-
-                $fileStored = true;
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | ENREGISTRER LA SIGNATURE
-                |--------------------------------------------------------------------------
-                */
-
-                SupplierOrderSignature::create([
-
-                    'supplier_order_id' =>
-                        $lockedOrder->id,
-
-                    'user_id' =>
-                        auth()->id(),
-
-                    'type' =>
-                        SupplierOrderSignature::TYPE_APPROVED,
-
-                    'signature_path' =>
-                        $signaturePath,
-
-                    'signed_at' =>
-                        $signedAt,
-
-                    'ip_address' =>
-                        $request->ip(),
-
-                    'user_agent' =>
-                        substr(
-                            (string) $request->userAgent(),
-                            0,
-                            2000
-                        ),
-
-                    'document_hash' =>
-                        $documentHash,
-                ]);
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | APPROUVER LE BC
-                |--------------------------------------------------------------------------
-                |
-                | La signature et l'approbation font partie de la même
-                | transaction SQL.
-                |
-                */
-
-                $lockedOrder->update([
-
-                    'status' =>
-                        SupplierOrder::STATUS_APPROVED,
-
-                    'approved_by' =>
-                        auth()->id(),
-
-                    'approved_at' =>
-                        $signedAt,
-                ]);
-            },
-            3
-        );
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | SUCCÈS
-        |--------------------------------------------------------------------------
-        */
-
-        return back()->with(
-            'success',
-            'Bon de commande signé et approuvé avec succès.'
-        );
-
-    } catch (ValidationException $exception) {
-
-        /*
-        |--------------------------------------------------------------------------
-        | NETTOYER LE PNG SI LA TRANSACTION A ÉCHOUÉ
-        |--------------------------------------------------------------------------
-        */
-
-        if ($fileStored) {
-
-            Storage::disk('local')
-                ->delete(
-                    $signaturePath
-                );
+                return $bc;
+            }, 3);
+        } catch (ValidationException $exception) {
+            $this->effacerFichier($service);
+            throw $exception;
+        } catch (Throwable $exception) {
+            $this->effacerFichier($service);
+            report($exception);
+
+            return back()->withInput()->with('error', 'Impossible de signer le bon de commande : ' . $exception->getMessage());
         }
 
-        throw $exception;
-
-    } catch (Throwable $exception) {
-
-        /*
-        |--------------------------------------------------------------------------
-        | NETTOYER LE PNG SI LA TRANSACTION A ÉCHOUÉ
-        |--------------------------------------------------------------------------
-        */
-
-        if ($fileStored) {
-
-            Storage::disk('local')
-                ->delete(
-                    $signaturePath
-                );
-        }
-
-        report($exception);
-
-        return back()
-            ->withInput()
-            ->with(
-                'error',
-                'Impossible de signer et approuver le bon de commande.'
+        if ($etape === 'valider') {
+            app(\App\Services\CircuitAchatService::class)->notifier(
+                $bc,
+                ['admin'],
+                'Bon de commande à approuver',
+                'Le bon de commande ' . $bc->order_number . ' a été validé par ' . auth()->user()->name . ' : il attend votre approbation.'
             );
+
+            return back()->with('success', 'Bon de commande signé et validé : il attend maintenant l\'approbation de l\'administrateur.');
+        }
+
+        return back()->with('success', 'Bon de commande signé et approuvé : il peut être envoyé au fournisseur.');
     }
-}
+
+    private function effacerFichier(\App\Services\SignatureBonCommandeService $service): void
+    {
+        if ($service->dernierFichier) {
+            Storage::disk('local')->delete($service->dernierFichier);
+        }
+    }
+
     /*
     |--------------------------------------------------------------------------
-    | MARQUER COMME ENVOYÉ AU FOURNISSEUR
+    | V7 — ENVOI AU FOURNISSEUR
     |--------------------------------------------------------------------------
+    |
+    | BC approuvé seulement. Ses pièces passent « Commandée ».
+    |
     */
 
     public function markAsSent(
         SupplierOrder $supplierOrder
     ): RedirectResponse {
-
-        /*
-        |--------------------------------------------------------------------------
-        | STATUTS AUTORISÉS
-        |--------------------------------------------------------------------------
-        */
-
-        if (
-            !in_array(
-                $supplierOrder->status,
-                [
-                    SupplierOrder::STATUS_DRAFT,
-                    SupplierOrder::STATUS_APPROVED,
-                ],
-                true
-            )
-        ) {
-            return back()->with(
-                'error',
-                'Ce bon de commande ne peut pas être marqué comme envoyé.'
-            );
+        try {
+            app(\App\Services\CircuitAchatService::class)->envoyer($supplierOrder);
+        } catch (ValidationException $e) {
+            return back()->with('error', collect($e->errors())->flatten()->first());
         }
-
-        /*
-        |--------------------------------------------------------------------------
-        | MARQUER COMME ENVOYÉ
-        |--------------------------------------------------------------------------
-        */
-
-        $supplierOrder->update([
-            'status' =>
-                SupplierOrder::STATUS_SENT,
-
-            'sent_at' =>
-                now(),
-        ]);
 
         return back()->with(
             'success',
-            'Bon de commande marqué comme envoyé au fournisseur.'
+            'Bon de commande marqué comme envoyé au fournisseur : ses pièces sont maintenant « Commandées ».'
         );
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | V7 — RÉCEPTION DEPUIS LE BON DE COMMANDE
+    |--------------------------------------------------------------------------
+    |
+    | Ligne par ligne : quantité reçue et prix réel (facture fournisseur).
+    | Stock, CUMP, pièce, ligne du BC, statut du BC et Atelier en un
+    | enregistrement. Plus que commandé : administrateur seulement.
+    |
+    */
+
+    public function receive(Request $request, SupplierOrder $supplierOrder): RedirectResponse
+    {
+        $validated = $request->validate([
+            'depot_id'           => ['required', 'integer', 'exists:depots,id'],
+            'lignes'             => ['required', 'array'],
+            'lignes.*.quantite'  => ['nullable', 'numeric', 'min:0'],
+            'lignes.*.prix'      => ['nullable', 'numeric', 'min:0'],
+        ], [
+            'depot_id.required' => 'Le dépôt de réception est obligatoire.',
+        ]);
+
+        try {
+            $n = app(\App\Services\CircuitAchatService::class)->receptionner(
+                $supplierOrder,
+                $validated['lignes'],
+                (int) $validated['depot_id'],
+                (bool) auth()->user()?->isAdmin()
+            );
+        } catch (ValidationException $e) {
+            return back()->withInput()->with('error', collect($e->errors())->flatten()->first());
+        }
+
+        $bc = $supplierOrder->fresh();
+
+        return back()->with(
+            'success',
+            $n . ' ligne' . ($n > 1 ? 's' : '') . ' réceptionnée' . ($n > 1 ? 's' : '') . ' : stock mis à jour. '
+            . ($bc->status === SupplierOrder::STATUS_RECEIVED
+                ? 'Tout est arrivé : le bon de commande est reçu.'
+                : 'Le bon de commande est en réception partielle.')
+        );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | V7 — SOLDER (le fournisseur ne livrera pas le reste)
+    |--------------------------------------------------------------------------
+    |
+    | Pour chaque ligne pas entièrement reçue : « recommander » (le reste repart
+    | en recherche dans la même demande, pour un autre fournisseur) ou
+    | « annuler ». Le BC passe « Soldé ».
+    |
+    */
+
+    public function close(Request $request, SupplierOrder $supplierOrder): RedirectResponse
+    {
+        $validated = $request->validate([
+            'choix'   => ['nullable', 'array'],
+            'choix.*' => ['in:recommander,annuler'],
+        ]);
+
+        try {
+            app(\App\Services\CircuitAchatService::class)->solder($supplierOrder, $validated['choix'] ?? []);
+        } catch (ValidationException $e) {
+            return back()->with('error', collect($e->errors())->flatten()->first());
+        }
+
+        return back()->with('success', 'Bon de commande soldé. Les pièces « à re-commander » sont de nouveau « En recherche » dans leur demande.');
+    }
 
     /*
     |--------------------------------------------------------------------------
@@ -2933,11 +2489,36 @@ public function createFromPartRequests(Request $request): View|RedirectResponse
         |--------------------------------------------------------------------------
         */
 
-        DB::transaction(function () use ($supplierOrder) {
+        if (
+            $supplierOrder->status === SupplierOrder::STATUS_SENT
+            && ! auth()->user()?->isAdmin()
+        ) {
+            return back()->with(
+                'error',
+                'Ce bon de commande est déjà envoyé au fournisseur : seul l’administrateur peut l’annuler.'
+            );
+        }
 
+        if (in_array($supplierOrder->status, SupplierOrder::STATUTS_INACTIFS, true)) {
+            return back()->with('error', 'Ce bon de commande est déjà ' . mb_strtolower($supplierOrder->libelleStatut()) . '.');
+        }
+
+        DB::transaction(function () use ($supplierOrder) {
             $supplierOrder->load(
                 'items.vehiclePartRequest'
             );
+
+            // V7 : les pièces pas encore commandées repartent en recherche
+            // (sans fournisseur, pour en choisir un autre)
+            $circuit = app(\App\Services\CircuitAchatService::class);
+            foreach ($supplierOrder->items as $item) {
+                $piece = $item->vehiclePartRequest;
+                if ($piece && in_array($piece->status, [VehiclePartRequest::STATUS_TO_ORDER, VehiclePartRequest::STATUS_ORDERED], true)) {
+                    $piece->supplier_id = null;
+                    $circuit->changerStatut($piece, VehiclePartRequest::STATUS_SEARCHING, 'Bon de commande ' . $supplierOrder->order_number . ' annulé.');
+                    $piece->save();
+                }
+            }
 
             foreach ($supplierOrder->items as $item) {
 
@@ -2981,6 +2562,69 @@ public function createFromPartRequests(Request $request): View|RedirectResponse
     }
 
     /*
+    |--------------------------------------------------------------------------
+    | V7 — REFUS (chef magasinier ou admin)
+    |--------------------------------------------------------------------------
+    |
+    | Le BC revient à son créateur avec le motif ; il le corrige (« Modifier »)
+    | et il repart « À valider ». Les signatures repartent de zéro.
+    |
+    */
+
+    public function reject(
+        Request $request,
+        SupplierOrder $supplierOrder
+    ): RedirectResponse {
+        abort_unless(self::peutRejeter($supplierOrder, $this->utilisateurConnecte()), 403);
+
+        $validated = $request->validate(
+            [
+                'rejection_reason' => ['required', 'string', 'min:3', 'max:2000'],
+            ],
+            [
+                'rejection_reason.required' => 'Le motif du rejet est obligatoire.',
+                'rejection_reason.min'      => 'Le motif du rejet doit contenir au moins 3 caractères.',
+                'rejection_reason.max'      => 'Le motif du rejet ne peut pas dépasser 2000 caractères.',
+            ]
+        );
+
+        DB::transaction(function () use ($supplierOrder, $validated) {
+            $bc = SupplierOrder::query()->lockForUpdate()->findOrFail($supplierOrder->id);
+
+            if (! self::peutRejeter($bc, auth()->user())) {
+                throw ValidationException::withMessages([
+                    'rejection_reason' => 'Ce bon de commande vient de changer de statut (' . $bc->libelleStatut() . ') : il ne peut plus être rejeté.',
+                ]);
+            }
+
+            app(\App\Services\SignatureBonCommandeService::class)->effacer($bc, SupplierOrderSignature::TYPE_VALIDATED);
+
+            $bc->update([
+                'status'           => SupplierOrder::STATUS_REJECTED,
+                'rejected_by'      => auth()->id(),
+                'rejected_at'      => now(),
+                'rejection_reason' => trim($validated['rejection_reason']),
+                'validated_by'     => null,
+                'validated_at'     => null,
+            ]);
+        });
+
+        $bc = $supplierOrder->fresh('creator');
+
+        if ($bc->creator && $bc->creator->id !== auth()->id()) {
+            rescue(fn () => $bc->creator->notify(new NewSupplierOrderNotification(
+                $bc,
+                'Bon de commande rejeté',
+                'Le bon de commande ' . $bc->order_number . ' a été rejeté par ' . auth()->user()->name . ' : ' . $bc->rejection_reason
+            )), null, true);
+        }
+
+        return redirect()
+            ->route('supplier-orders.show', $supplierOrder)
+            ->with('success', 'Bon de commande rejeté : il revient à son créateur pour correction.');
+    }
+
+    /*
 |--------------------------------------------------------------------------
 | AFFICHER UNE SIGNATURE ÉLECTRONIQUE
 |--------------------------------------------------------------------------
@@ -2992,164 +2636,6 @@ public function createFromPartRequests(Request $request): View|RedirectResponse
 |
 |--------------------------------------------------------------------------
 */
-
-    /*
-    |--------------------------------------------------------------------------
-    | REJETER LE BON DE COMMANDE
-    |--------------------------------------------------------------------------
-    |
-    | Le rejet est différent de l'annulation.
-    |
-    | Le rejet représente une décision administrative :
-    | l'administrateur refuse le bon de commande et doit obligatoirement
-    | enregistrer le motif de cette décision.
-    |
-    */
-
-    public function reject(
-        Request $request,
-        SupplierOrder $supplierOrder
-    ): RedirectResponse {
-
-        /*
-        |--------------------------------------------------------------------------
-        | AUTORISATION
-        |--------------------------------------------------------------------------
-        |
-        | Comme pour l'approbation, seuls les administrateurs peuvent
-        | rejeter un bon de commande.
-        |
-        */
-
-       abort_unless(
-            $this->utilisateurConnecte()
-                ->hasPermission('approuver_commandes_fournisseurs'),
-            403
-        );
-
-        /*
-        |--------------------------------------------------------------------------
-        | VALIDATION DU MOTIF
-        |--------------------------------------------------------------------------
-        */
-
-        $validated = $request->validate(
-            [
-                'rejection_reason' => [
-                    'required',
-                    'string',
-                    'min:3',
-                    'max:2000',
-                ],
-            ],
-            [
-                'rejection_reason.required' =>
-                    'Le motif du rejet est obligatoire.',
-
-                'rejection_reason.min' =>
-                    'Le motif du rejet doit contenir au moins 3 caractères.',
-
-                'rejection_reason.max' =>
-                    'Le motif du rejet ne peut pas dépasser 2000 caractères.',
-            ]
-        );
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | TRANSACTION SÉCURISÉE
-        |--------------------------------------------------------------------------
-        |
-        | Le verrouillage empêche par exemple qu'un administrateur approuve
-        | le BC pendant qu'un autre administrateur essaie de le rejeter.
-        |
-        */
-
-        DB::transaction(
-            function () use (
-                $supplierOrder,
-                $validated
-            ) {
-
-                /*
-                |--------------------------------------------------------------------------
-                | RECHARGER ET VERROUILLER LE BC
-                |--------------------------------------------------------------------------
-                */
-
-                $lockedOrder =
-                    SupplierOrder::query()
-                        ->whereKey(
-                            $supplierOrder->id
-                        )
-                        ->lockForUpdate()
-                        ->firstOrFail();
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | SEUL UN BC BROUILLON PEUT ÊTRE REJETÉ
-                |--------------------------------------------------------------------------
-                */
-
-                if (
-                    $lockedOrder->status
-                    !==
-                    SupplierOrder::STATUS_DRAFT
-                ) {
-
-                    throw ValidationException::withMessages([
-                        'rejection_reason' =>
-                            'Ce bon de commande n’est plus en brouillon et ne peut plus être rejeté.',
-                    ]);
-                }
-
-
-                /*
-                |--------------------------------------------------------------------------
-                | ENREGISTRER LE REJET
-                |--------------------------------------------------------------------------
-                */
-
-                $lockedOrder->update([
-
-                    'status' =>
-                        SupplierOrder::STATUS_REJECTED,
-
-                    'rejected_by' =>
-                        auth()->id(),
-
-                    'rejected_at' =>
-                        now(),
-
-                    'rejection_reason' =>
-                        trim(
-                            $validated[
-                                'rejection_reason'
-                            ]
-                        ),
-                ]);
-            }
-        );
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | RETOUR VERS LE BON DE COMMANDE
-        |--------------------------------------------------------------------------
-        */
-
-        return redirect()
-            ->route(
-                'supplier-orders.show',
-                $supplierOrder
-            )
-            ->with(
-                'success',
-                'Bon de commande rejeté avec succès.'
-            );
-    }
-
 
 public function showSignature(
     SupplierOrder $supplierOrder,
@@ -3167,6 +2653,7 @@ public function showSignature(
             $type,
             [
                 SupplierOrderSignature::TYPE_PREPARED,
+                SupplierOrderSignature::TYPE_VALIDATED,
                 SupplierOrderSignature::TYPE_APPROVED,
             ],
             true

@@ -33,6 +33,33 @@ class ProductController extends Controller
 |--------------------------------------------------------------------------
 */
 
+    /*
+    |--------------------------------------------------------------------------
+    | NOMBRE DE PRODUITS PAR PAGE (10, 25, 50 ou 100)
+    |--------------------------------------------------------------------------
+    |
+    | Choisi dans la liste (« Afficher … par page ») et mémorisé pour la
+    | session : les listes Tous / Disponibles / Indisponibles / Vendus
+    | gardent le même choix.
+    |
+    */
+    public const PAR_PAGE = [10, 25, 50, 100];
+
+    private function produitsParPage(Request $request): int
+    {
+        $demande = (int) $request->query('par_page');
+
+        if (in_array($demande, self::PAR_PAGE, true)) {
+            session(['produits_par_page' => $demande]);
+
+            return $demande;
+        }
+
+        $memorise = (int) session('produits_par_page', 10);
+
+        return in_array($memorise, self::PAR_PAGE, true) ? $memorise : 10;
+    }
+
    public function index(Request $request)
     {
         /*
@@ -89,7 +116,7 @@ class ProductController extends Controller
 
         $products = $query
             ->latest()
-            ->paginate(10);
+            ->paginate($this->produitsParPage($request));
 
         /*
         |--------------------------------------------------------------------------
@@ -146,6 +173,11 @@ class ProductController extends Controller
 
     public function import()
     {
+        // L'import Excel se fait depuis la liste des produits (fournisseur, dépôt,
+        // fichier) : l'ancienne page dédiée n'existe plus (vue absente -> erreur 500).
+        return redirect()->route('products.index')
+            ->with('info', "Pour importer, choisissez le fournisseur, le dépôt et le fichier Excel en haut de cette page.");
+
         /*
         |--------------------------------------------------------------------------
         | FOURNISSEURS
@@ -927,6 +959,9 @@ class ProductController extends Controller
         |--------------------------------------------------------------------------
         */
 
+        // V6 : pièces dont le rayon de l'Excel est dans un autre dépôt (rangées « Non défini »)
+        $placesIgnorees = [];
+
         foreach ($products as $product) {
 
             /*
@@ -963,15 +998,7 @@ class ProductController extends Controller
                     ? $subfamilyName
                     : 'Non défini';
 
-            $rayonName =
-                $rayonName !== ''
-                    ? $rayonName
-                    : 'Non défini';
-
-            $locationName =
-                $locationName !== ''
-                    ? $locationName
-                    : 'Non défini';
+            // V6 : rayon / emplacement vides = « Non défini » (pas de faux rayon créé)
 
             /*
             |--------------------------------------------------------------------------
@@ -997,14 +1024,14 @@ class ProductController extends Controller
                 'family_id' => $family->id,
             ]);
 
-            $rayon = Rayon::firstOrCreate([
-                'name' => $rayonName,
-            ]);
+            // V6 : un rayon appartient à un seul dépôt (créé dans le dépôt de l'import s'il n'existe pas)
+            [$rayon, $erreurRayon] = Rayon::pourDepot($rayonName, $depot->id);
 
-            $location = Location::firstOrCreate([
-                'name' => $locationName,
-                'rayon_id' => $rayon->id,
-            ]);
+            if ($erreurRayon) {
+                $placesIgnorees[] = trim((string) $product['reference']) . ' : ' . $erreurRayon;
+            }
+
+            $location = Location::pourRayon($locationName, $rayon);
 
             /*
             |--------------------------------------------------------------------------
@@ -1239,10 +1266,10 @@ class ProductController extends Controller
                         $subfamily->id,
 
                     'rayon_id' =>
-                        $rayon->id,
+                        $rayon?->id,
 
                     'location_id' =>
-                        $location->id,
+                        $location?->id,
 
                     /*
                     |--------------------------------------------------------------------------
@@ -1503,10 +1530,10 @@ class ProductController extends Controller
             */
 
             $depotStock->rayon_id =
-                $rayon->id;
+                $rayon?->id;
 
             $depotStock->location_id =
-                $location->id;
+                $location?->id;
 
             $depotStock->save();
 
@@ -1585,6 +1612,10 @@ class ProductController extends Controller
             ->with(
                 'success',
                 'Importation effectuée avec succès.'
+                . ($placesIgnorees
+                    ? ' Rangées « Non défini » (rayon d\'un autre dépôt) : ' . implode(' ; ', array_slice($placesIgnorees, 0, 20))
+                        . (count($placesIgnorees) > 20 ? ' … (' . count($placesIgnorees) . ' au total)' : '') . '.'
+                    : '')
             );
     }
 
@@ -1692,7 +1723,7 @@ class ProductController extends Controller
                 0
             )
             ->latest()
-            ->paginate(10);
+            ->paginate($this->produitsParPage($request));
 
         /*
         |--------------------------------------------------------------------------
@@ -1863,7 +1894,7 @@ class ProductController extends Controller
 
         $products = $query
             ->latest()
-            ->paginate(10);
+            ->paginate($this->produitsParPage($request));
 
         $products->appends(
             $request->query()
@@ -2056,7 +2087,7 @@ class ProductController extends Controller
 
         $products = $query
             ->latest()
-            ->paginate(10)
+            ->paginate($this->produitsParPage($request))
             ->withQueryString();
 
         $suppliers = Supplier::orderBy('name')
@@ -2454,7 +2485,7 @@ public function show(Product $product)
 
         'stockMovements',
 
-        'saleItems.sale',
+        'saleItems.sale.customer',
 
         'depotStocks.depot',
         'depotStocks.rayon',
@@ -2521,7 +2552,7 @@ public function create()
     $models = CarModel::orderBy('name')->get();
     $families = FamilyModel::orderBy('name')->get();
     $subfamilies = Subfamily::orderBy('name')->get();
-    $rayons = Rayon::orderBy('name')->get();
+    $rayons = Rayon::with('depot')->orderBy('name')->get();
     $locations = Location::orderBy('name')->get();
     $depots = Depot::where('is_active', true)
             ->orderBy('name')
@@ -2613,6 +2644,15 @@ public function store(Request $request)
         'rayon_id' => [
             'nullable',
             'exists:rayons,id',
+            // V6 : un rayon appartient à un seul dépôt
+            function ($attribute, $value, $fail) use ($request) {
+                $rayon = Rayon::with('depot')->find($value);
+
+                if ($rayon && $request->depot_id && ! $rayon->estDuDepot($request->depot_id)) {
+                    $fail("Le rayon {$rayon->name} n'est pas dans ce dépôt"
+                        . ($rayon->depot ? " (il est dans {$rayon->depot->name})." : ' (il n\'a pas de dépôt).'));
+                }
+            },
         ],
 
         'location_id' => [
@@ -3069,7 +3109,7 @@ public function exportExcel()
 
         $subfamilies = Subfamily::orderBy('name')->get();
 
-        $rayons = Rayon::orderBy('name')->get();
+        $rayons = Rayon::with('depot')->orderBy('name')->get();
 
         $locations = Location::orderBy('name')->get();
 

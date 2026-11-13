@@ -34,7 +34,7 @@
 
         $nouvellesCommandesGarage =
 
-            \App\Models\ExternalBonCommande::whereNull('vu_at')->count();
+            \App\Models\ExternalBonCommande::garage()->whereNull('vu_at')->count();
 
     }
 
@@ -674,6 +674,23 @@
 
 </div>
 
+{{-- PROFIL SOUS LE LOGO (design Wholesale : photo / initiales, nom,
+     « En ligne ») — affiché seulement avec la classe stcd-wholesale --}}
+@if($user)
+    @php
+        $initialesProfil = collect(preg_split('/\s+/', trim((string) $user->name)))
+            ->filter()
+            ->take(2)
+            ->map(fn ($mot) => mb_strtoupper(mb_substr($mot, 0, 1)))
+            ->implode('') ?: 'U';
+    @endphp
+    <div class="stcd-ws-profil">
+        <div class="stcd-ws-avatar">{{ $initialesProfil }}</div>
+        <div class="stcd-ws-nom">{{ mb_strtoupper($user->name) }}</div>
+        <div class="stcd-ws-statut"><span class="stcd-ws-point"></span> En ligne</div>
+    </div>
+@endif
+
 {{-- OMBRE SOUS L'EN-TÊTE --}}
 
 <div class="menu-inner-shadow"></div>
@@ -1129,6 +1146,7 @@
                     request()->routeIs('vehicles.*')
 
                     || request()->routeIs('vehicle-part-requests.*')
+                    || request()->routeIs('demandes.*')
 
                         ? 'active open'
 
@@ -1321,11 +1339,11 @@
 
                     {{-- ================================================= --}}
 
-                    {{-- 2. SUIVI DES PIÈCES --}}
+                    {{-- 2. SUIVI DES DEMANDES (V6 : suivi par demande, plus par pièce) --}}
 
                     {{-- ================================================= --}}
 
-                    @if($peut('vehicle-part-requests.index') || $peut('vehicle-part-requests.ordered') || $peut('vehicle-part-requests.received'))
+                    @if($peut('demandes.index') || $peut('vehicle-part-requests.index'))
 
                         <li class="menu-header small text-uppercase"
 
@@ -1353,11 +1371,20 @@
 
                                 ">
 
-                                Suivi des pièces
+                                Suivi des demandes
 
                             </span>
 
                         </li>
+
+                        {{-- DEMANDES : onglets En recherche / À commander / Commandées / Reçues / Non trouvées / À compléter --}}
+                        @if($peut('demandes.index'))
+                        <li class="menu-item {{ request()->routeIs('demandes.*') ? 'active' : '' }}">
+                            <a href="{{ route('demandes.index') }}" class="menu-link">
+                                <div class="flex-grow-1">Demandes</div>
+                            </a>
+                        </li>
+                        @endif
 
                         {{-- TOUTES LES PIÈCES --}}
 
@@ -1380,7 +1407,10 @@
 
                                     'vehicle-part-requests.update',
 
-                                    'vehicle-part-requests.change-status'
+                                    'vehicle-part-requests.change-status',
+                                    'vehicle-part-requests.ordered',
+                                    'vehicle-part-requests.received',
+                                    'vehicle-part-requests.not-found'
 
                                 )
 
@@ -1407,115 +1437,7 @@
                         </li>
                         @endif
 
-                        {{-- PIÈCES COMMANDÉES --}}
-
-                        @if($peut('vehicle-part-requests.ordered'))
-                        <li class="menu-item
-
-                            {{
-
-                                request()->routeIs(
-
-                                    'vehicle-part-requests.ordered'
-
-                                )
-
-                                    ? 'active'
-
-                                    : ''
-
-                            }}"
-
-                        >
-
-                            <a href="{{ route('vehicle-part-requests.ordered') }}"
-
-                            class="menu-link">
-
-                                <div>
-
-                                    Pièces commandées
-
-                                </div>
-
-                            </a>
-
-                        </li>
-                        @endif
-
-                        {{-- PIÈCES REÇUES --}}
-
-                        @if($peut('vehicle-part-requests.received'))
-                        <li class="menu-item
-
-                            {{
-
-                                request()->routeIs(
-
-                                    'vehicle-part-requests.received'
-
-                                )
-
-                                    ? 'active'
-
-                                    : ''
-
-                            }}"
-
-                        >
-
-                            <a href="{{ route('vehicle-part-requests.received') }}"
-
-                            class="menu-link">
-
-                                <div>
-
-                                    Pièces reçues
-
-                                </div>
-
-                            </a>
-
-                        </li>
-                        @endif
-
-                        {{-- PIÈCES NON TROUVÉES --}}
-
-                        <li class="menu-item
-
-                            {{
-
-                                request()->routeIs(
-
-                                    'vehicle-part-requests.not-found'
-
-                                )
-
-                                    ? 'active'
-
-                                    : ''
-
-                            }}"
-
-                        >
-
-                            <a href="{{ route(
-
-                                'vehicle-part-requests.not-found'
-
-                            ) }}"
-
-                            class="menu-link">
-
-                                <div>
-
-                                    Pièces non trouvées
-
-                                </div>
-
-                            </a>
-
-                        </li>
+                        {{-- « Pièces commandées / reçues / non trouvées » : remplacés par les onglets des Demandes --}}
 
                     @endif
 
@@ -1563,6 +1485,12 @@
                         Bons de commande
 
                     </div>
+
+                    {{-- V7 : BC qui attendent ma signature (chef : à valider, admin : à approuver) --}}
+                    @php $bcASigner = \App\Http\Controllers\SupplierOrderController::nombreASigner(auth()->user()); @endphp
+                    @if($bcASigner)
+                        <span class="badge rounded-pill bg-danger ms-auto" title="Bons de commande à signer">{{ $bcASigner }}</span>
+                    @endif
 
                 </a>
 
@@ -1688,11 +1616,31 @@
 
                 <div>Ajustements inventaire</div>
 
+                {{-- V6 : ajustements qui attendent la validation (chef magasinier / admin) --}}
+                @php
+                    $ajustementsAValider = \App\Services\AjustementStockService::peutValider(auth()->user())
+                        ? \App\Services\AjustementStockService::nombreAValider()
+                        : 0;
+                @endphp
+                @if($ajustementsAValider > 0)
+                    <span class="badge rounded-pill bg-danger ms-auto" title="Ajustements à valider">{{ $ajustementsAValider }}</span>
+                @endif
+
             </a>
 
         </li>
         @endif
 
+        @endif
+
+        {{-- V6 : FICHES D'INVENTAIRE --}}
+        @if($peut('inventaires.index'))
+        <li class="menu-item {{ request()->routeIs('inventaires.*') ? 'active' : '' }}">
+            <a href="{{ route('inventaires.index') }}" class="menu-link">
+                <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                <div>Fiches d'inventaire</div>
+            </a>
+        </li>
         @endif
 
         {{-- MOUVEMENTS STOCK --}}
@@ -1854,18 +1802,17 @@
                     </li>
                     @endif
 
-
-                    {{-- ===================================================== --}}
-                    {{-- BONS DE TRANSFERT --}}
-                    {{-- ===================================================== --}}
-                    <li class="menu-item {{ request()->routeIs('bons-transfert.*') ? 'active' : '' }}">
-                        <a href="{{ route('bons-transfert.index') }}" class="menu-link">
-                            <i class="menu-icon tf-icons bx bx-transfer"></i>
+                    {{-- V6 : BUS LEASING / TRANSPORT PUBLIC --}}
+                    @if($peut('bus.index'))
+                    <li class="menu-item {{ request()->routeIs('bus.*') ? 'active' : '' }}">
+                        <a href="{{ route('bus.index') }}" class="menu-link">
+                            <svg class="menu-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h8M5 11h14M6 17v2m12-2v2M7 3h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2zm1 11h.01M16 14h.01"/></svg>
                             <div class="flex-grow-1 text-truncate">
-                                Bons de transfert
+                                Bus leasing / transport
                             </div>
                         </a>
                     </li>
+                    @endif
 
                                @endif
 
@@ -1972,6 +1919,7 @@
                     || request()->routeIs('proformas.*')
 
                     || request()->routeIs('avoirs.*')
+                    || request()->routeIs('bons-livraison.*')
 
                         ? 'active open'
 
@@ -2097,6 +2045,19 @@
                                 Liste des ventes
 
                             </div>
+
+                        </a>
+
+                    </li>
+                    @endif
+
+                    {{-- BONS DE LIVRAISON (V6) --}}
+                    @if($peut('bons-livraison.index'))
+                    <li class="menu-item {{ request()->routeIs('bons-livraison.*') ? 'active' : '' }}">
+
+                        <a href="{{ route('bons-livraison.index') }}" class="menu-link">
+
+                            <div>Bons de livraison</div>
 
                         </a>
 
@@ -2351,7 +2312,7 @@
                 </button>
             </form>
 
-            <p class="stcd-sidebar-version">Magasin — Version 4.0</p>
+            <p class="stcd-sidebar-version">Magasin — Version {{ config('app.version') }}</p>
 
         </div>
 

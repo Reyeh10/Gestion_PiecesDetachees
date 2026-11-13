@@ -71,6 +71,7 @@
                                     </a>
 
                                     {{-- SUPPRIMER --}}
+                                    @if(auth()->user()->hasPermission('supprimer_transferts'))
                                     <form
                                         action="{{ route('depot-transfers.destroy', $transfer->id) }}"
                                         method="POST"
@@ -88,6 +89,7 @@
                                         </button>
 
                                     </form>
+                                    @endif
 
                                 @endif
 

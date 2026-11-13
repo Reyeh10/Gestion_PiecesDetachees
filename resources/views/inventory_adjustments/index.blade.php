@@ -5,1607 +5,245 @@
 @section('content')
 
 @php
+    use App\Models\InventoryAdjustment;
 
-    /*
-
-    *--------------------------------------------------------------------------
-
-    * UTILISATEUR & PERMISSIONS
-
-    *--------------------------------------------------------------------------
-
-    */
     $user = auth()->user();
-
-    $canCreateAdjustment = $user->hasPermission('gerer_ajustements');
-
-    $canImportAdjustment = $user->hasPermission('gerer_ajustements');
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | MODIFICATION / SUPPRESSION
-    |--------------------------------------------------------------------------
-    |
-    | Règle métier :
-    | - admin : peut modifier et supprimer
-    | - autres rôles : consultation uniquement
-    |
-    */
-    $canEditAdjustment =
-        $user
-        && $user->hasPermission('modifier_ajustements');
-
-    $canDeleteAdjustment =
-        $user
-        && $user->hasPermission('modifier_ajustements');
-
+    $peutSaisir = $user->hasPermission('gerer_ajustements');
+    $statutActif = request('statut');
+    $fmtQte = fn ($q) => rtrim(rtrim(number_format((float) $q, 2, ',', ' '), '0'), ',');
+    $fmtFdj = fn ($v) => $v === null ? '—' : number_format((float) $v, 0, ',', ' ');
 @endphp
 
-<style>
-
-    /*
-
-    *--------------------------------------------------------------------------
-
-    * TABLEAU RESPONSIVE
-
-    *--------------------------------------------------------------------------
-
-    */
-    .inventory-adjustments-wrapper {
-
-        width: 100%;
-
-        overflow-x: auto;
-
-        -webkit-overflow-scrolling: touch;
-
-    }
-
-    .inventory-adjustments-table {
-
-        width: 100%;
-
-        min-width: 1180px;
-
-        margin-bottom: 0;
-
-    }
-
-    .inventory-adjustments-table th,
-
-    .inventory-adjustments-table td {
-
-        vertical-align: middle;
-
-    }
-
-    .inventory-adjustments-table th {
-
-        white-space: nowrap;
-
-    }
-
-    .inventory-adjustments-table .col-id {
-
-        width: 60px;
-
-        min-width: 60px;
-
-    }
-
-    .inventory-adjustments-table .col-reference {
-
-        min-width: 145px;
-
-    }
-
-    .inventory-adjustments-table .col-designation {
-
-        min-width: 210px;
-
-        max-width: 260px;
-
-    }
-
-    .inventory-adjustments-table .col-depot {
-
-        min-width: 140px;
-
-    }
-
-    .inventory-adjustments-table .col-rayon {
-
-        min-width: 110px;
-
-    }
-
-    .inventory-adjustments-table .col-location {
-
-        min-width: 135px;
-
-    }
-
-    .inventory-adjustments-table .col-qty {
-
-        min-width: 120px;
-
-        white-space: nowrap;
-
-    }
-
-    .inventory-adjustments-table .col-type {
-
-        min-width: 95px;
-
-        white-space: nowrap;
-
-    }
-
-    .inventory-adjustments-table .col-reason {
-
-        min-width: 180px;
-
-        max-width: 230px;
-
-    }
-
-    .inventory-adjustments-table .col-user {
-
-        min-width: 135px;
-
-    }
-
-    .inventory-adjustments-table .col-date {
-
-        min-width: 145px;
-
-        white-space: nowrap;
-
-    }
-
-    .inventory-adjustments-table .col-action {
-
-        width: 155px;
-
-        min-width: 155px;
-
-        white-space: nowrap;
-
-    }
-
-    .inventory-action-buttons {
-
-        display: flex;
-
-        align-items: center;
-
-        justify-content: center;
-
-        gap: 6px;
-
-        flex-wrap: nowrap;
-
-    }
-
-    .inventory-action-buttons form {
-
-        display: inline-block;
-
-        margin: 0;
-
-    }
-
-    .inventory-reason {
-
-        max-width: 220px;
-
-        overflow: hidden;
-
-        text-overflow: ellipsis;
-
-        white-space: nowrap;
-
-    }
-
-    /*
-
-    *--------------------------------------------------------------------------
-
-    * ÉCRANS MOINS LARGES
-
-    *--------------------------------------------------------------------------
-
-    */
-    @media (max-width: 1399.98px) {
-
-        .inventory-adjustments-table {
-
-            min-width: 1000px;
-
-        }
-
-    }
-
-    @media (max-width: 1199.98px) {
-
-        .inventory-adjustments-table {
-
-            min-width: 900px;
-
-        }
-
-    }
-
-    /*
-
-    *--------------------------------------------------------------------------
-
-    * HEADER / ACTIONS
-
-    *--------------------------------------------------------------------------
-
-    */
-    .inventory-header-actions .btn {
-
-        white-space: nowrap;
-
-    }
-
-</style>
-
-<div class="card shadow-sm border-0">
-
-    {{-- ============================================================
-
-        HEADER
-
-    ============================================================ --}}
-
-    <div class="card-header bg-white border-bottom">
-
-        <div
-
-            class="
-
-                d-flex
-
-                flex-column
-
-                flex-lg-row
-
-                justify-content-between
-
-                align-items-lg-center
-
-                gap-3
-
-            "
-
-        >
-
-            <div>
-
-                <h4 class="mb-1 fw-bold">
-
-                    <i class="bx bx-list-check me-2"></i>
-
-                    Ajustements inventaire
-
-                </h4>
-
-                <small class="text-muted">
-
-                    Historique des corrections de stock,
-
-                    dépôts et localisations
-
-                </small>
-
-            </div>
-
-            @if(
-                $canCreateAdjustment
-                || $canImportAdjustment
-            )
-
-                <div
-
-                    class="
-
-                        inventory-header-actions
-
-                        d-flex
-
-                        flex-wrap
-
-                        gap-2
-
-                    "
-
-                >
-
-                    {{-- IMPORT EXCEL --}}
-
-                    @if($canImportAdjustment)
-
-                        <a
-
-                            href="{{ route('inventory-adjustments.import') }}"
-
-                            class="btn btn-success"
-
-                        >
-
-                            <i class="bx bx-spreadsheet me-1"></i>
-
-                            Importer Excel
-
-                        </a>
-
-                    @endif
-
-                    {{-- NOUVEL AJUSTEMENT --}}
-
-                    @if($canCreateAdjustment)
-
-                        <a
-
-                            href="{{ route('inventory-adjustments.create') }}"
-
-                            class="btn btn-primary"
-
-                        >
-
-                            <i class="bx bx-plus me-1"></i>
-
-                            Nouvel ajustement
-
-                        </a>
-
-                    @endif
-
-                </div>
-
-            @endif
-
-        </div>
-
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+        <h4 class="mb-1">Ajustements d'inventaire</h4>
+        <p class="text-muted mb-0">Un ajustement corrige le stock d'une pièce dans un dépôt. Il ne touche le stock qu'après la validation du chef magasinier ou de l'admin.</p>
     </div>
-
-    {{-- ============================================================
-
-        BODY
-
-    ============================================================ --}}
-
-    <div class="card-body">
-
-        {{-- ============================================================
-
-            MESSAGE SUCCESS
-
-        ============================================================ --}}
-
-        @if(session('success'))
-
-            <div
-
-                class="
-
-                    alert
-
-                    alert-success
-
-                    alert-dismissible
-
-                    fade
-
-                    show
-
-                "
-
-                role="alert"
-
-            >
-
-                <i class="bx bx-check-circle me-1"></i>
-
-                {{ session('success') }}
-
-                <button
-
-                    type="button"
-
-                    class="btn-close"
-
-                    data-bs-dismiss="alert"
-
-                    aria-label="Fermer"
-
-                ></button>
-
-            </div>
-
-        @endif
-
-        {{-- ============================================================
-
-            MESSAGE ERROR
-
-        ============================================================ --}}
-
-        @if(session('error'))
-
-            <div
-
-                class="
-
-                    alert
-
-                    alert-danger
-
-                    alert-dismissible
-
-                    fade
-
-                    show
-
-                "
-
-                role="alert"
-
-            >
-
-                <i class="bx bx-error-circle me-1"></i>
-
-                {{ session('error') }}
-
-                <button
-
-                    type="button"
-
-                    class="btn-close"
-
-                    data-bs-dismiss="alert"
-
-                    aria-label="Fermer"
-
-                ></button>
-
-            </div>
-
-        @endif
-
-        {{-- ============================================================
-
-            INFORMATION
-
-        ============================================================ --}}
-
-        <div
-
-            class="
-
-                alert
-
-                alert-info
-
-                d-flex
-
-                align-items-start
-
-                gap-2
-
-                mb-4
-
-            "
-
-        >
-
-            <i class="bx bx-info-circle fs-4 mt-1"></i>
-
-            <div>
-
-                <div class="fw-bold mb-1">
-
-                    Fonctionnement
-
-                </div>
-
-                <div>
-
-                    Un ajustement inventaire corrige la
-
-                    <strong>
-
-                        quantité réellement disponible
-
-                    </strong>
-
-                    dans un dépôt.
-
-                    <br>
-
-                    Lors d'un import Excel :
-
-                    <strong>
-
-                        le rayon et l'emplacement
-
-                    </strong>
-
-                    sont mis à jour uniquement lorsqu'ils
-
-                    sont renseignés dans le fichier.
-
-                </div>
-
-            </div>
-
+    @if($peutSaisir)
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ route('inventory-adjustments.import') }}" class="btn btn-outline-primary"><i class="bx bx-upload me-1"></i> Import Excel</a>
+            <a href="{{ route('inventory-adjustments.create') }}" class="btn btn-primary"><i class="bx bx-plus me-1"></i> Nouvel ajustement</a>
         </div>
-
-        {{-- ============================================================
-
-            RECHERCHE
-
-        ============================================================ --}}
-
-        <form
-
-            method="GET"
-
-            action="{{ route('inventory-adjustments.index') }}"
-
-            class="row g-3 mb-4"
-
-        >
-
-            {{-- CHAMP RECHERCHE --}}
-
-            <div class="col-12 col-lg-6">
-
-                <label
-
-                    for="search"
-
-                    class="form-label fw-semibold"
-
-                >
-
-                    Rechercher
-
-                </label>
-
-                <div class="input-group">
-
-                    <span class="input-group-text">
-
-                        <i class="bx bx-search"></i>
-
-                    </span>
-
-                    <input
-
-                        type="text"
-
-                        id="search"
-
-                        name="search"
-
-                        class="form-control"
-
-                        value="{{ request('search') }}"
-
-                        placeholder="Référence, désignation, dépôt, rayon ou emplacement..."
-
-                    >
-
-                </div>
-
-            </div>
-
-            {{-- BOUTON RECHERCHER --}}
-
-            <div
-
-                class="
-
-                    col-12
-
-                    col-sm-auto
-
-                    d-flex
-
-                    align-items-end
-
-                "
-
-            >
-
-                <button
-
-                    type="submit"
-
-                    class="btn btn-primary w-100"
-
-                >
-
-                    <i class="bx bx-search me-1"></i>
-
-                    Rechercher
-
-                </button>
-
-            </div>
-
-            {{-- BOUTON RÉINITIALISER --}}
-
-            <div
-
-                class="
-
-                    col-12
-
-                    col-sm-auto
-
-                    d-flex
-
-                    align-items-end
-
-                "
-
-            >
-
-                <a
-
-                    href="{{ route('inventory-adjustments.index') }}"
-
-                    class="btn btn-secondary w-100"
-
-                >
-
-                    <i class="bx bx-reset me-1"></i>
-
-                    Réinitialiser
-
-                </a>
-
-            </div>
-
-        </form>
-
-        {{-- ============================================================
-
-            TABLEAU
-
-        ============================================================ --}}
-
-        <div class="inventory-adjustments-wrapper">
-
-            <table
-
-                class="
-
-                    table
-
-                    table-bordered
-
-                    table-hover
-
-                    align-middle
-
-                    inventory-adjustments-table
-
-                "
-
-            >
-
-                {{-- ====================================================
-
-                    HEADER TABLE
-
-                ==================================================== --}}
-
-                <thead class="table-light">
-
-                    <tr>
-
-                        <th class="text-center col-id">
-
-                            #
-
-                        </th>
-
-                        <th class="col-reference">
-
-                            Référence
-
-                        </th>
-
-                        <th class="col-designation">
-
-                            Désignation
-
-                        </th>
-
-                        <th class="d-none d-xxl-table-cell">
-
-                            Marque
-
-                        </th>
-
-                        <th class="d-none d-xxl-table-cell">
-
-                            Modèle
-
-                        </th>
-
-                        <th class="col-depot">
-
-                            Dépôt
-
-                        </th>
-
-                        <th class="col-rayon">
-
-                            Rayon
-
-                        </th>
-
-                        <th class="col-location">
-
-                            Emplacement
-
-                        </th>
-
-                        <th class="text-center col-qty">
-
-                            Qté avant
-
-                        </th>
-
-                        <th class="text-center col-qty">
-
-                            Qté après
-
-                        </th>
-
-                        <th class="text-center col-qty">
-
-                            Différence
-
-                        </th>
-
-                        <th class="text-center col-type">
-
-                            Type
-
-                        </th>
-
-                        <th class="col-reason">
-
-                            Raison
-
-                        </th>
-
-                        <th class="d-none d-xl-table-cell col-user">
-
-                            Effectué par
-
-                        </th>
-
-                        <th class="d-none d-xl-table-cell col-date">
-
-                            Date
-
-                        </th>
-
-                        <th class="text-center col-action">
-
-                            Action
-
-                        </th>
-
-                    </tr>
-
-                </thead>
-
-                {{-- ====================================================
-
-                    BODY TABLE
-
-                ==================================================== --}}
-
-                <tbody>
-
-                    @forelse($adjustments as $adjustment)
-
-                        @php
-
-                            /*
-
-                            *--------------------------------------------------------------------------
-
-                            * QUANTITÉS
-
-                            *--------------------------------------------------------------------------
-
-                            */
-                            $oldQty =
-
-                                (float) (
-
-                                    $adjustment->old_qty
-
-                                    ?? 0
-
-                                );
-
-                            $newQty =
-
-                                (float) (
-
-                                    $adjustment->new_qty
-
-                                    ?? 0
-
-                                );
-
-                            $difference =
-
-                                round(
-
-                                    $newQty - $oldQty,
-
-                                    2
-
-                                );
-
-                            /*
-
-                            *--------------------------------------------------------------------------
-
-                            * UNITÉ
-
-                            *--------------------------------------------------------------------------
-
-                            */
-                            $unit =
-
-                                $adjustment->product?->unit_label
-
-                                ?? $adjustment->product?->unit_type
-
-                                ?? 'Pièce';
-
-                            /*
-
-                            *--------------------------------------------------------------------------
-
-                            * LOCALISATION
-
-                            *--------------------------------------------------------------------------
-
-                            *
-
-                            * On privilégie la localisation enregistrée
-
-                            * dans l'ajustement.
-
-                            *
-
-                            * Pour les anciens ajustements qui n'avaient pas
-
-                            * depot_id / rayon_id / location_id, on retombe
-
-                            * sur la localisation actuelle du produit.
-
-                            *
-
-                            */
-                            $depotName =
-
-                                $adjustment->depot?->name;
-
-                            $rayonName =
-
-                                $adjustment->rayon?->name
-
-                                ?? $adjustment->product?->rayon?->name;
-
-                            $locationName =
-
-                                $adjustment->location?->name
-
-                                ?? $adjustment->product?->location?->name;
-
-                            /*
-
-                            *--------------------------------------------------------------------------
-
-                            * TYPE AJUSTEMENT
-
-                            *--------------------------------------------------------------------------
-
-                            */
-                            if ($difference > 0) {
-
-                                $typeLabel =
-
-                                    'Entrée';
-
-                                $typeClass =
-
-                                    'bg-success';
-
-                                $typeIcon =
-
-                                    'bx-plus-circle';
-
-                            } elseif ($difference < 0) {
-
-                                $typeLabel =
-
-                                    'Sortie';
-
-                                $typeClass =
-
-                                    'bg-danger';
-
-                                $typeIcon =
-
-                                    'bx-minus-circle';
-
-                            } else {
-
-                                $typeLabel =
-
-                                    'Aucun';
-
-                                $typeClass =
-
-                                    'bg-secondary';
-
-                                $typeIcon =
-
-                                    'bx-minus';
-
-                            }
-
-                        @endphp
-
-                        <tr>
-
-                            {{-- ==========================================
-
-                                ID
-
-                            ========================================== --}}
-
-                            <td class="text-center col-id">
-                                {{ $adjustment->id }}
-                            </td>
-
-                            {{-- ==========================================
-
-                                RÉFÉRENCE
-
-                            ========================================== --}}
-
-                            <td>
-
-                                <strong>
-
-                                    {{
-
-                                        $adjustment->product?->reference
-
-                                        ?? '-'
-
-                                    }}
-
-                                </strong>
-
-                            </td>
-
-                            {{-- ==========================================
-
-                                DÉSIGNATION
-
-                            ========================================== --}}
-
-                            <td>
-
-                                <div
-
-                                    class="text-truncate"
-
-                                    style="max-width: 250px;"
-
-                                    title="{{
-
-                                        $adjustment->product?->designation
-
-                                        ?? 'Produit supprimé'
-
-                                    }}"
-
-                                >
-
-                                    {{
-
-                                        $adjustment->product?->designation
-
-                                        ?? 'Produit supprimé'
-
-                                    }}
-
-                                </div>
-
-                            </td>
-
-                            {{-- ==========================================
-
-                                MARQUE
-
-                            ========================================== --}}
-
-                            <td class="d-none d-xxl-table-cell">
-
-                                {{
-
-                                    $adjustment->product?->brand?->name
-
-                                    ?? '-'
-
-                                }}
-
-                            </td>
-
-                            {{-- ==========================================
-
-                                MODÈLE
-
-                            ========================================== --}}
-
-                            <td class="d-none d-xxl-table-cell">
-
-                                {{
-
-                                    $adjustment->product?->model?->name
-
-                                    ?? '-'
-
-                                }}
-
-                            </td>
-
-                            {{-- ==========================================
-
-                                DÉPÔT
-
-                            ========================================== --}}
-
-                            <td>
-
-                                @if($depotName)
-
-                                    <span
-
-                                        class="
-
-                                            badge
-
-                                            bg-label-primary
-
-                                        "
-
-                                    >
-
-                                        {{ $depotName }}
-
-                                    </span>
-
-                                @else
-
-                                    <span class="text-muted">
-
-                                        Non renseigné
-
-                                    </span>
-
-                                @endif
-
-                            </td>
-
-                            {{-- ==========================================
-
-                                RAYON
-
-                            ========================================== --}}
-
-                            <td>
-
-                                @if($rayonName)
-
-                                    <span
-
-                                        class="
-
-                                            badge
-
-                                            bg-label-info
-
-                                        "
-
-                                    >
-
-                                        {{ $rayonName }}
-
-                                    </span>
-
-                                @else
-
-                                    <span class="text-muted">
-
-                                        -
-
-                                    </span>
-
-                                @endif
-
-                            </td>
-
-                            {{-- ==========================================
-
-                                EMPLACEMENT
-
-                            ========================================== --}}
-
-                            <td>
-
-                                @if($locationName)
-
-                                    <span
-
-                                        class="
-
-                                            badge
-
-                                            bg-label-secondary
-
-                                        "
-
-                                    >
-
-                                        {{ $locationName }}
-
-                                    </span>
-
-                                @else
-
-                                    <span class="text-muted">
-
-                                        -
-
-                                    </span>
-
-                                @endif
-
-                            </td>
-
-                            {{-- ==========================================
-
-                                QUANTITÉ AVANT
-
-                            ========================================== --}}
-
-                            <td class="text-center">
-
-                                <span
-
-                                    class="
-
-                                        badge
-
-                                        bg-label-secondary
-
-                                    "
-
-                                >
-
-                                    {{
-
-                                        number_format(
-
-                                            $oldQty,
-
-                                            2,
-
-                                            ',',
-
-                                            ' '
-
-                                        )
-
-                                    }}
-
-                                    {{ $unit }}
-
-                                </span>
-
-                            </td>
-
-                            {{-- ==========================================
-
-                                QUANTITÉ APRÈS
-
-                            ========================================== --}}
-
-                            <td class="text-center">
-
-                                <span
-
-                                    class="
-
-                                        badge
-
-                                        bg-label-primary
-
-                                    "
-
-                                >
-
-                                    {{
-
-                                        number_format(
-
-                                            $newQty,
-
-                                            2,
-
-                                            ',',
-
-                                            ' '
-
-                                        )
-
-                                    }}
-
-                                    {{ $unit }}
-
-                                </span>
-
-                            </td>
-
-                            {{-- ==========================================
-
-                                DIFFÉRENCE
-
-                            ========================================== --}}
-
-                            <td class="text-center">
-
-                                @if($difference > 0)
-
-                                    <span class="badge bg-success">
-
-                                        +
-
-                                        {{
-
-                                            number_format(
-
-                                                $difference,
-
-                                                2,
-
-                                                ',',
-
-                                                ' '
-
-                                            )
-
-                                        }}
-
-                                        {{ $unit }}
-
-                                    </span>
-
-                                @elseif($difference < 0)
-
-                                    <span class="badge bg-danger">
-
-                                        {{
-
-                                            number_format(
-
-                                                $difference,
-
-                                                2,
-
-                                                ',',
-
-                                                ' '
-
-                                            )
-
-                                        }}
-
-                                        {{ $unit }}
-
-                                    </span>
-
-                                @else
-
-                                    <span class="badge bg-secondary">
-
-                                        0,00 {{ $unit }}
-
-                                    </span>
-
-                                @endif
-
-                            </td>
-
-                            {{-- ==========================================
-
-                                TYPE
-
-                            ========================================== --}}
-
-                            <td class="text-center">
-
-                                <span
-
-                                    class="
-
-                                        badge
-
-                                        {{ $typeClass }}
-
-                                    "
-
-                                >
-
-                                    <i
-
-                                        class="
-
-                                            bx
-
-                                            {{ $typeIcon }}
-
-                                            me-1
-
-                                        "
-
-                                    ></i>
-
-                                    {{ $typeLabel }}
-
-                                </span>
-
-                            </td>
-
-                            {{-- ==========================================
-
-                                RAISON
-
-                            ========================================== --}}
-
-                            <td>
-
-                                <div
-
-                                    class="inventory-reason"
-
-                                    title="{{ $adjustment->reason ?? '-' }}"
-
-                                >
-
-                                    {{ $adjustment->reason ?? '-' }}
-
-                                </div>
-
-                            </td>
-
-                            {{-- ==========================================
-
-                                UTILISATEUR
-
-                            ========================================== --}}
-
-                            <td class="d-none d-xl-table-cell">
-
-                                {{
-
-                                    $adjustment->approver?->name
-
-                                    ?? '-'
-
-                                }}
-
-                            </td>
-
-                            {{-- ==========================================
-
-                                DATE
-
-                            ========================================== --}}
-
-                            <td class="d-none d-xl-table-cell">
-
-                                {{
-
-                                    optional(
-
-                                        $adjustment->created_at
-
-                                    )->format(
-
-                                        'd/m/Y H:i'
-
-                                    )
-
-                                }}
-
-                            </td>
-
-                            {{-- ==========================================
-
-                                ACTION
-
-                            ========================================== --}}
-
-                            <td class="text-center col-action">
-                                <div class="inventory-action-buttons">
-
-                                    {{-- VOIR --}}
-                                    <a
-                                        href="{{ route('inventory-adjustments.show', $adjustment->id) }}"
-                                        class="btn btn-info btn-sm"
-                                        title="Voir le détail"
-                                        aria-label="Voir le détail"
-                                    >
-                                        <i class="bx bx-show"></i>
-                                    </a>
-
-                                    {{-- MODIFIER : ADMIN UNIQUEMENT --}}
-                                    @if($canEditAdjustment)
-                                        <a
-                                            href="{{ route('inventory-adjustments.edit', $adjustment->id) }}"
-                                            class="btn btn-warning btn-sm"
-                                            title="Modifier"
-                                            aria-label="Modifier"
-                                        >
-                                            <i class="bx bx-edit"></i>
-                                        </a>
-                                    @endif
-
-                                    {{-- SUPPRIMER : ADMIN UNIQUEMENT --}}
-                                    @if($canDeleteAdjustment)
-                                        <form
-                                            action="{{ route('inventory-adjustments.destroy', $adjustment->id) }}"
-                                            method="POST"
-                                            class="d-inline"
-                                            onsubmit="return confirm('Voulez-vous vraiment supprimer cet ajustement d\'inventaire ? Cette action est irréversible.');"
-                                        >
-                                            @csrf
-                                            @method('DELETE')
-
-                                            <button
-                                                type="submit"
-                                                class="btn btn-danger btn-sm"
-                                                title="Supprimer"
-                                                aria-label="Supprimer"
-                                            >
-                                                <i class="bx bx-trash"></i>
-                                            </button>
-                                        </form>
-                                    @endif
-
-                                </div>
-                            </td>
-
-                        </tr>
-
-                    @empty
-
-                        <tr>
-
-                            <td
-
-                                colspan="16"
-
-                                class="
-
-                                    text-center
-
-                                    py-5
-
-                                    text-muted
-
-                                "
-
-                            >
-
-                                <i
-
-                                    class="
-
-                                        bx
-
-                                        bx-package
-
-                                        fs-1
-
-                                        d-block
-
-                                        mb-2
-
-                                    "
-
-                                ></i>
-
-                                Aucun ajustement trouvé.
-
-                            </td>
-
-                        </tr>
-
-                    @endforelse
-
-                </tbody>
-
-            </table>
-
-        </div>
-
-        {{-- ============================================================
-
-            PAGINATION
-
-        ============================================================ --}}
-
-        @if(
-
-            method_exists(
-
-                $adjustments,
-
-                'links'
-
-            )
-
-            && $adjustments->hasPages()
-
-        )
-
-            <div
-
-                class="
-
-                    mt-4
-
-                    d-flex
-
-                    justify-content-center
-
-                "
-
-            >
-
-                {{ $adjustments->links() }}
-
-            </div>
-
-        @endif
-
-    </div>
-
+    @endif
 </div>
 
+@if(session('success'))
+    <div class="alert alert-success">{{ session('success') }}</div>
+@endif
+@if(session('error'))
+    <div class="alert alert-danger">{{ session('error') }}</div>
+@endif
+@if($errors->any())
+    <div class="alert alert-danger">{{ $errors->first() }}</div>
+@endif
+
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {{ ! $statutActif ? 'active' : '' }}" href="{{ route('inventory-adjustments.index') }}">Tous</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {{ $statutActif === InventoryAdjustment::EN_ATTENTE ? 'active' : '' }}" href="{{ route('inventory-adjustments.index', ['statut' => InventoryAdjustment::EN_ATTENTE]) }}">
+            À valider
+            @if($nombreAValider)<span class="badge bg-danger ms-1">{{ $nombreAValider }}</span>@endif
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {{ $statutActif === InventoryAdjustment::REFUSE ? 'active' : '' }}" href="{{ route('inventory-adjustments.index', ['statut' => InventoryAdjustment::REFUSE]) }}">Refusés</a>
+    </li>
+</ul>
+
+<form method="GET" class="card mb-3">
+    <div class="card-body row g-2 align-items-end">
+        @if($statutActif)<input type="hidden" name="statut" value="{{ $statutActif }}">@endif
+        <div class="col-md-3">
+            <label class="form-label">Rechercher</label>
+            <input type="text" name="search" class="form-control" value="{{ request('search') }}" placeholder="N°, référence, désignation, remarque">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Dépôt</label>
+            <select name="depot_id" class="form-select">
+                <option value="">Tous</option>
+                @foreach($depots as $depot)
+                    <option value="{{ $depot->id }}" @selected((string) request('depot_id') === (string) $depot->id)>{{ $depot->name }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Motif</label>
+            <select name="motif" class="form-select">
+                <option value="">Tous</option>
+                @foreach(InventoryAdjustment::MOTIFS as $cle => $libelle)
+                    <option value="{{ $cle }}" @selected(request('motif') === $cle)>{{ $libelle }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="col-md-1">
+            <label class="form-label">Origine</label>
+            <select name="source" class="form-select">
+                <option value="">Toutes</option>
+                @foreach(InventoryAdjustment::SOURCES as $cle => $libelle)
+                    <option value="{{ $cle }}" @selected(request('source') === $cle)>{{ $libelle }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="col-md-1">
+            <label class="form-label">Du</label>
+            <input type="date" name="du" class="form-control" value="{{ request('du') }}">
+        </div>
+        <div class="col-md-1">
+            <label class="form-label">Au</label>
+            <input type="date" name="au" class="form-control" value="{{ request('au') }}">
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+            <button class="btn btn-primary flex-fill"><i class="bx bx-search"></i> Filtrer</button>
+            <a href="{{ route('inventory-adjustments.index', $statutActif ? ['statut' => $statutActif] : []) }}" class="btn btn-light">Effacer</a>
+        </div>
+    </div>
+</form>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="card"><div class="card-body py-3">
+            <div class="text-muted small">Entrées validées (valeur au CUMP)</div>
+            <div class="fs-5 fw-semibold text-success">+{{ $fmtFdj($totaux->entrees ?? 0) }} FDJ</div>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card"><div class="card-body py-3">
+            <div class="text-muted small">Sorties validées (valeur au CUMP)</div>
+            <div class="fs-5 fw-semibold text-danger">{{ $fmtFdj($totaux->sorties ?? 0) }} FDJ</div>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card"><div class="card-body py-3">
+            <div class="text-muted small">Écart net validé</div>
+            <div class="fs-5 fw-semibold">{{ $fmtFdj(($totaux->entrees ?? 0) + ($totaux->sorties ?? 0)) }} FDJ</div>
+        </div></div>
+    </div>
+</div>
+
+<form method="POST" action="{{ route('inventory-adjustments.valider-lot') }}" id="form-lot">
+    @csrf
+    <div class="card">
+        @if($peutValider && $nombreAValider)
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <span class="text-muted">Cochez les ajustements « À valider » puis validez-les en une fois.</span>
+                <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('Valider les ajustements cochés ? Le stock des dépôts sera mis à jour.')">
+                    <i class="bx bx-check-double me-1"></i> Valider la sélection
+                </button>
+            </div>
+        @endif
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        @if($peutValider)
+                            <th class="text-center" style="width:36px"><input type="checkbox" class="form-check-input" id="tout-cocher" title="Tout cocher"></th>
+                        @endif
+                        <th>N°</th>
+                        <th>Date</th>
+                        <th>Pièce</th>
+                        <th>Dépôt</th>
+                        <th class="text-end">Avant</th>
+                        <th class="text-end">Après</th>
+                        <th class="text-end">Écart</th>
+                        <th class="text-end">Valeur (FDJ)</th>
+                        <th>Motif</th>
+                        <th>Statut</th>
+                        <th>Saisi / validé par</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($adjustments as $a)
+                        @php $ecart = $a->ecartQuantite(); @endphp
+                        <tr>
+                            @if($peutValider)
+                                <td class="text-center">
+                                    @if($a->estEnAttente())
+                                        <input type="checkbox" name="ids[]" value="{{ $a->id }}" class="form-check-input case-lot">
+                                    @endif
+                                </td>
+                            @endif
+                            <td class="fw-semibold">
+                                {{ $a->id }}
+                                @if($a->corrige_id)<div class="small text-muted">corrige n° {{ $a->corrige_id }}</div>@endif
+                            </td>
+                            <td class="text-nowrap">{{ $a->created_at?->format('d/m/Y H:i') }}</td>
+                            <td>
+                                <div class="fw-semibold">{{ $a->product?->reference ?? '—' }}</div>
+                                <div class="small text-muted">{{ \Illuminate\Support\Str::limit($a->product?->designation, 40) }}</div>
+                            </td>
+                            <td>
+                                {{ $a->depot?->name ?? '—' }}
+                                @if($a->rayon || $a->location)
+                                    <div class="small text-muted">{{ $a->rayon?->name }}{{ $a->location ? ' / ' . $a->location->name : '' }}</div>
+                                @endif
+                                @if($a->changeDePlace())
+                                    <div class="small text-primary fw-semibold">→ {{ $a->nouveauRayon?->name ?? $a->rayon?->name }}{{ ($a->nouvelEmplacement ?? $a->location) ? ' / ' . ($a->nouvelEmplacement ?? $a->location)->name : '' }}</div>
+                                @endif
+                            </td>
+                            <td class="text-end">{{ $fmtQte($a->old_qty) }}</td>
+                            <td class="text-end">{{ $fmtQte($a->new_qty) }}</td>
+                            <td class="text-end fw-semibold {{ $ecart > 0 ? 'text-success' : ($ecart < 0 ? 'text-danger' : '') }}">
+                                {{ $ecart > 0 ? '+' : '' }}{{ $fmtQte($ecart) }}
+                            </td>
+                            <td class="text-end {{ $a->valeur_ecart > 0 ? 'text-success' : ($a->valeur_ecart < 0 ? 'text-danger' : '') }}">
+                                {{ $a->valeur_ecart !== null && $a->valeur_ecart > 0 ? '+' : '' }}{{ $fmtFdj($a->valeur_ecart) }}
+                            </td>
+                            <td>
+                                {{ $a->motif ? $a->libelleMotif() : '' }}
+                                <div class="small text-muted" title="{{ $a->reason }}">{{ \Illuminate\Support\Str::limit($a->motif ? \Illuminate\Support\Str::after($a->reason, ' — ') : $a->reason, 35) }}</div>
+                            </td>
+                            <td>
+                                <span class="badge bg-label-{{ $a->couleurStatut() }}">{{ $a->libelleStatut() }}</span>
+                                <div class="small text-muted">{{ $a->libelleSource() }}</div>
+                            </td>
+                            <td class="small">
+                                {{ $a->creator?->name ?? $a->approver?->name ?? '—' }}
+                                @if($a->estValide() && $a->approved_by && (int) $a->approved_by !== (int) $a->created_by)
+                                    <div class="text-muted">validé : {{ $a->approver?->name }}</div>
+                                @elseif($a->refuseur && ! $a->estValide())
+                                    <div class="text-muted">{{ $a->statut === InventoryAdjustment::REFUSE ? 'refusé' : 'annulé' }} : {{ $a->refuseur->name }}</div>
+                                @endif
+                            </td>
+                            <td class="text-end text-nowrap">
+                                <a href="{{ route('inventory-adjustments.show', $a) }}" class="btn btn-sm btn-icon btn-outline-secondary" title="Voir"><i class="bx bx-show"></i></a>
+                                @if($peutValider && $a->estEnAttente())
+                                    <button type="submit" form="valider-{{ $a->id }}" class="btn btn-sm btn-icon btn-success" title="Valider"
+                                            onclick="return confirm('Valider l\'ajustement n° {{ $a->id }} ? Le stock du dépôt sera mis à jour.')"><i class="bx bx-check"></i></button>
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="13" class="text-center text-muted py-4">Aucun ajustement.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+        @if($adjustments->hasPages())
+            <div class="card-footer">{{ $adjustments->links() }}</div>
+        @endif
+    </div>
+</form>
+
+{{-- formulaires de validation unitaire (hors du formulaire de lot) --}}
+@if($peutValider)
+    @foreach($adjustments as $a)
+        @if($a->estEnAttente())
+            <form id="valider-{{ $a->id }}" method="POST" action="{{ route('inventory-adjustments.valider', $a) }}" class="d-none">
+                @csrf @method('PATCH')
+            </form>
+        @endif
+    @endforeach
+@endif
+
 @endsection
+
+@push('scripts')
+<script>
+    document.getElementById('tout-cocher')?.addEventListener('change', function () {
+        document.querySelectorAll('.case-lot').forEach(c => c.checked = this.checked);
+    });
+</script>
+@endpush

@@ -2,1000 +2,1090 @@
 
 @section('content')
 
+{{-- V6 : le proforma a la même présentation que la facture ; seule la
+     numérotation change (PROFORMA-…). Pas de paiements sur un proforma. --}}
+@php
+    $numero = $proforma->proforma_number;
+
+    $invoiceTotal = (int) round((float) $proforma->calculated_total);
+    $discountPercent = round((float) $proforma->discount_rate, 2);
+    $discountAmount = (int) round((float) $proforma->calculated_discount_amount);
+    $subtotal = (int) round((float) $proforma->calculated_subtotal);
+    $tva = (int) round((float) $proforma->calculated_tva);
+
+    $isConverted = $proforma->status === 'Converti';
+    $isCancelled = $proforma->status === 'Annulé';
+    $statusLabel = $proforma->status ?: 'Validé';
+
+    $totalInWords = strtoupper(
+        (new \NumberToWords\NumberToWords())->getNumberTransformer('fr')->toWords($invoiceTotal)
+    ) . ' FDJ';
+
+    // Pièces pas encore disponibles : pas de facture tant qu'elles ne sont pas réapprovisionnées
+    $manquants = $manquants ?? [];
+    $bloqueStock = ! $isConverted && ! $isCancelled && count($manquants) > 0;
+@endphp
+
 <style>
-
-    @page {
-        margin: 20px;
-        size: A4 portrait;
-    }
-
-    .proforma-wrapper {
+    /* ============================================================
+       AFFICHAGE ÉCRAN
+   ============================================================ */
+    .invoice-page {
         background: #fff;
-    }
-
-    .proforma-card {
-        border: 0;
         border-radius: 14px;
         box-shadow: 0 4px 18px rgba(15, 23, 42, .08);
         overflow: hidden;
     }
 
-    .proforma-card .card-body {
-        max-width: 1180px;
+    .invoice-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 24px;
+        border-bottom: 1px solid #e5e7eb;
+        background: #fff;
+    }
+
+    .invoice-toolbar-left,
+    .invoice-toolbar-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .invoice-toolbar-right {
+        justify-content: flex-end;
+        margin-left: auto;
+    }
+
+    .invoice-toolbar .btn {
+        min-width: 145px;
+        min-height: 42px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-weight: 600;
+        border-radius: 7px;
+        white-space: nowrap;
+    }
+
+    .invoice-toolbar .btn-back {
+        min-width: 120px;
+    }
+
+    .invoice-toolbar .btn-status-paid {
+        cursor: default;
+        opacity: 1;
+    }
+
+    @media (max-width: 768px) {
+        .invoice-toolbar {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .invoice-toolbar-left,
+        .invoice-toolbar-right {
+            width: 100%;
+        }
+
+        .invoice-toolbar-right {
+            margin-left: 0;
+            justify-content: stretch;
+        }
+
+        .invoice-toolbar-left .btn,
+        .invoice-toolbar-right .btn,
+        .invoice-toolbar-right form,
+        .invoice-toolbar-right form .btn {
+            width: 100%;
+        }
+
+        .invoice-toolbar-right {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .invoice-body {
+        max-width: 1050px;
         margin: 0 auto;
-        padding: 35px;
+        padding: 30px;
+        color: #334155;
+        background: #fff;
     }
 
-    .no-border {
-        width: 100%;
-        border-collapse: collapse;
+    .invoice-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 25px;
+        margin-bottom: 22px;
     }
 
-    .no-border td,
-    .no-border th {
-        border: 0 !important;
+    .company-block {
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        width: 62%;
+    }
+
+    .company-logo {
+        width: 125px;
+        height: auto;
+        object-fit: contain;
+        flex: 0 0 auto;
     }
 
     .company-title {
-        margin: 0 0 6px;
-        font-size: 28px;
-        font-weight: 800;
-        color: #1f3a93;
+        margin: 0 0 5px;
+        color: #111827;
+        font-size: 25px;
         line-height: 1.1;
-    }
-
-    .document-title {
-        margin: 0;
-        font-size: 42px;
         font-weight: 800;
-        color: #1f3a93;
-        line-height: 1;
     }
 
-    .document-meta {
-        margin-top: 14px;
-        line-height: 1.8;
+    .company-details {
+        font-size: 13px;
+        line-height: 1.45;
         color: #475569;
     }
 
-    .section-title {
-        background: #eef2f7;
-        border: 1px solid #d5dbe5;
-        border-bottom: 0;
-        padding: 9px 14px;
-        font-weight: 800;
-        color: #334155;
-    }
-
-    .info-box {
-        border: 1px solid #d5dbe5;
-        padding: 14px;
-        min-height: 145px;
-        color: #475569;
-        line-height: 1.7;
-    }
-
-    .proforma-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 22px;
-    }
-
-    .proforma-table th {
-        background: #e9edf3;
-        border: 1px solid #cfd6df;
-        padding: 9px;
-        font-size: 11px;
-        font-weight: 800;
-        text-transform: uppercase;
-        color: #475569;
-    }
-
-    .proforma-table td {
-        border: 1px solid #d7dde5;
-        padding: 9px;
-        vertical-align: middle;
-        color: #475569;
-    }
-
-    .text-end {
+    .invoice-heading {
+        width: 38%;
         text-align: right;
     }
 
+    .invoice-title {
+        margin: 0 0 7px;
+        color: #253494;
+        font-size: 38px;
+        line-height: 1;
+        font-weight: 800;
+    }
+
+    .invoice-number-line,
+    .invoice-date-line {
+        font-size: 13px;
+        line-height: 1.45;
+    }
+
+    .invoice-status {
+        margin-top: 7px;
+    }
+
+    .invoice-info-row {
+        display: flex;
+        align-items: stretch;
+        gap: 18px;
+        margin-bottom: 18px;
+    }
+
+    .invoice-info-col {
+        width: 50%;
+    }
+
+    .info-title {
+        padding: 8px 12px;
+        background: #e5e7eb;
+        border: 1px solid #cbd5e1;
+        font-size: 13px;
+        font-weight: 800;
+        color: #1e293b;
+    }
+
+    .info-box {
+        min-height: 123px;
+        padding: 11px 12px;
+        border: 1px solid #cbd5e1;
+        border-top: 0;
+        line-height: 1.5;
+        font-size: 13px;
+    }
+
+    .customer-name {
+        margin: 0 0 7px;
+        font-size: 16px;
+        font-weight: 800;
+        color: #1e293b;
+    }
+
+    .invoice-table,
+    .payment-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0;
+    }
+
+    .invoice-table th,
+    .payment-table th {
+        padding: 8px 7px;
+        border: 1px solid #cbd5e1;
+        background: #e5e7eb;
+        color: #334155;
+        font-size: 11px;
+        line-height: 1.2;
+        text-transform: uppercase;
+        vertical-align: middle;
+    }
+
+    .invoice-table td,
+    .payment-table td {
+        padding: 8px 7px;
+        border: 1px solid #cbd5e1;
+        font-size: 12px;
+        line-height: 1.3;
+        vertical-align: middle;
+    }
+
     .text-center {
-        text-align: center;
+        text-align: center !important;
+    }
+
+    .text-end {
+        text-align: right !important;
+    }
+
+    .text-primary {
+        color: #253494 !important;
+    }
+
+    .text-danger {
+        color: #dc3545 !important;
+    }
+
+    .text-success {
+        color: #198754 !important;
     }
 
     .fw-bold {
-        font-weight: 700;
+        font-weight: 700 !important;
+    }
+
+    .totals-wrapper {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 13px;
     }
 
     .totals-box {
-        width: 430px;
-        margin-left: auto;
-        margin-top: 25px;
+        width: 42%;
     }
 
-    .totals-box td {
-        padding: 7px 0;
+    .totals-table {
+        width: 100%;
+        border-collapse: collapse;
     }
 
-    .grand-total-row td {
-        border-top: 2px solid #334155 !important;
-        padding-top: 14px;
-        font-size: 24px;
-        font-weight: 800;
-    }
-
-    .grand-total-value {
-        color: #4169e1;
-        font-size: 30px;
-        font-weight: 800;
-    }
-
-    .text-danger-custom {
-        color: #ea5455;
-    }
-
-    .status-badge {
-        display: inline-block;
-        padding: 5px 11px;
-        border-radius: 999px;
+    .totals-table td {
+        padding: 4px 0;
+        border: 0;
         font-size: 12px;
-        font-weight: 700;
-        background: #eef2ff;
-        color: #4f46e5;
+        line-height: 1.3;
     }
 
-    .status-converted {
-        background: #dcfce7;
-        color: #15803d;
-    }
-
-    .status-cancelled {
-        background: #fee2e2;
-        color: #dc2626;
+    .grand-total td {
+        padding-top: 7px;
+        border-top: 2px solid #334155;
+        font-size: 20px;
+        font-weight: 800;
     }
 
     .amount-words {
-        margin-top: 28px;
-        padding: 14px 16px;
-        border: 1px solid #d7dde5;
+        margin-top: 15px;
+        padding: 9px 11px;
+        border: 1px solid #94a3b8;
         background: #f8fafc;
-        color: #475569;
+        font-size: 11px;
+        line-height: 1.35;
+        font-weight: 600;
     }
 
-    .actions-bar {
-        display: flex;
-        justify-content: flex-end;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-top: 28px;
+    .payments-section {
+        margin-top: 15px;
     }
 
+    .payments-title {
+        margin: 0 0 7px;
+        color: #253494;
+        font-size: 14px;
+        font-weight: 800;
+    }
+
+    .payment-table th,
+    .payment-table td {
+        padding-top: 6px;
+        padding-bottom: 6px;
+    }
+
+    .payment-summary {
+        margin-top: 8px;
+        font-size: 12px;
+        line-height: 1.5;
+        text-align: right;
+    }
+
+    /* ============================================================
+       IMPRESSION A4
+       - Pas de zoom
+       - Client et détails restent côte à côte
+       - Taille lisible
+       - Une seule page pour une facture normale
+   ============================================================ */
     @media print {
+        .d-print-none { display: none !important; } /* ex. mention « Hors catalogue » */
+        @page {
+            size: A4 portrait;
+            margin: 8mm;
+        }
+
+        html,
+        body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+            width: auto !important;
+            min-width: 0 !important;
+            height: auto !important;
+            overflow: visible !important;
+            font-family: Arial, Helvetica, sans-serif !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
 
         .layout-navbar,
         .layout-menu,
-        .print-hide,
-        footer {
+        .invoice-toolbar,
+        .no-print,
+        footer,
+        .content-footer,
+        .layout-overlay,
+        .buy-now {
             display: none !important;
         }
 
-        body,
+        .layout-wrapper,
+        .layout-container,
+        .layout-page,
         .content-wrapper,
         .container-xxl,
-        .proforma-wrapper {
+        .container-fluid,
+        main,
+        .content-wrapper > .container-xxl,
+        .content-wrapper > .container-fluid {
+            width: 100% !important;
+            max-width: none !important;
+            min-width: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+            box-shadow: none !important;
+            transform: none !important;
+        }
+
+        .layout-page {
+            padding-left: 0 !important;
+        }
+
+        .invoice-page {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            overflow: visible !important;
             background: #fff !important;
         }
 
-        .proforma-card {
-            box-shadow: none !important;
-            border-radius: 0 !important;
+        .invoice-body {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            color: #000 !important;
+            background: #fff !important;
+            font-size: 10.5pt !important;
+            zoom: 1 !important;
+            transform: none !important;
         }
 
-        .proforma-card .card-body {
-            max-width: none;
-            padding: 10px !important;
+        /* ENTÊTE */
+        .invoice-header {
+            display: flex !important;
+            flex-direction: row !important;
+            justify-content: space-between !important;
+            align-items: flex-start !important;
+            gap: 10mm !important;
+            margin: 0 0 5mm 0 !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
         }
 
-        .document-title {
-            font-size: 34px;
+        .company-block {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: flex-start !important;
+            gap: 4mm !important;
+            width: 62% !important;
         }
 
-        .proforma-table {
-            font-size: 10px;
+        .company-logo {
+            width: 30mm !important;
+            max-width: 30mm !important;
+            height: auto !important;
+            max-height: 23mm !important;
+            object-fit: contain !important;
         }
 
-        .proforma-table th,
-        .proforma-table td {
-            padding: 5px !important;
+        .company-title {
+            margin: 0 0 1mm 0 !important;
+            font-size: 16pt !important;
+            line-height: 1.05 !important;
+            color: #000 !important;
         }
 
-        .info-box,
-        .totals-box,
+        .company-details {
+            font-size: 8.5pt !important;
+            line-height: 1.3 !important;
+            color: #000 !important;
+        }
+
+        .invoice-heading {
+            width: 38% !important;
+            text-align: right !important;
+        }
+
+        .invoice-title {
+            margin: 0 0 2mm 0 !important;
+            font-size: 24pt !important;
+            line-height: 1 !important;
+            color: #253494 !important;
+        }
+
+        .invoice-number-line,
+        .invoice-date-line {
+            font-size: 8.5pt !important;
+            line-height: 1.35 !important;
+        }
+
+        .invoice-status {
+            margin-top: 1.5mm !important;
+        }
+
+        .invoice-status .badge {
+            font-size: 7.5pt !important;
+            padding: 1mm 2mm !important;
+        }
+
+        /* CLIENT + DÉTAILS : TOUJOURS CÔTE À CÔTE */
+        .invoice-info-row {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: stretch !important;
+            gap: 5mm !important;
+            width: 100% !important;
+            margin: 0 0 5mm 0 !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        .invoice-info-col {
+            display: block !important;
+            flex: 1 1 0 !important;
+            width: calc(50% - 2.5mm) !important;
+            max-width: calc(50% - 2.5mm) !important;
+            min-width: 0 !important;
+        }
+
+        .info-title {
+            padding: 2mm 2.5mm !important;
+            border: 0.3mm solid #777 !important;
+            background: #e5e7eb !important;
+            font-size: 9pt !important;
+            line-height: 1.15 !important;
+            color: #000 !important;
+        }
+
+        .info-box {
+            min-height: 25mm !important;
+            height: auto !important;
+            padding: 2.5mm !important;
+            border: 0.3mm solid #777 !important;
+            border-top: 0 !important;
+            font-size: 8.5pt !important;
+            line-height: 1.35 !important;
+            color: #000 !important;
+        }
+
+        .customer-name {
+            margin: 0 0 1.5mm 0 !important;
+            font-size: 11pt !important;
+            line-height: 1.1 !important;
+        }
+
+        /* ARTICLES */
+        .table-responsive {
+            width: 100% !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        .invoice-table {
+            width: 100% !important;
+            table-layout: fixed !important;
+            border-collapse: collapse !important;
+            margin: 0 !important;
+        }
+
+        .invoice-table th {
+            padding: 1.6mm 1.2mm !important;
+            border: 0.25mm solid #777 !important;
+            background: #e5e7eb !important;
+            color: #000 !important;
+            font-size: 7.2pt !important;
+            line-height: 1.15 !important;
+        }
+
+        .invoice-table td {
+            padding: 1.7mm 1.2mm !important;
+            border: 0.25mm solid #777 !important;
+            color: #000 !important;
+            font-size: 7.8pt !important;
+            line-height: 1.2 !important;
+            overflow-wrap: anywhere !important;
+        }
+
+        .invoice-table tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        /* TOTAUX */
+        .totals-wrapper {
+            display: flex !important;
+            justify-content: flex-end !important;
+            width: 100% !important;
+            margin-top: 3mm !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        .totals-box {
+            width: 43% !important;
+        }
+
+        .totals-table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+        }
+
+        .totals-table td {
+            padding: 1mm 0 !important;
+            border: 0 !important;
+            font-size: 8.5pt !important;
+            line-height: 1.2 !important;
+        }
+
+        .grand-total td {
+            padding-top: 1.8mm !important;
+            border-top: 0.5mm solid #333 !important;
+            font-size: 14pt !important;
+            font-weight: 800 !important;
+        }
+
+        /* MONTANT EN LETTRES */
         .amount-words {
-            break-inside: avoid;
+            margin-top: 3.5mm !important;
+            padding: 2.2mm 2.5mm !important;
+            border: 0.3mm solid #777 !important;
+            background: #fff !important;
+            font-size: 7.8pt !important;
+            line-height: 1.25 !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        /* PAIEMENTS */
+        .payments-section {
+            margin-top: 3.5mm !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        .payments-title {
+            margin: 0 0 1.5mm 0 !important;
+            font-size: 9.5pt !important;
+            line-height: 1.1 !important;
+            color: #253494 !important;
+        }
+
+        .payment-table {
+            width: 100% !important;
+            table-layout: fixed !important;
+            border-collapse: collapse !important;
+            margin: 0 !important;
+        }
+
+        .payment-table th {
+            padding: 1.3mm 1.5mm !important;
+            border: 0.25mm solid #777 !important;
+            background: #e5e7eb !important;
+            color: #000 !important;
+            font-size: 7pt !important;
+            line-height: 1.1 !important;
+        }
+
+        .payment-table td {
+            padding: 1.3mm 1.5mm !important;
+            border: 0.25mm solid #777 !important;
+            color: #000 !important;
+            font-size: 7.5pt !important;
+            line-height: 1.1 !important;
+        }
+
+        .payment-table tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        .payment-summary {
+            margin-top: 2mm !important;
+            font-size: 8.5pt !important;
+            line-height: 1.45 !important;
+            text-align: right !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        */ Évite qu'un bloc normal soit envoyé seul sur la page suivante */
+        .invoice-header,
+        .invoice-info-row,
+        .totals-wrapper,
+        .amount-words,
+        .payments-section,
+        .payment-summary {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
         }
     }
-
 </style>
 
-
-@php
-
-    $proformaNumber =
-        $proforma->proforma_number;
-
-    $proformaDate =
-        $proforma->proforma_date
-        ?? $proforma->created_at;
-
-    $subtotal =
-        (float) $proforma->calculated_subtotal;
-
-    $discountPercent =
-        (float) $proforma->discount_rate;
-
-    $discountAmount =
-        (float) $proforma->calculated_discount_amount;
-
-    $tva =
-        (float) $proforma->calculated_tva;
-
-    $total =
-        (float) $proforma->calculated_total;
-
-    $vehicleDescription = '';
-
-    if ($proforma->vehicle) {
-
-        $vehicleDescription = trim(
-            ($proforma->vehicle->brand ?? '')
-            . ' '
-            . ($proforma->vehicle->model ?? '')
-        );
-    }
-
-    $isConverted =
-        $proforma->status === 'Converti';
-
-    $isCancelled =
-        $proforma->status === 'Annulé';
-
-@endphp
-
-
-<div class="proforma-wrapper">
+<div class="invoice-page">
 
     {{-- ============================================================
-        MESSAGES
+         ACTIONS — NAVIGATEUR UNIQUEMENT
     ============================================================ --}}
+    <div class="invoice-toolbar no-print">
 
-    @if(session('success'))
+        <div class="invoice-toolbar-left">
+            <a href="{{ route('proformas.index') }}" class="btn btn-secondary btn-back">
+                <i class="bx bx-arrow-back"></i>
+                Retour
+            </a>
+        </div>
 
-        <div class="alert alert-success print-hide">
+        <div class="invoice-toolbar-right">
 
-            <i class="bx bx-check-circle me-1"></i>
+            <a href="{{ route('proformas.pdf', $proforma) }}" class="btn btn-danger">
+                <i class="bx bxs-file-pdf"></i>
+                Télécharger PDF
+            </a>
 
-            {{ session('success') }}
+            <button type="button" class="btn btn-dark" onclick="window.print()">
+                <i class="bx bx-printer"></i>
+                Imprimer
+            </button>
+
+            @if($isConverted && $proforma->sale_id)
+
+                <a href="{{ route('sales.invoice', $proforma->sale_id) }}" class="btn btn-primary">
+                    <i class="bx bx-receipt"></i>
+                    Voir la facture
+                </a>
+
+            @elseif(! $isCancelled)
+
+                <form action="{{ route('proformas.convert-sale', $proforma) }}" method="POST" class="d-inline" id="convertProformaForm">
+                    @csrf
+                    <button type="submit" class="btn btn-success" id="convertProformaButton"
+                        @if($bloqueStock) disabled title="Pièce(s) pas encore disponible(s) : réapprovisionnez d'abord" @endif>
+                        <i class="bx bx-transfer"></i>
+                        Convertir en vente
+                    </button>
+                </form>
+
+            @endif
 
         </div>
 
-    @endif
+    </div>
 
+    <div class="invoice-body">
 
-    @if(session('error'))
+        {{-- MESSAGES --}}
+        @foreach(['success' => 'success', 'error' => 'danger', 'info' => 'info'] as $cle => $couleur)
+            @if(session($cle))
+                <div class="alert alert-{{ $couleur }} no-print">
+                    {{ session($cle) }}
+                </div>
+            @endif
+        @endforeach
 
-        <div class="alert alert-danger print-hide">
+        @if($isConverted && $proforma->sale)
+            <div class="alert alert-success no-print">
+                Proforma transformé en facture
+                <a href="{{ route('sales.invoice', $proforma->sale) }}" class="fw-bold">{{ $proforma->sale->invoice_number }}</a>.
+            </div>
+        @elseif($isCancelled)
+            <div class="alert alert-warning no-print">
+                <strong>Proforma annulé.</strong>
+            </div>
+        @endif
 
-            <i class="bx bx-error-circle me-1"></i>
+        @if($bloqueStock)
+            <div class="alert alert-warning no-print">
+                <div class="fw-semibold mb-1">
+                    <i class="bx bx-error me-1"></i>
+                    Transformation en facture impossible pour l'instant
+                </div>
+                <div class="mb-2">
+                    Ce proforma contient des pièces qui ne sont pas (ou plus) disponibles.
+                    Dès qu'elles seront réapprovisionnées dans le dépôt indiqué, la
+                    transformation en facture sera possible.
+                </div>
+                <ul class="mb-0 ps-3">
+                    @foreach($manquants as $m)
+                        <li>
+                            <strong>{{ $m['reference'] }}</strong> — {{ $m['designation'] }}
+                            ({{ $m['depot'] }}) :
+                            disponible {{ number_format($m['disponible'], 2, ',', ' ') }},
+                            demandé {{ number_format($m['demande'], 2, ',', ' ') }} {{ $m['unite'] }}
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
 
-            {{ session('error') }}
+        {{-- ========================================================
+**            ENTÊTE**
+        ======================================================== --}}
+        <div class="invoice-header">
 
-        </div>
+            <div class="company-block">
 
-    @endif
+                <img
+                    src="{{ asset('assets/img/logo/stcd.jpg') }}"
+                    alt="Logo STCD Motors"
+                    class="company-logo"
+                    onerror="this.style.display='none';"
+                >
 
+                <div>
+                    <h2 class="company-title">
+                        STCD MOTORS
+                    </h2>
 
-    {{-- Pièces pas encore disponibles : pas de facture tant qu'elles ne
-         sont pas réapprovisionnées dans le dépôt choisi --}}
-    @php
-        $manquants = $manquants ?? [];
-        $bloqueStock = !$isConverted && !$isCancelled && count($manquants) > 0;
-    @endphp
+                    <div class="company-details">
+                        <div>1667 Guelleh-Batal, Djibouti-ville</div>
+                        <div>Téléphone : +253 77 22 93 33</div>
+                        <div>Fax : +253 21 35 30 09</div>
+                        <div>Email : spareparts@stcd.dj</div>
+                    </div>
+                </div>
 
-    @if($bloqueStock)
-
-        <div class="alert alert-warning print-hide">
-
-            <div class="fw-semibold mb-1">
-                <i class="bx bx-error me-1"></i>
-                Transformation en facture impossible pour l'instant
             </div>
 
-            <div class="mb-2">
-                Ce proforma contient des pièces qui ne sont pas (ou plus) disponibles.
-                Dès qu'elles seront réapprovisionnées dans le dépôt indiqué, la
-                transformation en facture sera possible.
+            <div class="invoice-heading">
+
+                <h1 class="invoice-title">
+                    PROFORMA
+                </h1>
+
+                <div class="invoice-number-line">
+                    <strong>N° Proforma :</strong>
+                    {{ $numero }}
+                </div>
+
+                <div class="invoice-date-line">
+                    <strong>Date :</strong>
+                    {{ optional($proforma->created_at)->format('d/m/Y') }}
+                </div>
+
+                <div class="invoice-status">
+                    @if($isCancelled)
+                        <span class="badge bg-danger">
+                            Annulé
+                        </span>
+                    @elseif($isConverted)
+                        <span class="badge bg-success">
+                            Converti
+                        </span>
+                    @else
+                        <span class="badge bg-primary">
+                            Validé
+                        </span>
+                    @endif
+                </div>
+
             </div>
 
-            <ul class="mb-0 ps-3">
-                @foreach($manquants as $m)
-                    <li>
-                        <strong>{{ $m['reference'] }}</strong> — {{ $m['designation'] }}
-                        ({{ $m['depot'] }}) :
-                        disponible {{ number_format($m['disponible'], 2, ',', ' ') }},
-                        demandé {{ number_format($m['demande'], 2, ',', ' ') }} {{ $m['unite'] }}
-                    </li>
-                @endforeach
-            </ul>
+        </div>
+
+        {{-- ========================================================
+**            CLIENT + DÉTAILS**
+        ======================================================== --}}
+        <div class="invoice-info-row">
+
+            <div class="invoice-info-col">
+
+                <div class="info-title">
+                    Facturé à
+                </div>
+
+                <div class="info-box">
+
+                    <div class="customer-name">
+                        {{ $proforma->customer->name ?? 'Client non renseigné' }}
+                    </div>
+
+                    <div>
+                        <strong>Téléphone :</strong>
+                        {{ $proforma->customer->phone ?? '-' }}
+                    </div>
+
+                    <div>
+                        <strong>Email :</strong>
+                        {{ $proforma->customer->email ?? '-' }}
+                    </div>
+
+                    <div>
+                        <strong>Adresse :</strong>
+                        {{ $proforma->customer->address ?? '-' }}
+                    </div>
+
+                    <div>
+                        <strong>Immatriculation :</strong>
+                        {{ $proforma->plaque ?? '-' }}
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="invoice-info-col">
+
+                <div class="info-title">
+                    Détails du proforma
+                </div>
+
+                <div class="info-box">
+
+                    <div>
+                        <strong>Proforma :</strong>
+                        {{ $numero }}
+                    </div>
+
+                    <div>
+                        <strong>Date :</strong>
+                        {{ optional($proforma->created_at)->format('d/m/Y') }}
+                    </div>
+
+                    <div>
+                        <strong>Statut :</strong>
+                        {{ $statusLabel }}
+                    </div>
+
+                    <div>
+                        <strong>Paiement :</strong>
+                        {{ $proforma->payment_type ?? '-' }}
+                    </div>
+
+                    <!--div>
+                        <strong>Immatriculation :</strong>
+                        { $proforma->vehicle->plate_number ?? '-' }}
+                    </div-->
+
+                   <!-- @ if($proforma->vehicle)
+                        <div>
+                            <strong>Véhicule :</strong>
+                            { {
+                                trim(
+                                    ($proforma->vehicle->brand ?? '')
+                                    . ' '
+                                    . ($proforma->vehicle->model ?? '')
+                                ) ?: '-'
+                            }}
+                        </div>
+                    @ endif-->
+
+                    <div>
+                        <strong>Vendeur :</strong>
+                        {{ $proforma->creator->name ?? '-' }}
+                    </div>
+
+                </div>
+
+            </div>
 
         </div>
 
-    @endif
-
-
-    @if(session('info'))
-
-        <div class="alert alert-info print-hide">
-
-            <i class="bx bx-info-circle me-1"></i>
-
-            {{ session('info') }}
-
-        </div>
-
-    @endif
-
-
-    <div class="card proforma-card">
-
-        <div class="card-body">
-
-            {{-- ====================================================
-                ENTÊTE
-            ==================================================== --}}
-
-            <table class="no-border">
-
-                <tr>
-
-                    <td style="
-                        width:62%;
-                        vertical-align:top;
-                        padding:0;
-                    ">
-
-                        <table class="no-border">
-
-                            <tr>
-
-                                <td style="
-                                    width:155px;
-                                    vertical-align:top;
-                                    padding:0 18px 0 0;
-                                ">
-
-                                    <img
-                                        src="{{ asset('assets/img/logo/stcd.jpg') }}"
-                                        alt="STCD Motors"
-                                        style="
-                                            width:135px;
-                                            height:auto;
-                                        "
-                                    >
-
-                                </td>
-
-
-                                <td style="
-                                    vertical-align:top;
-                                    padding:0;
-                                ">
-
-                                    <h1 class="company-title">
-
-                                        STCD MOTORS
-
-                                    </h1>
-
-                                    <div style="
-                                        line-height:1.7;
-                                        color:#64748b;
-                                    ">
-
-                                        1667 Guelleh-Batal,
-                                        Djibouti-ville
-
-                                        <br>
-
-                                        Téléphone :
-                                        +253 77 22 93 33
-
-                                        <br>
-
-                                        Fax :
-                                        +253 21 35 30 09
-
-                                        <br>
-
-                                        Email :
-                                        spareparts@stcd.dj
-
-                                    </div>
-
-                                </td>
-
-                            </tr>
-
-                        </table>
-
-                    </td>
-
-
-                    <td style="
-                        width:38%;
-                        text-align:right;
-                        vertical-align:top;
-                        padding:0;
-                    ">
-
-                        <div class="document-title">
-
-                            PROFORMA
-
-                        </div>
-
-
-                        <div class="document-meta">
-
-                            <div>
-
-                                <strong>
-                                    N° Proforma :
-                                </strong>
-
-                                {{ $proformaNumber }}
-
-                            </div>
-
-
-                            <div>
-
-                                <strong>
-                                    Date :
-                                </strong>
-
-                                {{
-                                    $proformaDate
-                                        ? $proformaDate->format('d/m/Y')
-                                        : '-'
-                                }}
-
-                            </div>
-
-
-                            <div style="margin-top:4px;">
-
-                                <span
-                                    class="
-                                        status-badge
-
-                                        @if($isConverted)
-                                            status-converted
-                                        @elseif($isCancelled)
-                                            status-cancelled
-                                        @endif
-                                    "
-                                >
-
-                                    {{ $proforma->status ?? 'Validé' }}
-
-                                </span>
-
-                            </div>
-
-                        </div>
-
-                    </td>
-
-                </tr>
-
-            </table>
-
-
-            {{-- ====================================================
-                CLIENT / DÉTAILS
-            ==================================================== --}}
-
-            <table
-                class="no-border"
-                style="margin-top:28px;"
-            >
-
-                <tr>
-
-                    <td style="
-                        width:48%;
-                        vertical-align:top;
-                        padding:0;
-                    ">
-
-                        <div class="section-title">
-
-                            Facturé à
-
-                        </div>
-
-                        <div class="info-box">
-
-                            <strong>
-
-                                {{
-                                    $proforma->customer?->name
-                                    ?? 'Client non défini'
-                                }}
-
-                            </strong>
-
-                            <br><br>
-
-                            <strong>
-                                Téléphone :
-                            </strong>
-
-                            {{
-                                $proforma->customer?->phone
-                                ?? '-'
-                            }}
-
-                            <br>
-
-                            <strong>
-                                Email :
-                            </strong>
-
-                            {{
-                                $proforma->customer?->email
-                                ?? '-'
-                            }}
-
-                            <br>
-
-                            <strong>
-                                Adresse :
-                            </strong>
-
-                            {{
-                                $proforma->customer?->address
-                                ?? '-'
-                            }}
-
-                        </div>
-
-                    </td>
-
-
-                    <td style="width:4%;"></td>
-
-
-                    <td style="
-                        width:48%;
-                        vertical-align:top;
-                        padding:0;
-                    ">
-
-                        <div class="section-title">
-
-                            Détails du proforma
-
-                        </div>
-
-                        <div class="info-box">
-
-                            <table class="no-border">
-
-                                <tr>
-
-                                    <td
-                                        class="fw-bold"
-                                        style="width:40%;"
-                                    >
-                                        Proforma :
-                                    </td>
-
-                                    <td>
-                                        {{ $proformaNumber }}
-                                    </td>
-
-                                </tr>
-
-
-                                <tr>
-
-                                    <td class="fw-bold">
-                                        Date :
-                                    </td>
-
-                                    <td>
-
-                                        {{
-                                            $proformaDate
-                                                ? $proformaDate->format('d/m/Y')
-                                                : '-'
-                                        }}
-
-                                    </td>
-
-                                </tr>
-
-
-                                <tr>
-
-                                    <td class="fw-bold">
-                                        Statut :
-                                    </td>
-
-                                    <td>
-
-                                        {{ $proforma->status ?? 'Validé' }}
-
-                                    </td>
-
-                                </tr>
-
-
-                                <tr>
-
-                                    <td class="fw-bold">
-                                        Paiement :
-                                    </td>
-
-                                    <td>
-
-                                        {{ $proforma->payment_type ?? '-' }}
-
-                                    </td>
-
-                                </tr>
-
-
-                                <tr>
-
-                                    <td class="fw-bold">
-                                        Immatriculation :
-                                    </td>
-
-                                    <td>
-
-                                        {{
-                                            $proforma->vehicle?->plate_number
-                                            ?? '-'
-                                        }}
-
-                                    </td>
-
-                                </tr>
-
-
-                                @if($vehicleDescription !== '')
-
-                                    <tr>
-
-                                        <td class="fw-bold">
-                                            Véhicule :
-                                        </td>
-
-                                        <td>
-                                            {{ $vehicleDescription }}
-                                        </td>
-
-                                    </tr>
-
-                                @endif
-
-                            </table>
-
-                        </div>
-
-                    </td>
-
-                </tr>
-
-            </table>
-
-
-            {{-- ====================================================
-                PRODUITS
-            ==================================================== --}}
-
-            <table class="proforma-table">
+        {{-- ========================================================
+            **            ARTICLES**
+        ======================================================== --}}
+        <div class="table-responsive">
+
+            <table class="invoice-table">
 
                 <thead>
-
                     <tr>
-
-                        <th
-                            style="width:5%;"
-                            class="text-center"
-                        >
-                            #
-                        </th>
-
-                        <th style="width:15%;">
-                            Référence
-                        </th>
-
-                        <th style="width:28%;">
-                            Désignation
-                        </th>
-
-                        <th
-                            style="width:12%;"
-                            class="text-end"
-                        >
-                            Quantité
-                        </th>
-
-                        <th
-                            style="width:15%;"
-                            class="text-end"
-                        >
-                            Prix unitaire
-                        </th>
-
-                        <th
-                            style="width:12%;"
-                            class="text-end"
-                        >
-                            TVA
-                        </th>
-
-                        <th
-                            style="width:13%;"
-                            class="text-end"
-                        >
-                            Total HT
-                        </th>
-
+                        <th class="text-center" style="width:5%;">#</th>
+                        <th style="width:16%;">Référence</th>
+                        <th style="width:28%;">Désignation</th>
+                        <th class="text-end" style="width:14%;">Quantité</th>
+                        <th class="text-end" style="width:17%;">Prix unitaire</th>
+                        <th class="text-end" style="width:20%;">Total</th>
                     </tr>
-
                 </thead>
-
 
                 <tbody>
 
                     @forelse($proforma->items as $item)
 
                         @php
+                            /**
+*                            |--------------------------------------------------------------------------*
+*                            | QUANTITÉ*
+*                            |--------------------------------------------------------------------------*
+*                            | La quantité peut rester décimale pour les litres / kg.*
+*                            */
+                            $quantity = round(
+                                (float) ($item->quantity ?? 0),
+                                2
+                            );
 
-                            $quantity =
-                                (float) $item->quantity;
+                            /**
+*                            |--------------------------------------------------------------------------*
+*                            | MONTANTS FDJ*
+*                            |--------------------------------------------------------------------------*
+*                            | Prix et total de ligne arrondis à l'unité.*
+*                            */
+                            $price = (int) round(
+                                (float) ($item->price ?? 0)
+                            );
 
-                            $price =
-                                (float) $item->price;
-
-                            $lineSubtotal =
-                                round(
-                                    $quantity * $price,
-                                    2
-                                );
-
-                            $lineDiscount =
-                                round(
-                                    (
-                                        $lineSubtotal
-                                        * $discountPercent
-                                    ) / 100,
-                                    2
-                                );
-
-                            $lineTaxable =
-                                max(
-                                    0,
-                                    round(
-                                        $lineSubtotal
-                                        - $lineDiscount,
-                                        2
-                                    )
-                                );
-
-                            $lineTva =
-                                $proforma->invoice_type === 'without_tax'
-                                    ? 0
-                                    : round(
-                                        $lineTaxable * 0.10,
-                                        2
-                                    );
+                            $lineTotal = (int) round(
+                                $quantity * (float) ($item->price ?? 0)
+                            );
 
                             /*
-                            |--------------------------------------------------------------------------
-                            | INFORMATIONS À AFFICHER POUR LA LIGNE
-                            |--------------------------------------------------------------------------
+                            |--------------------------------------------------------------
+                            | AFFICHAGE PRODUIT
+                            |--------------------------------------------------------------
                             |
-                            | Une ligne peut représenter :
+                            | Produit catalogue :
+                            | les informations viennent de la table products.
                             |
-                            | 1. un produit existant dans le catalogue ;
-                            | 2. un produit hors catalogue saisi manuellement ;
-                            | 3. un ancien produit réellement supprimé.
+                            | Produit hors catalogue :
+                            | les informations sont conservées directement
+                            | dans sale_items.
                             |
                             */
 
                             $isCustomProduct =
-                                is_null($item->product_id)
+                                empty($item->product_id)
                                 && filled($item->designation_libre);
 
                             $unit =
                                 $item->product?->unit_label
                                 ?? 'Pièce';
 
-                            if ($item->product) {
+                            $reference =
+                                $isCustomProduct
+                                    ? (
+                                        $item->reference_libre
+                                        ?: '-'
+                                    )
+                                    : (
+                                        $item->product?->reference
+                                        ?? '-'
+                                    );
 
-                                $displayReference =
-                                    $item->product->reference
-                                    ?? '-';
-
-                                $displayDesignation =
-                                    $item->product->designation
-                                    ?? '-';
-
-                            } elseif ($isCustomProduct) {
-
-                                $displayReference =
-                                    $item->reference_libre
-                                    ?: '-';
-
-                                $displayDesignation =
-                                    $item->designation_libre;
-
-                            } else {
-
-                                $displayReference =
-                                    '-';
-
-                                $displayDesignation =
-                                    'Produit supprimé';
-                            }
-
+                            $designation =
+                                $isCustomProduct
+                                    ? $item->designation_libre
+                                    : (
+                                        $item->product?->designation
+                                        ?? 'Produit supprimé'
+                                    );
                         @endphp
-
 
                         <tr>
 
                             <td class="text-center">
-
                                 {{ $loop->iteration }}
-
                             </td>
 
-
                             <td>
-
-                                {{ $displayReference }}
-
+                                {{ $reference }}
                             </td>
 
-
                             <td>
-
-                                {{ $displayDesignation }}
+                                {{ $designation }}
 
                                 @if($isCustomProduct)
 
+                                    <span class="d-print-none">
                                     <br>
-
-                                    <small style="color:#6366f1; font-weight:600;">
+                                    <small
+                                        style="
+                                            color:#6366f1;
+                                            font-weight:600;
+                                        "
+                                    >
                                         Hors catalogue
                                     </small>
-
-                                    @if(filled($item->description_libre))
-
-                                        <br>
-
-                                        <small style="color:#64748b;">
-                                            {{ $item->description_libre }}
-                                        </small>
-
-                                    @endif
+                                    </span>
 
                                 @endif
-
-                                <br>
-
-                                <small style="color:#94a3b8;">
-
-                                    Unité :
-                                    {{ $unit }}
-
-                                </small>
-
                             </td>
 
-
                             <td class="text-end">
-
                                 {{
-                                    number_format(
-                                        $quantity,
-                                        2,
-                                        ',',
-                                        ' '
-                                    )
+                                    fmod($quantity, 1.0) == 0.0
+                                        ? number_format($quantity, 0, ',', ' ')
+                                        : number_format($quantity, 2, ',', ' ')
                                 }}
-
                                 {{ $unit }}
-
                             </td>
-
 
                             <td class="text-end">
-
-                                {{
-                                    number_format(
-                                        $price,
-                                        2,
-                                        ',',
-                                        ' '
-                                    )
-                                }}
-
+                                {{ number_format($price, 0, ',', ' ') }}
                                 FDJ
-
                             </td>
-
-
-                            <td class="text-end">
-
-                                {{
-                                    number_format(
-                                        $lineTva,
-                                        2,
-                                        ',',
-                                        ' '
-                                    )
-                                }}
-
-                                FDJ
-
-                            </td>
-
 
                             <td class="text-end fw-bold">
-
-                                {{
-                                    number_format(
-                                        $lineSubtotal,
-                                        2,
-                                        ',',
-                                        ' '
-                                    )
-                                }}
-
+                                {{ number_format($lineTotal, 0, ',', ' ') }}
                                 FDJ
-
                             </td>
 
                         </tr>
 
-
                     @empty
 
                         <tr>
-
                             <td
-                                colspan="7"
+                                colspan="6"
                                 class="text-center"
-                                style="
-                                    padding:25px;
-                                    color:#94a3b8;
-                                "
                             >
-
-                                Aucun produit enregistré sur ce proforma.
-
+                                Aucun produit enregistré.
                             </td>
-
                         </tr>
 
                     @endforelse
@@ -1004,275 +1094,77 @@
 
             </table>
 
+        </div>
 
-            {{-- ====================================================
-                TOTAUX
-            ==================================================== --}}
+        {{-- ========================================================
+**            TOTAUX**
+        ======================================================== --}}
+        <div class="totals-wrapper">
 
             <div class="totals-box">
 
-                <table class="no-border">
+                <table class="totals-table">
 
                     <tr>
-
                         <td class="fw-bold">
                             Sous-total :
                         </td>
 
                         <td class="text-end">
-
-                            {{
-                                number_format(
-                                    $subtotal,
-                                    2,
-                                    ',',
-                                    ' '
-                                )
-                            }}
-
+                            {{ number_format($subtotal, 0, ',', ' ') }}
                             FDJ
-
                         </td>
-
                     </tr>
 
-
                     <tr>
-
                         <td class="fw-bold">
-
                             Remise
-
                             @if($discountPercent > 0)
-
-                                (
-                                    {{
-                                        number_format(
-                                            $discountPercent,
-                                            2,
-                                            ',',
-                                            ' '
-                                        )
-                                    }}
-                                    %
-                                )
-
+                                ({{ number_format($discountPercent, 2, ',', ' ') }} %)
                             @endif
-
                             :
-
                         </td>
 
-
-                        <td class="text-end text-danger-custom">
-
-                            -
-
-                            {{
-                                number_format(
-                                    $discountAmount,
-                                    2,
-                                    ',',
-                                    ' '
-                                )
-                            }}
-
+                        <td class="text-end text-danger">
+                            - {{ number_format($discountAmount, 0, ',', ' ') }}
                             FDJ
-
                         </td>
-
                     </tr>
 
-
                     <tr>
-
                         <td class="fw-bold">
                             TVA (10 %) :
                         </td>
 
                         <td class="text-end">
-
-                            {{
-                                number_format(
-                                    $tva,
-                                    2,
-                                    ',',
-                                    ' '
-                                )
-                            }}
-
+                            {{ number_format($tva, 0, ',', ' ') }}
                             FDJ
-
                         </td>
-
                     </tr>
 
-
-                    <tr class="grand-total-row">
-
+                    <tr class="grand-total">
                         <td>
                             TOTAL :
                         </td>
 
-                        <td class="text-end grand-total-value">
-
-                            {{
-                                number_format(
-                                    $total,
-                                    2,
-                                    ',',
-                                    ' '
-                                )
-                            }}
-
+                        <td class="text-end text-primary">
+                            {{ number_format($invoiceTotal, 0, ',', ' ') }}
                             FDJ
-
                         </td>
-
                     </tr>
 
                 </table>
 
             </div>
 
+        </div>
 
-            {{-- ====================================================
-                MONTANT EN LETTRES
-            ==================================================== --}}
-
-            @if(isset($totalInWords) && $totalInWords !== '')
-
-                <div class="amount-words">
-
-                    <strong>
-                        Montant en lettres :
-                    </strong>
-
-                    {{ $totalInWords }}
-
-                </div>
-
-            @endif
-
-
-            {{-- ====================================================
-                ACTIONS
-            ==================================================== --}}
-
-            <div class="actions-bar print-hide">
-
-                {{-- RETOUR --}}
-                <a
-                    href="{{ route('proformas.index') }}"
-                    class="btn btn-secondary"
-                >
-
-                    <i class="bx bx-arrow-back me-1"></i>
-
-                    Retour
-
-                </a>
-
-
-                {{-- PDF PROFORMA --}}
-                @if(Route::has('proformas.pdf'))
-
-                    <a
-                        href="{{ route(
-                            'proformas.pdf',
-                            $proforma
-                        ) }}"
-                        class="btn btn-danger"
-                    >
-
-                        <i class="bx bxs-file-pdf me-1"></i>
-
-                        Télécharger PDF
-
-                    </a>
-
-                @endif
-
-
-                {{-- IMPRIMER --}}
-                <button
-                    type="button"
-                    class="btn btn-dark"
-                    onclick="window.print()"
-                >
-
-                    <i class="bx bx-printer me-1"></i>
-
-                    Imprimer
-
-                </button>
-
-
-                {{-- =================================================
-                    PROFORMA DÉJÀ CONVERTI
-                ================================================= --}}
-
-                @if($isConverted && $proforma->sale_id)
-
-                    <a
-                        href="{{ route(
-                            'sales.invoice',
-                            $proforma->sale_id
-                        ) }}"
-                        class="btn btn-primary"
-                    >
-
-                        <i class="bx bx-receipt me-1"></i>
-
-                        Voir la facture
-
-                    </a>
-
-
-                {{-- =================================================
-                    CONVERTIR EN VENTE
-                ================================================= --}}
-
-                @elseif(
-                    !$isCancelled
-                    && Route::has('proformas.convert-sale')
-                )
-
-                    <form
-                        action="{{ route(
-                            'proformas.convert-sale',
-                            $proforma
-                        ) }}"
-                        method="POST"
-                        class="d-inline"
-                        id="convertProformaForm"
-                    >
-
-                        @csrf
-
-
-                        <button
-                            type="submit"
-                            class="btn btn-success"
-                            id="convertProformaButton"
-                            @if($bloqueStock)
-                                disabled
-                                title="Pièce(s) pas encore disponible(s) : réapprovisionnez d'abord"
-                            @endif
-                        >
-
-                            <i class="bx bx-transfer me-1"></i>
-
-                            Convertir en vente
-
-                        </button>
-
-                    </form>
-
-                @endif
-
-            </div>
-
+        {{-- ========================================================
+**            MONTANT EN LETTRES**
+        ======================================================== --}}
+        <div class="amount-words">
+            <strong>Montant en lettres :</strong>
+            {{ $totalInWordsRounded ?? $totalInWords ?? '-' }}
         </div>
 
     </div>

@@ -549,10 +549,10 @@
                                                 Immatriculation :
                                             </strong>
 
-                                            @if($sale->vehicle)
+                                            @if($sale->plaque)
 
                                                 <span class="badge bg-label-primary">
-                                                    {{ $sale->vehicle->plate_number }}
+                                                    {{ $sale->plaque }}
                                                 </span>
 
                                             @else

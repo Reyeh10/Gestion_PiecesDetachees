@@ -128,8 +128,15 @@ class ProductOptionController extends Controller
                     'max:255',
                     Rule::unique((new Rayon())->getTable(), 'name'),
                 ],
+                // V6 : un rayon appartient à un seul dépôt
+                'depot_id' => [
+                    'required',
+                    'integer',
+                    'exists:depots,id',
+                ],
             ],
             [
+                'depot_id.required' => 'Choisissez le dépôt du rayon.',
                 'name.required' => 'Le nom du rayon est obligatoire.',
                 'name.max' => 'Le nom du rayon ne doit pas dépasser 255 caractères.',
                 'name.unique' => 'Ce rayon existe déjà.',
@@ -140,6 +147,7 @@ class ProductOptionController extends Controller
 
         $rayon->forceFill([
             'name' => trim($validated['name']),
+            'depot_id' => (int) $validated['depot_id'],
         ]);
 
         $rayon->save();
@@ -150,6 +158,7 @@ class ProductOptionController extends Controller
             'item' => [
                 'id' => $rayon->id,
                 'name' => $rayon->name,
+                'depot_id' => $rayon->depot_id,
             ],
         ]);
     }
