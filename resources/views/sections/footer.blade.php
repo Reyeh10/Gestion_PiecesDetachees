@@ -6,7 +6,7 @@
         </div>
 
         <div class="d-none d-lg-inline-block">
-            <span class="text-muted">Version 4.0</span>
+            <span class="text-muted">Version {{ config('app.version') }}</span>
         </div>
 
     </div>

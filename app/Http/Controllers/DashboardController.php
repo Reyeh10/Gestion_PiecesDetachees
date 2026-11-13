@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BonTransfert;
+use App\Models\ExternalBonCommande;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
@@ -374,6 +376,23 @@ class DashboardController extends Controller
         |--------------------------------------------------------------------------
         */
 
+        // Pièces en stock faible ou en rupture (bloc « Stock faible » du
+        // tableau de bord, comme DreamsPOS) : les plus urgentes d'abord.
+        $stockFaible = Product::query()
+            ->where(function ($q) {
+                $q->where('quantity', '<=', 0)
+                    ->orWhere(fn ($w) => $w->where('min_stock', '>', 0)->whereColumn('quantity', '<=', 'min_stock'));
+            })
+            ->orderBy('quantity')
+            ->orderBy('designation')
+            ->take(6)
+            ->get(['id', 'reference', 'designation', 'quantity', 'min_stock', 'unit_type']);
+
+        // V6 : valeur des pièces sorties par destination, mois par mois
+        $anneeSorties = (int) request('annee', now()->year);
+        $anneeSorties = $anneeSorties >= 2000 && $anneeSorties <= now()->year + 1 ? $anneeSorties : now()->year;
+        $sortiesParDestination = $this->sortiesParDestination($anneeSorties);
+
         if (
             auth()->user()->role == 'admin'
         ) {
@@ -403,7 +422,10 @@ class DashboardController extends Controller
                     'monthlySales',
                     'totalStockPrice',
                     'totalSoldPrice',
-                    'monthlySold'
+                    'monthlySold',
+                    'stockFaible',
+                    'anneeSorties',
+                    'sortiesParDestination'
                 )
             );
         }
@@ -433,5 +455,57 @@ class DashboardController extends Controller
                 'monthlySold'
             )
         );
+    }
+
+    /**
+     * V6 : valeur des sorties de pièces par destination et par mois (année
+     * donnée) : factures clients directs + bons de transfert selon leur type.
+     *
+     * @return array<string, array{libelle:string, lien:?string, mois:array<int,float>, nombre:array<int,int>, total:float, nb:int}>
+     */
+    private function sortiesParDestination(int $annee): array
+    {
+        $destinations = [
+            'clients'    => ['libelle' => 'Clients directs (factures)', 'lien' => route('sales.index')],
+            'garage'     => ['libelle' => 'Atelier – véhicules (BC garage)', 'lien' => route('bons-transfert.index', ['type' => 'garage'])],
+            'bus'        => ['libelle' => 'Bus leasing / transport', 'lien' => route('bons-transfert.index', ['type' => 'bus'])],
+            ExternalBonCommande::MOTIF_CONSO => ['libelle' => 'Consommation atelier (équipements)', 'lien' => route('bons-transfert.index', ['type' => ExternalBonCommande::MOTIF_CONSO])],
+        ];
+        foreach (ExternalBonCommande::MOTIFS as $motif => $libelle) {
+            $destinations[$motif] ??= ['libelle' => $libelle, 'lien' => route('bons-transfert.index', ['type' => $motif])];
+        }
+        foreach ($destinations as &$d) {
+            $d += ['mois' => array_fill(1, 12, 0.0), 'nombre' => array_fill(1, 12, 0), 'total' => 0.0, 'nb' => 0];
+        }
+        unset($d);
+
+        $ajouter = function (string $cle, int $mois, float $valeur, int $nombre) use (&$destinations) {
+            $destinations[$cle]['mois'][$mois] += $valeur;
+            $destinations[$cle]['nombre'][$mois] += $nombre;
+            $destinations[$cle]['total'] += $valeur;
+            $destinations[$cle]['nb'] += $nombre;
+        };
+
+        Sale::query()->whereNotIn('status', ['cancelled'])->whereYear('created_at', $annee)
+            ->selectRaw('MONTH(created_at) mois, SUM(total) valeur, COUNT(*) nombre')
+            ->groupByRaw('MONTH(created_at)')->get()
+            ->each(fn ($r) => $ajouter('clients', (int) $r->mois, (float) $r->valeur, (int) $r->nombre));
+
+        $bc = (new ExternalBonCommande)->getTable();
+        $bt = (new BonTransfert)->getTable();
+        $conso = ExternalBonCommande::MOTIF_CONSO;
+
+        BonTransfert::query()
+            ->leftJoin($bc, "{$bc}.id", '=', "{$bt}.external_bon_commande_id")
+            ->whereYear("{$bt}.created_at", $annee)
+            ->selectRaw("MONTH({$bt}.created_at) mois, SUM({$bt}.total) valeur, COUNT(*) nombre, CASE
+                WHEN {$bc}.source_system = ? THEN 'bus'
+                WHEN {$bc}.source_system = ? OR {$bc}.equipement IS NOT NULL THEN '{$conso}'
+                WHEN {$bc}.source_system = ? THEN {$bc}.motif
+                ELSE 'garage' END destination", [ExternalBonCommande::SOURCE_BUS, ExternalBonCommande::SOURCE_CONSO, ExternalBonCommande::SOURCE_INTERNE])
+            ->groupByRaw('mois, destination')->get()
+            ->each(fn ($r) => $ajouter(isset($destinations[$r->destination]) ? $r->destination : 'autre', (int) $r->mois, (float) $r->valeur, (int) $r->nombre));
+
+        return $destinations;
     }
 }

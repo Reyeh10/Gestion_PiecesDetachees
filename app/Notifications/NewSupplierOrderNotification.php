@@ -19,7 +19,10 @@ class NewSupplierOrderNotification extends Notification
      * Constructeur.
      */
     public function __construct(
-        SupplierOrder $supplierOrder
+        SupplierOrder $supplierOrder,
+        // V7 : titre / message selon l'étape (à valider par le chef, à approuver par l'admin)
+        protected ?string $titre = null,
+        protected ?string $texte = null
     ) {
         $this->supplierOrder = $supplierOrder;
     }
@@ -54,9 +57,8 @@ class NewSupplierOrderNotification extends Notification
 
             'order_number' => $supplierOrder->order_number,
 
-            'title' => 'Nouveau bon de commande',
-
-            'message' =>
+            'title' => $this->titre ?? 'Nouveau bon de commande',
+            'message' => $this->texte ??
                 'Le bon de commande '
                 . $supplierOrder->order_number
                 . ' attend votre approbation.',

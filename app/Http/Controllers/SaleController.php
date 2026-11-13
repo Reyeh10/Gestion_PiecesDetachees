@@ -29,175 +29,256 @@ class SaleController extends Controller
     */
    public function index(Request $request)
     {
-        $sales = Sale::query()
+        // V6 : mêmes filtres que l'Atelier (recherche, statut, période, payeur)
+        $filtres = $this->ventesFiltrees($request);
+
+        // Chiffres de la sélection (les factures annulées n'ont pas de TVA due)
+        $actives = (clone $filtres)->where('status', '!=', 'cancelled');
+        $resume = [
+            'nombre' => (clone $filtres)->count(),
+            'ttc'    => (float) (clone $actives)->sum('total'),
+            'tva'    => (float) (clone $actives)->sum('tva'),
+            'reste'  => 0.0,
+        ];
+
+        $nonPayees = (clone $actives)->where('status', '!=', 'payé');
+        $resume['reste'] = max(0, (float) (clone $nonPayees)->sum('total')
+            - (float) Payment::query()->whereIn('sale_id', (clone $nonPayees)->select('id'))->sum('amount'));
+
+        $sales = $filtres
             ->with([
                 'customer',
                 'vehicle',
-                'items.product.brand',
-                'items.product.model',
-                'items.depot',
+                'items',
                 'payments',
             ])
-
-            /*
-            |--------------------------------------------------------------------------
-            | UNIQUEMENT LES VENTES
-            |--------------------------------------------------------------------------
-            */
-            ->where(
-                'document_type',
-                'sale'
-            )
-
-            /*
-            |--------------------------------------------------------------------------
-            | EXCLURE LES PROFORMAS
-            |--------------------------------------------------------------------------
-            */
-            ->where(
-                'invoice_number',
-                'NOT LIKE',
-                'PRO-%'
-            )
-
-            /*
-            |--------------------------------------------------------------------------
-            | RECHERCHE CLIENT / FACTURE
-            |--------------------------------------------------------------------------
-            */
-            ->when(
-                $request->filled('client'),
-                function ($query) use ($request) {
-
-                    $search = trim(
-                        (string) $request->client
-                    );
-
-                    $query->where(
-                        function ($q) use ($search) {
-
-                            $q->whereHas(
-                                'customer',
-                                function ($customer) use ($search) {
-
-                                    $customer->where(
-                                        'name',
-                                        'like',
-                                        '%' . $search . '%'
-                                    );
-                                }
-                            )
-                            ->orWhere(
-                                'invoice_number',
-                                'like',
-                                '%' . $search . '%'
-                            );
-                        }
-                    );
-                }
-            )
-
-            /*
-            |--------------------------------------------------------------------------
-            | RECHERCHE RÉFÉRENCE PRODUIT
-            |--------------------------------------------------------------------------
-            */
-            ->when(
-                $request->filled('reference'),
-                function ($query) use ($request) {
-
-                    $search = trim(
-                        (string) $request->reference
-                    );
-
-                    $query->whereHas(
-                        'items.product',
-                        function ($q) use ($search) {
-
-                            $q->where(
-                                'reference',
-                                'like',
-                                '%' . $search . '%'
-                            );
-                        }
-                    );
-                }
-            )
-
-            /*
-            |--------------------------------------------------------------------------
-            | RECHERCHE DÉSIGNATION
-            |--------------------------------------------------------------------------
-            */
-            ->when(
-                $request->filled('designation'),
-                function ($query) use ($request) {
-
-                    $search = trim(
-                        (string) $request->designation
-                    );
-
-                    $query->whereHas(
-                        'items.product',
-                        function ($q) use ($search) {
-
-                            $q->where(
-                                'designation',
-                                'like',
-                                '%' . $search . '%'
-                            );
-                        }
-                    );
-                }
-            )
-
-            /*
-            |--------------------------------------------------------------------------
-            | RECHERCHE PAR DATE
-            |--------------------------------------------------------------------------
-            */
-            ->when(
-                $request->filled('date'),
-                function ($query) use ($request) {
-
-                    $query->whereDate(
-                        'created_at',
-                        $request->date
-                    );
-                }
-            )
-
-            /*
-            |--------------------------------------------------------------------------
-            | TRI
-            |--------------------------------------------------------------------------
-            */
-            ->latest()
-
-            /*
-            |--------------------------------------------------------------------------
-            | PAGINATION
-            |--------------------------------------------------------------------------
-            */
-            ->paginate(10);
-
-        /*
-        |--------------------------------------------------------------------------
-        | CONSERVER LES FILTRES DANS LA PAGINATION
-        |--------------------------------------------------------------------------
-        |
-        | Utilisation de appends() à la place de withQueryString()
-        | pour éviter le faux avertissement Intelephense.
-        |
-        */
-        $sales->appends(
-            $request->query()
-        );
+            ->orderByDesc('id')
+            ->paginate(25)
+            ->withQueryString();
 
         return view(
             'sales.index',
-            compact('sales')
+            compact('sales', 'resume')
         );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | V6 : FACTURES FILTRÉES (liste et export Excel)
+    |--------------------------------------------------------------------------
+    |
+    | recherche : n° facture, client (nom, téléphone), immatriculation,
+    |             référence ou désignation d'une pièce
+    | statut    : non_payees | payees | annulees
+    | periode   : jour | mois | annee, avec date_ref (2026-11-12 / 2026-11 / 2026)
+    | payeur    : assurance | client
+    |
+    */
+    private function ventesFiltrees(Request $request): \Illuminate\Database\Eloquent\Builder
+    {
+        $query = Sale::query()
+            ->where('document_type', 'sale')
+            ->where('invoice_number', 'NOT LIKE', 'PRO-%');
+
+        // l'ancien champ « client » de la liste reste accepté
+        $recherche = trim((string) ($request->input('recherche') ?? $request->input('client', '')));
+
+        if ($recherche !== '') {
+            $immat = strtoupper(preg_replace('/[\s\-\.]+/', '', $recherche));
+
+            $query->where(function ($q) use ($recherche, $immat) {
+                $q->where('invoice_number', 'like', "%{$recherche}%")
+                    ->orWhereRaw("REPLACE(REPLACE(UPPER(COALESCE(immatriculation, '')), ' ', ''), '-', '') LIKE ?", ["%{$immat}%"])
+                    ->orWhereHas('customer', fn ($c) => $c->where('name', 'like', "%{$recherche}%")
+                        ->orWhere('phone', 'like', "%{$recherche}%"))
+                    ->orWhereHas('vehicle', fn ($v) => $v->whereRaw("REPLACE(REPLACE(UPPER(plate_number), ' ', ''), '-', '') LIKE ?", ["%{$immat}%"]))
+                    ->orWhereHas('items.product', fn ($p) => $p->where('reference', 'like', "%{$recherche}%")
+                        ->orWhere('designation', 'like', "%{$recherche}%"));
+            });
+        }
+
+        match ($request->input('statut')) {
+            'non_payees' => $query->whereIn('status', ['vendu', 'partiel']),
+            'payees'     => $query->where('status', 'payé'),
+            'annulees'   => $query->where('status', 'cancelled'),
+            default      => null,
+        };
+
+        match ($request->input('payeur')) {
+            'assurance' => $query->whereHas('customer', fn ($c) => $c->where('est_assurance', true)),
+            'client'    => $query->where(fn ($q) => $q->whereDoesntHave('customer')
+                ->orWhereHas('customer', fn ($c) => $c->where(fn ($w) => $w->where('est_assurance', false)->orWhereNull('est_assurance')))),
+            default     => null,
+        };
+
+        // ancien filtre « date » de la liste
+        if ($request->filled('date') && ! $request->filled('periode')) {
+            $query->whereDate('created_at', $request->input('date'));
+        }
+
+        if ($date = $this->dateDePeriode($request)) {
+            match ($request->input('periode')) {
+                'jour'  => $query->whereDate('created_at', $date->toDateString()),
+                'mois'  => $query->whereYear('created_at', $date->year)->whereMonth('created_at', $date->month),
+                'annee' => $query->whereYear('created_at', $date->year),
+                default => null,
+            };
+        }
+
+        return $query;
+    }
+
+    /** Date de référence de la période (« 2026 » seul serait lu comme une heure : on complète). */
+    private function dateDePeriode(Request $request): ?\Carbon\Carbon
+    {
+        $periode = $request->input('periode');
+
+        if (! in_array($periode, ['jour', 'mois', 'annee'], true)) {
+            return null;
+        }
+
+        $ref = trim((string) $request->input('date_ref', ''));
+
+        try {
+            return $ref !== ''
+                ? \Carbon\Carbon::parse($ref . ($periode === 'annee' ? '-01-01' : ($periode === 'mois' ? '-01' : '')))
+                : now();
+        } catch (\Throwable $e) {
+            return now();
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | V6 : FICHE DE SUIVI DE RÈGLEMENT (EXCEL) — RÉCOLTE DE LA TVA
+    |--------------------------------------------------------------------------
+    |
+    | Même présentation que l'Atelier. Mêmes filtres que la liste. Les factures
+    | annulées n'y sont pas (leur TVA n'est pas due), sauf avec le filtre
+    | « Annulées ». Une ligne par facture, dans l'ordre des numéros, puis les
+    | totaux (formules SOUS.TOTAL : ils suivent les filtres d'Excel).
+    |
+    */
+    public function exporter(Request $request)
+    {
+        $query = $this->ventesFiltrees($request)->with(['customer', 'vehicle', 'payments', 'avoir']);
+
+        if ($request->input('statut') !== 'annulees') {
+            $query->where('status', '!=', 'cancelled');
+        }
+
+        $ventes = $query->orderBy('created_at')->orderBy('id')->get();
+
+        $date = $this->dateDePeriode($request) ?? now();
+        $mois = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+        [$libellePeriode, $suffixe] = match ($request->input('periode')) {
+            'jour'  => ['du ' . $date->format('d/m/Y'), $date->format('Y-m-d')],
+            'mois'  => [$mois[$date->month - 1] . ' ' . $date->year, $date->format('Y-m')],
+            'annee' => ['année ' . $date->year, (string) $date->year],
+            default => ['toutes périodes', 'tout'],
+        };
+
+        $libellesModes = [
+            'cash' => 'ESPECE', 'espèces' => 'ESPECE', 'especes' => 'ESPECE',
+            'banque' => 'VIREMENT', 'virement' => 'VIREMENT',
+            'chèque' => 'CHQ', 'cheque' => 'CHQ',
+            'mobile money' => 'MOBILE MONEY', 'waafi' => 'WAAFI', 'carte' => 'CARTE',
+        ];
+        $modes = fn (Sale $s) => $s->payments->pluck('method')
+            ->map(fn ($m) => $libellesModes[mb_strtolower(trim((string) $m))] ?? mb_strtoupper(trim((string) $m)))
+            ->filter()->unique()->implode('/');
+
+        $classeur = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $feuille = $classeur->getActiveSheet();
+        $feuille->setTitle('Suivi reglement');
+        $feuille->setCellValue('A1', 'Fiche de suivi de règlement des factures Magasin ' . $date->year);
+        $feuille->mergeCells('A1:K1');
+        $feuille->setCellValue('A2', 'Période : ' . $libellePeriode);
+        $feuille->mergeCells('A2:K2');
+        $feuille->fromArray(['Date', 'Numéro', 'Client', 'Type de prestation', 'PHT', 'TVA', 'TIMBRE', 'PTTC', 'Date reçu', 'Decl', 'Observation'], null, 'A4');
+
+        $ligne = 5;
+
+        foreach ($ventes as $s) {
+            $annulee = $s->status === 'cancelled';
+            $paye = round((float) $s->payments->sum('amount'));
+            $total = round((float) $s->total);
+            $reste = max(0, $total - $paye);
+            $regle = ! $annulee && ($s->status === 'payé' || ($total > 0 && $reste <= 0));
+            $dernierPaiement = $s->payments->max('created_at');
+
+            $client = mb_strtoupper($s->customer->name ?? 'CLIENT COMPTOIR');
+            if ($s->customer?->est_assurance) {
+                $immat = $s->immatriculation ?: $s->vehicle?->plate_number;
+                $client .= ' (ASSURANCE' . ($immat ? ' — IMMAT ' . mb_strtoupper($immat) : '') . ')';
+            }
+
+            if ($annulee) {
+                $observation = $s->avoir ? 'ANNULEE PAR AVOIR ' . $s->avoir->numero : 'ANNULEE';
+            } elseif ($regle) {
+                $observation = $modes($s);
+            } elseif ($paye > 0) {
+                $observation = trim($modes($s) . ' ' . number_format($paye, 0, ',', ' ')
+                    . ' — RESTE ' . number_format($reste, 0, ',', ' ') . ' (A PAYER)');
+            } else {
+                $observation = 'EN ATTENTE';
+            }
+
+            $feuille->fromArray([
+                \PhpOffice\PhpSpreadsheet\Shared\Date::PHPToExcel($s->created_at->copy()->startOfDay()),
+                $s->invoice_number,
+                $client,
+                'VENTE PIECES',
+                round((float) $s->subtotal - (float) $s->discount_amount),
+                round((float) $s->tva),
+                null,
+                $total,
+                $regle && $dernierPaiement ? \PhpOffice\PhpSpreadsheet\Shared\Date::PHPToExcel(\Carbon\Carbon::parse($dernierPaiement)->startOfDay()) : null,
+                $annulee ? 'ANNULEE' : ($regle ? 'REGLER' : 'NON REGLER'),
+                $observation,
+            ], null, "A{$ligne}", true);
+
+            $ligne++;
+        }
+
+        $derniere = $ligne - 1;
+
+        $feuille->setCellValue("D{$ligne}", 'TOTAL (' . $ventes->count() . ' factures)');
+        foreach (['E', 'F', 'G', 'H'] as $col) {
+            $feuille->setCellValue("{$col}{$ligne}", $ventes->isEmpty() ? 0 : "=SUBTOTAL(109,{$col}5:{$col}{$derniere})");
+        }
+
+        $remplir = \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID;
+        $centre = \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER;
+        $feuille->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        $feuille->getStyle('A1:K1')->getFill()->setFillType($remplir)->getStartColor()->setRGB('C4D79B');
+        $feuille->getStyle('A1:K2')->getAlignment()->setHorizontal($centre);
+        $feuille->getStyle('A4:K4')->getFont()->setBold(true);
+        $feuille->getStyle('A4:K4')->getFill()->setFillType($remplir)->getStartColor()->setRGB('92CDDC');
+        $feuille->getStyle("A4:K{$ligne}")->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+        $feuille->getStyle("A{$ligne}:K{$ligne}")->getFont()->setBold(true);
+        $feuille->getStyle("A5:A{$ligne}")->getNumberFormat()->setFormatCode('dd/mm/yyyy');
+        $feuille->getStyle("I5:I{$ligne}")->getNumberFormat()->setFormatCode('dd/mm/yyyy');
+        $feuille->getStyle("E5:H{$ligne}")->getNumberFormat()->setFormatCode('#,##0');
+        $feuille->getStyle("B5:D{$ligne}")->getAlignment()->setHorizontal($centre);
+        $feuille->getStyle("J5:J{$ligne}")->getAlignment()->setHorizontal($centre);
+        $feuille->getStyle("J5:J{$derniere}")->getFill()->setFillType($remplir)->getStartColor()->setRGB('D9D9D9');
+
+        if ($ventes->isNotEmpty()) {
+            $feuille->setAutoFilter("A4:K{$derniere}");
+        }
+
+        $feuille->freezePane('A5');
+
+        foreach (range('A', 'K') as $col) {
+            $feuille->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        return response()->streamDownload(function () use ($classeur) {
+            \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($classeur, 'Xlsx')->save('php://output');
+        }, 'suivi-reglement-factures-magasin-' . $suffixe . '.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
     }
     /*
     |--------------------------------------------------------------------------
@@ -332,6 +413,11 @@ class SaleController extends Controller
     public function store(
         Request $request
     ): RedirectResponse {
+        // V6 : client assurance → véhicule facultatif (immatriculation libre)
+        $assurance = (bool) Customer::query()
+            ->whereKey($request->input('customer_id'))
+            ->value('est_assurance');
+
         $request->validate(
             [
                 'customer_id' => [
@@ -341,7 +427,8 @@ class SaleController extends Controller
                 ],
 
                 'vehicle_id' => [
-                    'required',
+                    Rule::requiredIf(! $assurance),
+                    'nullable',
                     'integer',
 
                     Rule::exists(
@@ -356,6 +443,12 @@ class SaleController extends Controller
                                 )
                             )
                     ),
+                ],
+
+                'immatriculation' => [
+                    'nullable',
+                    'string',
+                    'max:30',
                 ],
 
                 'items' => [
@@ -431,17 +524,31 @@ class SaleController extends Controller
         DB::beginTransaction();
 
         try {
-            $vehicle = Vehicle::query()
-                ->where(
-                    'id',
-                    $request->vehicle_id
-                )
-                ->where(
-                    'customer_id',
-                    $request->customer_id
-                )
-                ->lockForUpdate()
-                ->firstOrFail();
+            $immatriculation = null;
+
+            if ($assurance) {
+                // V6 : assurance — immatriculation libre et facultative, rattachée au
+            // véhicule s'il existe (même celui d'un autre client)
+            $immatriculation = filled($request->input('immatriculation'))
+                ? strtoupper(preg_replace('/\s+/', '', (string) $request->input('immatriculation')))
+                : null;
+
+                $vehicle = $immatriculation
+                    ? Vehicle::query()->whereRaw("REPLACE(UPPER(plate_number), ' ', '') = ?", [$immatriculation])->first()
+                    : null;
+            } else {
+                $vehicle = Vehicle::query()
+                    ->where(
+                        'id',
+                        $request->vehicle_id
+                    )
+                    ->where(
+                        'customer_id',
+                        $request->customer_id
+                    )
+                    ->lockForUpdate()
+                    ->firstOrFail();
+            }
 
             /*
             |--------------------------------------------------------------------------
@@ -589,6 +696,10 @@ class SaleController extends Controller
             $validatedItems =
                 [];
 
+            // V6 : vente à une assurance → prix majorés du taux de l'assurance
+            $tauxMajoration =
+                Customer::findOrFail($request->customer_id)->tauxMajoration();
+
             foreach ($request->items as $row) {
                 $productId =
                     (int) $row['product_id'];
@@ -613,10 +724,16 @@ class SaleController extends Controller
                 $depot =
                     $locked[$key]['depot'];
 
-                $price =
+                $prixBase =
                     round(
                         (float) $product->sale_price,
                         2
+                    );
+
+                $price =
+                    Customer::prixMajore(
+                        $prixBase,
+                        $tauxMajoration
                     );
 
                 $lineTotal =
@@ -629,6 +746,9 @@ class SaleController extends Controller
                     $lineTotal;
 
                 $validatedItems[] = [
+                    'prix_base' =>
+                        $prixBase,
+
                     'product' =>
                         $product,
 
@@ -732,7 +852,10 @@ class SaleController extends Controller
                     $request->customer_id,
 
                 'vehicle_id' =>
-                    $vehicle->id,
+                    $vehicle?->id,
+
+                'immatriculation' =>
+                    $immatriculation,
 
                 'user_id' =>
                     auth()->id(),
@@ -742,6 +865,9 @@ class SaleController extends Controller
 
                 'subtotal' =>
                     $subtotal,
+
+                'taux_majoration' =>
+                    $tauxMajoration,
 
                 'discount' =>
                     $discountPercent,
@@ -800,6 +926,9 @@ class SaleController extends Controller
 
                     'price' =>
                         $item['price'],
+
+                    'prix_base' =>
+                        $item['prix_base'],
                 ]);
 
                 $depotStock->quantity =

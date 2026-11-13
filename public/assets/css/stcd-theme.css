@@ -1227,3 +1227,311 @@ html.dark .stcd-idle-boite { background: #1e293b; }
 html.dark .stcd-idle-boite h2 { color: #f1f5f9; }
 html.dark .stcd-idle-boite p { color: #94a3b8; }
 html.dark .stcd-idle-icone { background: rgba(249, 115, 22, .15); }
+
+/* Éléments ajoutés pour le design Wholesale : cachés tant que ce design
+   n'est pas actif (stcd-theme-wholesale.css les affiche). */
+.stcd-ws-profil,
+.stcd-ws-titre-icone,
+.stcd-ws-fil,
+.stcd-ws-haut { display: none !important; }
+
+/* Éléments ajoutés pour le design DreamsPOS (recherche, + Ajouter, plein
+   écran, profil) : cachés tant que ce design n'est pas actif. */
+body:not(.stcd-dreamspos) .dp-recherche,
+body:not(.stcd-dreamspos) .dp-ajouter,
+body:not(.stcd-dreamspos) .dp-plein-ecran,
+body:not(.stcd-dreamspos) .dp-profil { display: none !important; }
+
+/* ==========================================================================
+   TABLEAUX ADAPTATIFS — jamais de défilement horizontal
+   (classe et data-label posés par layoutMaster)
+   - de 992 à 1399 px : le tableau tient dans la largeur, le texte passe à
+     la ligne entre les mots (jamais au milieu d'un mot) ;
+   - moins de 992 px : chaque ligne devient une carte « colonne : valeur ».
+   ========================================================================== */
+@media screen and (max-width: 1399.98px) {
+    html body .content-wrapper table.stcd-tableau-adaptatif {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        table-layout: auto !important;
+    }
+
+    html body .content-wrapper table.stcd-tableau-adaptatif th,
+    html body .content-wrapper table.stcd-tableau-adaptatif td,
+    html body .content-wrapper table.stcd-tableau-adaptatif td * {
+        overflow-wrap: break-word !important;
+        word-break: normal !important;
+    }
+
+    html body .content-wrapper table.stcd-tableau-adaptatif td .badge,
+    html body .content-wrapper table.stcd-tableau-adaptatif td [class*="badge"] {
+        white-space: nowrap !important;
+    }
+
+    /* cellules un peu plus serrées pour que tout tienne */
+    html body .content-wrapper table.stcd-tableau-adaptatif > thead > tr > th,
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td {
+        padding-left: 6px !important;
+        padding-right: 6px !important;
+    }
+
+    /* boutons d'action : passent sur 2 lignes plutôt que d'être coupés */
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td:last-child,
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td:last-child > div,
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td:last-child > .d-flex {
+        flex-wrap: wrap !important;
+        white-space: normal !important;
+    }
+
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td:last-child .btn { margin-bottom: 2px; }
+
+    /* aucun cadre de tableau ne doit plus défiler de côté */
+    html body .content-wrapper :has(> table.stcd-tableau-adaptatif) { overflow-x: visible !important; }
+}
+
+@media screen and (max-width: 991.98px) {
+    html body .content-wrapper table.stcd-tableau-adaptatif,
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody,
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr,
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td {
+        display: block !important;
+        width: 100% !important;
+    }
+
+    html body .content-wrapper table.stcd-tableau-adaptatif { border: 0 !important; background: transparent !important; }
+    html body .content-wrapper table.stcd-tableau-adaptatif > thead { display: none !important; }
+
+    /* une carte par ligne */
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr {
+        margin: 0 0 12px !important;
+        padding: 6px 14px !important;
+        background: var(--stcd-surface, #fff) !important;
+        border: 1px solid var(--stcd-border, #E6EAED) !important;
+        border-radius: 10px !important;
+        box-shadow: none !important;
+    }
+
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td {
+        display: flex !important;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        min-height: 0 !important;
+        padding: 7px 0 !important;
+        text-align: right !important;
+        background: transparent !important;
+        border: 0 !important;
+        border-bottom: 1px dashed var(--stcd-border, #E6EAED) !important;
+    }
+
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td:last-child { border-bottom: 0 !important; }
+
+    /* nom de la colonne à gauche */
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td[data-label]::before {
+        content: attr(data-label);
+        flex-shrink: 0;
+        max-width: 45%;
+        color: var(--stcd-muted, #8a9198);
+        font-size: 12px;
+        font-weight: 700;
+        text-align: left;
+    }
+
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td[data-label=""]::before,
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td[data-label="#"]::before { content: none; }
+
+    /* la valeur occupe le reste, alignée à droite ; badges à leur taille */
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td > * { max-width: 100%; }
+
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td > .badge,
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td > [class*="badge"] {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+    }
+
+    /* boutons d'action : en bas de la carte, à droite */
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td:last-child { justify-content: flex-end; flex-wrap: wrap; }
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td:last-child::before { margin-right: auto; }
+
+    /* champs et listes déroulantes dans une carte : texte à gauche */
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td :is(input, select, textarea, .select2-selection__rendered) {
+        text-align: left !important;
+    }
+
+    /* ligne « aucun résultat » : centrée, sans nom de colonne */
+    html body .content-wrapper table.stcd-tableau-adaptatif > tbody > tr > td.stcd-cellule-pleine {
+        display: block !important;
+        text-align: center !important;
+        border: 0 !important;
+    }
+}
+
+/* « Voir plus » : seulement dans les cartes (caché sur grand écran) */
+html body .content-wrapper table.stcd-tableau-adaptatif td.stcd-voir-plus { display: none !important; }
+
+/* ==========================================================================
+   GRILLE DE PETITES CARTES (moins de 992 px) pour les listes qui ont une
+   page « voir » : l'essentiel, les actions et « Voir plus ».
+   ========================================================================== */
+@media screen and (max-width: 991.98px) {
+    html body .content-wrapper table.stcd-grille > tbody {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+    }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr {
+        display: flex !important;
+        flex-direction: column;
+        margin: 0 !important;
+        padding: 14px !important;
+        min-height: 170px;
+        transition: box-shadow .2s ease, transform .2s ease;
+    }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr:hover {
+        box-shadow: 0 10px 24px rgba(9, 44, 76, .10) !important;
+        transform: translateY(-2px);
+    }
+
+    /* seulement l'essentiel, sans traits entre les lignes */
+    html body .content-wrapper table.stcd-grille > tbody > tr > td {
+        display: none !important;
+        border: 0 !important;
+    }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr > td * { border-bottom: 0 !important; }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-titre,
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-sous,
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-cle,
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-actions,
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-voir-plus,
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-cellule-pleine {
+        display: flex !important;
+    }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-cellule-pleine { grid-column: 1 / -1; }
+
+    /* titre et sous-titre : sans nom de colonne, à gauche */
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-titre,
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-sous {
+        justify-content: flex-start;
+        padding: 0 !important;
+        text-align: left !important;
+        border: 0 !important;
+    }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-titre::before,
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-sous::before { content: none !important; }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-titre {
+        color: var(--stcd-text, #212B36);
+        font-size: 14.5px !important;
+        font-weight: 800 !important;
+    }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-titre * { font-size: inherit !important; }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-sous {
+        display: -webkit-box !important;
+        overflow: hidden;
+        margin: 2px 0 8px;
+        color: var(--stcd-muted, #8a9198);
+        font-size: 12.5px !important;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-sous * { font-size: inherit !important; }
+
+    /* infos clés : petites lignes « nom : valeur » */
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-cle {
+        padding: 5px 0 !important;
+        font-size: 12.5px;
+    }
+
+    /* bas de la carte : actions, puis « Voir plus » à droite */
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-actions {
+        justify-content: flex-start !important;
+        margin-top: auto;
+        padding: 10px 0 0 !important;
+        border: 0 !important;
+        border-top: 1px solid var(--stcd-border, #E6EAED) !important;
+    }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-actions::before { content: none !important; }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-c-actions .btn {
+        padding: 5px 8px !important;
+        font-size: 12px !important;
+    }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-voir-plus {
+        justify-content: flex-end;
+        padding: 8px 0 0 !important;
+        border: 0 !important;
+    }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-voir-plus::before { content: none !important; }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-voir-plus a {
+        color: var(--stcd-primary, #FE9F43) !important;
+        font-size: 13px;
+        font-weight: 800;
+        text-decoration: none;
+    }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr > td.stcd-voir-plus a span {
+        display: inline-block;
+        transition: transform .2s ease;
+    }
+
+    html body .content-wrapper table.stcd-grille > tbody > tr:hover td.stcd-voir-plus a span { transform: translateX(3px); }
+}
+
+/* bloc de valeur des cartes : éléments empilés (grand écran : sans effet) */
+.stcd-valeur { display: contents; }
+
+@media screen and (max-width: 991.98px) {
+    html body .content-wrapper table.stcd-grille .stcd-valeur {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        min-width: 0;
+    }
+
+    html body .content-wrapper table.stcd-grille td.stcd-c-titre .stcd-valeur,
+    html body .content-wrapper table.stcd-grille td.stcd-c-sous .stcd-valeur { align-items: flex-start; }
+
+    html body .content-wrapper table.stcd-grille td.stcd-c-cle .stcd-valeur { align-items: flex-end; text-align: right; }
+
+    /* la date / le complément sous le titre : plus petit, gris */
+    html body .content-wrapper table.stcd-grille td.stcd-c-titre .stcd-valeur > :not(:first-child) {
+        color: var(--stcd-muted, #8a9198) !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+    }
+
+    html body .content-wrapper table.stcd-grille .stcd-valeur * { white-space: normal; }
+}
+
+@media screen and (max-width: 991.98px) {
+    /* boutons des cartes : jamais écrasés, passent à la ligne si besoin */
+    html body .content-wrapper table.stcd-grille td.stcd-c-actions,
+    html body .content-wrapper table.stcd-grille td.stcd-c-actions > div,
+    html body .content-wrapper table.stcd-grille td.stcd-c-actions > .d-flex,
+    html body .content-wrapper table.stcd-grille td.stcd-c-actions > form {
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+    }
+
+    html body .content-wrapper table.stcd-grille td.stcd-c-actions .btn {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+        white-space: nowrap !important;
+    }
+}

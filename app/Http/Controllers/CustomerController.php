@@ -290,6 +290,8 @@ class CustomerController extends Controller
             'credit_limit' => 'nullable|numeric|min:0',
 
             'payment_terms' => 'nullable|string|max:255',
+
+            'taux_majoration' => 'nullable|numeric|min:0|max:300',
         ]);
 
         /*
@@ -344,6 +346,10 @@ class CustomerController extends Controller
             'credit_limit' => $request->credit_limit ?? 0,
 
             'payment_terms' => $request->payment_terms,
+
+            // V6 : assurance (prix des ventes / proformas majorés)
+            'est_assurance' => $request->boolean('est_assurance'),
+            'taux_majoration' => $request->boolean('est_assurance') && filled($request->taux_majoration) ? $request->taux_majoration : null,
         ]);
 
         /*
@@ -430,6 +436,7 @@ class CustomerController extends Controller
 
             'credit_limit' => 'nullable|numeric|min:0',
             'payment_terms' => 'nullable|string|max:255',
+            'taux_majoration' => 'nullable|numeric|min:0|max:300',
             //'address' => 'nullable|string|max:1000',
         ]);
 
@@ -441,6 +448,10 @@ class CustomerController extends Controller
            // 'address' => $request->address,
             'credit_limit' => $request->credit_limit ?? 0,
             'payment_terms' => $request->payment_terms,
+
+            // V6 : assurance (prix des ventes / proformas majorés)
+            'est_assurance' => $request->boolean('est_assurance'),
+            'taux_majoration' => $request->boolean('est_assurance') && filled($request->taux_majoration) ? $request->taux_majoration : null,
         ]);
 
         return redirect()

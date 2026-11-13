@@ -172,13 +172,23 @@
             </div>
         </div>
 
-        <a
-            href="{{ route('fournisseur-commandes.index') }}"
-            class="btn btn-outline-secondary bt-btn"
-        >
-            <i class="bx bx-arrow-back"></i>
-            Commandes garage
-        </a>
+        <div class="d-flex flex-wrap gap-2">
+            <a
+                href="{{ route('fournisseur-commandes.index') }}"
+                class="btn btn-outline-secondary bt-btn"
+            >
+                <i class="bx bx-arrow-back"></i>
+                Commandes garage
+            </a>
+
+            @if(auth()->user()->hasPermission('gerer_consommations_atelier'))
+                <a href="{{ route('bt-direct.create') }}" class="btn btn-primary bt-btn"
+                   title="BT direct pour un usage interne : consommation atelier, vente intersociété, équipe commerciale…">
+                    <i class="bx bx-plus"></i>
+                    BT
+                </a>
+            @endif
+        </div>
 
     </div>
 
@@ -214,8 +224,17 @@
                     name="search"
                     value="{{ $search }}"
                     class="form-control"
-                    placeholder="N° BT, N° BC, client ou immatriculation..."
+                    placeholder="N° BT, N° BC, client, bénéficiaire ou immatriculation..."
                 >
+            </div>
+
+            <div class="col-md-3 col-lg-3">
+                <select name="type" class="form-select" onchange="this.form.submit()">
+                    <option value="">Tous les BT</option>
+                    @foreach($types as $cle => $libelle)
+                        <option value="{{ $cle }}" @selected($type === $cle)>{{ $libelle }}</option>
+                    @endforeach
+                </select>
             </div>
 
             <div class="col-auto">
@@ -225,7 +244,7 @@
                 </button>
             </div>
 
-            @if($search !== '')
+            @if($search !== '' || $type !== '')
                 <div class="col-auto">
                     <a
                         href="{{ route('bons-transfert.index') }}"
@@ -299,10 +318,16 @@
                             </div>
 
                             <div class="bt-muted">
+                                @if($bc?->estConsommation())
+                                    Consommation atelier · {{ $bc->equipement }}
+                                @elseif($bc?->estInterne())
+                                    {{ $bc->libelleMotif() }}{{ $bc->demande_par ? ' · demandé par ' . $bc->demande_par : '' }}
+                                @else
                                 {{ trim(($bc?->vehicule_marque ?? '') . ' ' . ($bc?->vehicule_modele ?? '')) ?: '—' }}
 
                                 @if($bc?->vehicule_immatriculation)
                                     · {{ $bc->vehicule_immatriculation }}
+                                @endif
                                 @endif
                             </div>
                         </td>
@@ -326,7 +351,11 @@
                         </td>
 
                         <td>
-                            @if($bt->envoye_atelier_at)
+                            @if($bc?->estInterne())
+
+                                <span class="bt-muted">Interne — pas d'envoi</span>
+
+                            @elseif($bt->envoye_atelier_at)
 
                                 <span class="bt-status bt-status-sent">
                                     <i class="bx bx-check-circle"></i>
@@ -398,11 +427,53 @@
     {{-- ============================================================
          PAGINATION
          ============================================================ --}}
-    @if($bons->hasPages())
-        <div class="px-4 pb-3">
-            {{ $bons->links() }}
+    @if($bons->total() > 0)
+        <div class="bt-pagination">
+
+            <form method="GET" action="{{ route('bons-transfert.index') }}" class="bt-par-page">
+                @foreach(request()->except(['par_page', 'page']) as $cle => $valeur)
+                    @if(is_scalar($valeur))
+                        <input type="hidden" name="{{ $cle }}" value="{{ $valeur }}">
+                    @endif
+                @endforeach
+                <label for="par_page">Afficher</label>
+                <select id="par_page" name="par_page" class="form-select form-select-sm" onchange="this.form.submit()">
+                    @foreach(\App\Http\Controllers\BonTransfertController::PAR_PAGE as $nombre)
+                        <option value="{{ $nombre }}" @selected($bons->perPage() === $nombre)>{{ $nombre }}</option>
+                    @endforeach
+                </select>
+                <span>par page</span>
+            </form>
+
+            <div class="bt-par-page-info">
+                {{ $bons->firstItem() }}–{{ $bons->lastItem() }} sur {{ $bons->total() }} bons de transfert
+            </div>
+
+            @if($bons->hasPages())
+                <div class="bt-pagination-liens">{{ $bons->links() }}</div>
+            @endif
+
         </div>
     @endif
+
+    <style>
+        .bt-pagination {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px 20px;
+            padding: 8px 1.5rem 1.5rem;
+        }
+
+        .bt-par-page { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; }
+        .bt-par-page label { margin: 0; }
+        .bt-par-page .form-select { width: auto; min-width: 76px; }
+        .bt-par-page-info { color: var(--stcd-muted, #8a9198); font-size: 14px; }
+        .bt-pagination-liens { margin-left: auto; }
+        .bt-pagination-liens nav p { display: none; }
+        .bt-pagination-liens svg { width: 18px; height: 18px; }
+    </style>
 
 </div>
 

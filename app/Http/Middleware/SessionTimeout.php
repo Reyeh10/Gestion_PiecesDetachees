@@ -34,6 +34,10 @@ class SessionTimeout
             return $next($request);
         }
 
+        if (self::connexionMemorisee($request)) {
+            return $next($request);
+        }
+
         $lastActivity = $request->session()->get('last_activity');
 
         if ($lastActivity !== null && (time() - $lastActivity) > self::TIMEOUT) {
@@ -55,5 +59,15 @@ class SessionTimeout
         }
 
         return $next($request);
+    }
+
+    /**
+     * « Se souvenir de moi » coché à la connexion : le cookie de connexion
+     * mémorisée est présent → pas de déconnexion après 10 min (poste de
+     * confiance), jusqu'à « Déconnexion » ou 30 jours.
+     */
+    public static function connexionMemorisee(Request $request): bool
+    {
+        return $request->cookies->has(Auth::guard()->getRecallerName());
     }
 }

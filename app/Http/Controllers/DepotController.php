@@ -14,13 +14,29 @@ class DepotController extends Controller
 {
     public function index(): View
     {
+        // V6 : chiffres de chaque dépôt (pièces, quantité, rayons) pour la liste
         $depots = Depot::query()
-            ->latest()
+            ->withCount([
+                'stocks as pieces_en_stock' => fn ($q) => $q->where('quantity', '>', 0),
+                'stocks as pieces_a_zero' => fn ($q) => $q->where('quantity', '<=', 0),
+                'stocks as pieces_sans_rayon' => fn ($q) => $q->whereNull('rayon_id'),
+            ])
+            ->withSum('stocks as quantite_totale', 'quantity')
+            ->orderBy('code')
             ->get();
+
+        // rayons de chaque dépôt (noms), pour les cartes
+        $rayonsParDepot = \Illuminate\Support\Facades\Schema::hasColumn('rayons', 'depot_id')
+            ? \App\Models\Rayon::query()
+                ->whereNotNull('depot_id')
+                ->orderBy('name')
+                ->get(['id', 'name', 'depot_id'])
+                ->groupBy('depot_id')
+            : collect();
 
         return view(
             'depots.index',
-            compact('depots')
+            compact('depots', 'rayonsParDepot')
         );
     }
 

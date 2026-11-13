@@ -9,18 +9,13 @@
 
 @php
 
-    $statusLabels = [
-        'draft' => 'Brouillon',
-        'approved' => 'Approuvé',
-        'sent' => 'Envoyé',
-        'partial_received' => 'Réception partielle',
-        'received' => 'Reçu',
-        'cancelled' => 'Annulé',
-    ];
+    // V7 : libellés du modèle (sans la précision « (chef magasinier) » sur le document)
+    $statusLabel = trim(preg_replace('/\s*\(.*\)$/', '', $supplierOrder->libelleStatut()));
 
-    $statusLabel =
-        $statusLabels[$supplierOrder->status]
-        ?? strtoupper($supplierOrder->status);
+    $peutGererBc = auth()->user()?->hasPermission('gerer_commandes_fournisseurs');
+    $enReception = in_array($supplierOrder->status, \App\Models\SupplierOrder::STATUTS_RECEPTION, true);
+    $avecReception = $enReception || in_array($supplierOrder->status, [\App\Models\SupplierOrder::STATUS_RECEIVED, \App\Models\SupplierOrder::STATUS_CLOSED], true);
+    $lignesARecevoir = $supplierOrder->items->filter(fn ($i) => (float) $i->quantity_received < (float) $i->quantity_ordered);
 
 @endphp
 
@@ -307,7 +302,7 @@
     .order-signatures {
         margin-top: 60px;
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(3, 1fr);
         gap: 80px;
     }
 
@@ -752,10 +747,8 @@
 
     .order-signatures {
         display: grid !important;
-
-        grid-template-columns: 1fr 1fr !important;
-
-        gap: 60px !important;
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 30px !important;
 
         margin-top: 13px !important;
 
@@ -884,6 +877,42 @@
         @endif
 
 
+        {{-- V7 : où en est le bon de commande --}}
+        @if($supplierOrder->status === \App\Models\SupplierOrder::STATUS_REJECTED && $supplierOrder->rejection_reason)
+            <div class="order-alert order-alert-error d-print-none">
+                <strong>Rejeté</strong>
+                @if($supplierOrder->rejector) par {{ $supplierOrder->rejector->name }} @endif
+                @if($supplierOrder->rejected_at) le {{ $supplierOrder->rejected_at->format('d/m/Y') }} @endif
+                : {{ $supplierOrder->rejection_reason }}
+                — corrigez-le avec « Modifier » : il repartira à la validation du chef magasinier.
+            </div>
+        @elseif($supplierOrder->status === \App\Models\SupplierOrder::STATUS_DRAFT)
+            <div class="order-alert d-print-none" style="background:#fff7e6;border:1px solid #ffd591;color:#874d00;">
+                En attente de la <strong>validation du chef magasinier</strong> (signature), puis de l'approbation de l'administrateur.
+                @if($supplierOrder->estARelancer()) <strong>À relancer</strong> : en attente depuis plus de {{ config('magasin.relance_bc_jours', 3) }} jours. @endif
+            </div>
+        @elseif($supplierOrder->status === \App\Models\SupplierOrder::STATUS_VALIDATED)
+            <div class="order-alert d-print-none" style="background:#e6f4ff;border:1px solid #91caff;color:#003eb3;">
+                Validé par {{ $supplierOrder->validator?->name ?? 'le chef magasinier' }}
+                @if($supplierOrder->validated_at) le {{ $supplierOrder->validated_at->format('d/m/Y à H:i') }} @endif
+                — en attente de l'<strong>approbation de l'administrateur</strong>.
+                @if($supplierOrder->estARelancer()) <strong>À relancer</strong>. @endif
+            </div>
+        @elseif($supplierOrder->status === \App\Models\SupplierOrder::STATUS_APPROVED)
+            <div class="order-alert order-alert-success d-print-none">
+                Approuvé : imprimez-le, envoyez-le au fournisseur puis cliquez sur « Marquer envoyé ».
+            </div>
+        @elseif($supplierOrder->estEnRetard())
+            <div class="order-alert order-alert-error d-print-none">
+                <strong>En retard</strong> : livraison prévue le {{ $supplierOrder->expected_delivery_date->format('d/m/Y') }}.
+            </div>
+        @elseif($supplierOrder->status === \App\Models\SupplierOrder::STATUS_CLOSED)
+            <div class="order-alert d-print-none" style="background:#f5f5f5;border:1px solid #d9d9d9;">
+                Soldé{{ $supplierOrder->closer ? ' par ' . $supplierOrder->closer->name : '' }}{{ $supplierOrder->closed_at ? ' le ' . $supplierOrder->closed_at->format('d/m/Y') : '' }} : le reste ne sera pas livré.
+            </div>
+        @endif
+
+
         <div class="order-toolbar">
 
             <a
@@ -892,6 +921,12 @@
             >
                 ← Liste des BC
             </a>
+
+            @if($supplierOrder->demande)
+                <a href="{{ route('demandes.show', $supplierOrder->demande) }}" class="order-btn order-btn-light" title="Toutes les pièces et bons de commande de la demande">
+                    Demande {{ $supplierOrder->demande->numero }}
+                </a>
+            @endif
 
 
             <div class="order-toolbar-actions">
@@ -932,19 +967,13 @@
       jamais afficher/utiliser ce bouton.
 ============================================================ --}}
 
-@if(
-    auth()->check()
-    &&
-    auth()->user()->hasPermission('approuver_commandes_fournisseurs')
-    &&
-    $supplierOrder->status === \App\Models\SupplierOrder::STATUS_DRAFT
-)
+@if($etapeSignature)
 
     <form
         method="POST"
         action="{{
             route(
-                'supplier-orders.approve',
+                $etapeSignature === 'valider' ? 'supplier-orders.validate' : 'supplier-orders.approve',
                 $supplierOrder
             )
         }}"
@@ -975,12 +1004,12 @@
         <button
             type="submit"
             class="order-btn order-btn-success"
-            title="Approuver le bon de commande"
+            title="{{ $etapeSignature === 'valider' ? 'Signer et valider (chef magasinier)' : 'Signer et approuver (administrateur)' }}"
         >
 
             <i class="bx bx-check"></i>
 
-            Approuver
+            {{ $etapeSignature === 'valider' ? 'Valider' : 'Approuver' }}
 
         </button>
 
@@ -998,13 +1027,7 @@
     - Le motif du rejet sera obligatoire.
 ============================================================ --}}
 
-@if(
-    auth()->check()
-    &&
-    auth()->user()->hasPermission('approuver_commandes_fournisseurs')
-    &&
-    $supplierOrder->status === \App\Models\SupplierOrder::STATUS_DRAFT
-)
+@if($peutRejeter)
 
     <button
         type="button"
@@ -1021,14 +1044,9 @@
 
 
                 @if(
-                    in_array(
-                        $supplierOrder->status,
-                        [
-                            \App\Models\SupplierOrder::STATUS_DRAFT,
-                            \App\Models\SupplierOrder::STATUS_APPROVED,
-                        ],
-                        true
-                    )
+                    $peutGererBc
+                    &&
+                    $supplierOrder->status === \App\Models\SupplierOrder::STATUS_APPROVED
                 )
 
                     <form
@@ -1041,14 +1059,30 @@
                         @csrf
                         @method('PATCH')
 
-                        <!--button
+                        <button
                             type="submit"
                             class="order-btn order-btn-primary"
+                            onclick="return confirm('Le bon de commande a été envoyé au fournisseur ? Ses pièces passeront « Commandée ».');"
                         >
+                            <i class="bx bx-send"></i>
                             Marquer envoyé
-                        </button-->
+                        </button>
                     </form>
 
+                @endif
+
+                @if($peutGererBc && $enReception)
+                    <button type="button" class="order-btn order-btn-success" data-bs-toggle="modal" data-bs-target="#modalReceptionBc">
+                        <i class="bx bx-package"></i>
+                        Réceptionner
+                    </button>
+
+                    @if($lignesARecevoir->isNotEmpty())
+                        <button type="button" class="order-btn order-btn-light" data-bs-toggle="modal" data-bs-target="#modalSolderBc"
+                                title="Le fournisseur ne livrera pas le reste">
+                            Solder
+                        </button>
+                    @endif
                 @endif
 
 
@@ -1059,9 +1093,14 @@
                             \App\Models\SupplierOrder::STATUS_CANCELLED,
                             \App\Models\SupplierOrder::STATUS_PARTIAL_RECEIVED,
                             \App\Models\SupplierOrder::STATUS_RECEIVED,
+                            \App\Models\SupplierOrder::STATUS_CLOSED,
                         ],
                         true
                     )
+                    &&
+                    $peutGererBc
+                    &&
+                    ($supplierOrder->status !== \App\Models\SupplierOrder::STATUS_SENT || auth()->user()?->isAdmin())
                 )
 
                     <form
@@ -1493,6 +1532,9 @@
                         <th class="text-center">
                             Qté
                         </th>
+                        @if($avecReception)
+                            <th class="text-center d-print-none">Reçu</th>
+                        @endif
                         <th class="text-right">
                             Prix unitaire
                         </th>
@@ -1539,6 +1581,13 @@
                                     ' '
                                 ) }}
                             </td>
+                            @if($avecReception)
+                                <td class="text-center d-print-none">
+                                    <span class="{{ (float) $item->quantity_received >= (float) $item->quantity_ordered ? 'text-success fw-bold' : '' }}">
+                                        {{ number_format((float) $item->quantity_received, 2, ',', ' ') }}
+                                    </span>
+                                </td>
+                            @endif
 
                             <td class="text-right">
                                 {{ number_format(
@@ -1748,87 +1797,46 @@
             </div>
 
 
-            {{-- SIGNATURES --}}
+            {{-- SIGNATURES (V7) : préparé par (sans signature), validé par le chef magasinier, approuvé par l'admin --}}
+
+            @php
+                $blocsSignature = [
+                    ['titre' => 'Préparé par', 'nom' => $supplierOrder->creator?->name, 'signature' => null, 'type' => null],
+                    ['titre' => 'Validé par (chef magasinier)', 'nom' => $supplierOrder->validator?->name, 'signature' => $supplierOrder->validatedSignature, 'type' => \App\Models\SupplierOrderSignature::TYPE_VALIDATED],
+                    ['titre' => 'Approuvé par', 'nom' => $supplierOrder->approver?->name, 'signature' => $supplierOrder->approvedSignature, 'type' => \App\Models\SupplierOrderSignature::TYPE_APPROVED],
+                ];
+            @endphp
 
             <div class="order-signatures">
+                @foreach($blocsSignature as $bloc)
+                    <div class="order-signature">
+                        <strong>{{ $bloc['titre'] }}</strong>
 
-             <div class="order-signature">
+                        @if($bloc['signature'])
+                            <div class="order-electronic-signature">
+                                <img
+                                    src="{{ route('supplier-orders.signature', ['supplierOrder' => $supplierOrder, 'type' => $bloc['type']]) }}"
+                                    alt="Signature électronique — {{ $bloc['titre'] }}"
+                                    class="order-signature-image"
+                                >
+                            </div>
+                        @else
+                            <div class="order-signature-empty"></div>
+                        @endif
 
-    <strong>
-        Approuvé par
-    </strong>
+                        <div class="order-signature-line"></div>
 
+                        <div class="order-signature-name">
+                            {{ $bloc['nom'] ?? 'Nom / Signature' }}
+                        </div>
 
-    {{--
-    |--------------------------------------------------------------------------
-    | SIGNATURE ÉLECTRONIQUE DE L'APPROBATEUR
-    |--------------------------------------------------------------------------
-    --}}
-
-    @if($supplierOrder->approvedSignature)
-
-        <div class="order-electronic-signature">
-
-            <img
-                src="{{
-                    route(
-                        'supplier-orders.signature',
-                        [
-                            'supplierOrder' => $supplierOrder,
-                            'type' => \App\Models\SupplierOrderSignature::TYPE_APPROVED,
-                        ]
-                    )
-                }}"
-                alt="Signature électronique de l'approbateur"
-                class="order-signature-image"
-            >
-
-        </div>
-
-    @else
-
-        <div class="order-signature-empty"></div>
-
-    @endif
-
-
-    <div class="order-signature-line"></div>
-
-
-    <div class="order-signature-name">
-
-        {{ $supplierOrder->approver?->name
-            ?? 'Nom / Signature' }}
-
-    </div>
-
-
-    @if(
-        $supplierOrder->approvedSignature
-        &&
-        $supplierOrder->approvedSignature->signed_at
-    )
-
-        <div class="order-signature-date">
-
-            Signé le
-
-            {{
-                $supplierOrder
-                    ->approvedSignature
-                    ->signed_at
-                    ->format('d/m/Y à H:i')
-            }}
-
-        </div>
-
-    @endif
-
-</div>
-
-
-
-
+                        @if($bloc['signature']?->signed_at)
+                            <div class="order-signature-date">
+                                Signé le {{ $bloc['signature']->signed_at->format('d/m/Y à H:i') }}
+                            </div>
+                        @endif
+                    </div>
+                @endforeach
             </div>
 
 
@@ -1857,16 +1865,119 @@
 
 
 {{-- ================================================================
+     V7 — RÉCEPTION DEPUIS LE BON DE COMMANDE / SOLDE
+================================================================ --}}
+@if($peutGererBc && $enReception)
+<div class="modal fade d-print-none" id="modalReceptionBc" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <form method="POST" action="{{ route('supplier-orders.receive', $supplierOrder) }}" class="modal-content">
+            @csrf
+            <div class="modal-header">
+                <h5 class="modal-title">Réceptionner {{ $supplierOrder->order_number }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-md-5">
+                        <label class="form-label">Dépôt de réception</label>
+                        <select name="depot_id" class="form-select" required>
+                            @foreach($depots as $d)
+                                <option value="{{ $d->id }}" @selected($supplierOrder->depot_id == $d->id)>{{ $d->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-7 small text-muted d-flex align-items-end">
+                        Laissez la quantité vide pour une ligne pas encore arrivée. Le prix réel est celui de la facture
+                        du fournisseur (il recalcule le CUMP et le total du bon de commande).
+                        @unless(auth()->user()?->isAdmin()) Pas plus que le reste à recevoir. @endunless
+                    </div>
+                </div>
+                <table class="table table-sm align-middle no-cartes">
+                    <thead><tr><th>Pièce</th><th class="text-center">Commandé</th><th class="text-center">Déjà reçu</th><th style="width:130px;">Reçu maintenant</th><th style="width:150px;">Prix réel</th></tr></thead>
+                    <tbody>
+                    @foreach($supplierOrder->items as $item)
+                        @php $reste = max(0, (float) $item->quantity_ordered - (float) $item->quantity_received); @endphp
+                        <tr class="{{ $reste <= 0 ? 'text-muted' : '' }}">
+                            <td><strong>{{ $item->reference ?? '—' }}</strong> {{ $item->description }}</td>
+                            <td class="text-center">{{ number_format((float) $item->quantity_ordered, 2, ',', ' ') }}</td>
+                            <td class="text-center">{{ number_format((float) $item->quantity_received, 2, ',', ' ') }}</td>
+                            <td>
+                                @if($reste > 0 || auth()->user()?->isAdmin())
+                                    <input type="number" name="lignes[{{ $item->id }}][quantite]" class="form-control form-control-sm"
+                                           min="0" step="0.01" @unless(auth()->user()?->isAdmin()) max="{{ $reste }}" @endunless placeholder="{{ $reste > 0 ? 'reste ' . rtrim(rtrim(number_format($reste, 2, '.', ''), '0'), '.') : '' }}">
+                                @else
+                                    <span class="text-success small">Tout reçu</span>
+                                @endif
+                            </td>
+                            <td>
+                                @if($reste > 0 || auth()->user()?->isAdmin())
+                                    <input type="number" name="lignes[{{ $item->id }}][prix]" class="form-control form-control-sm text-end"
+                                           min="0" step="0.01" value="{{ rtrim(rtrim(number_format((float) $item->unit_price, 2, '.', ''), '0'), '.') }}">
+                                @endif
+                            </td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button class="btn btn-success"><i class="bx bx-check"></i> Enregistrer la réception</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@if($lignesARecevoir->isNotEmpty())
+<div class="modal fade d-print-none" id="modalSolderBc" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <form method="POST" action="{{ route('supplier-orders.close', $supplierOrder) }}" class="modal-content"
+              onsubmit="return confirm('Solder {{ $supplierOrder->order_number }} ? Le reste ne sera plus attendu de ce fournisseur.');">
+            @csrf
+            <div class="modal-header">
+                <h5 class="modal-title">Solder {{ $supplierOrder->order_number }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">Le fournisseur ne livrera pas le reste. Pour chaque pièce non livrée : la commander ailleurs (elle repart « En recherche » dans sa demande) ou l'annuler.</p>
+                <table class="table table-sm align-middle no-cartes">
+                    <thead><tr><th>Pièce</th><th class="text-center">Non livré</th><th>Que faire du reste ?</th></tr></thead>
+                    <tbody>
+                    @foreach($lignesARecevoir as $item)
+                        <tr>
+                            <td><strong>{{ $item->reference ?? '—' }}</strong> {{ $item->description }}</td>
+                            <td class="text-center">{{ number_format((float) $item->quantity_ordered - (float) $item->quantity_received, 2, ',', ' ') }}</td>
+                            <td>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="choix[{{ $item->id }}]" value="recommander" id="rec{{ $item->id }}" checked>
+                                    <label class="form-check-label" for="rec{{ $item->id }}">Commander ailleurs</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="choix[{{ $item->id }}]" value="annuler" id="ann{{ $item->id }}">
+                                    <label class="form-check-label" for="ann{{ $item->id }}">Annuler</label>
+                                </div>
+                            </td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Retour</button>
+                <button class="btn btn-dark">Solder le bon de commande</button>
+            </div>
+        </form>
+    </div>
+</div>
+@endif
+@endif
+
+
+{{-- ================================================================
      MODALE DE CONFIRMATION - APPROBATION DU BON DE COMMANDE
 ================================================================ --}}
 
-@if(
-    auth()->check()
-    &&
-    auth()->user()->hasPermission('approuver_commandes_fournisseurs')
-    &&
-    $supplierOrder->status === \App\Models\SupplierOrder::STATUS_DRAFT
-)
+@if($etapeSignature)
 
 <div
     id="approveOrderModal"
@@ -1903,7 +2014,7 @@
         <div class="bc-approve-content">
 
             <h3 id="approveOrderModalTitle">
-                Approuver le bon de commande ?
+                {{ $etapeSignature === 'valider' ? 'Valider le bon de commande ?' : 'Approuver le bon de commande ?' }}
             </h3>
 
             <div class="bc-approve-number">
@@ -1911,8 +2022,13 @@
             </div>
 
             <p>
-                Vous êtes sur le point d'approuver officiellement
-                ce bon de commande.
+                @if($etapeSignature === 'valider')
+                    Vous validez ce bon de commande en tant que chef magasinier :
+                    il partira ensuite chez l'administrateur pour approbation.
+                @else
+                    Vous êtes sur le point d'approuver officiellement
+                    ce bon de commande.
+                @endif
             </p>
 
             <div class="bc-approve-warning">
@@ -1939,7 +2055,7 @@
                     <div>
 
                         <strong>
-                            Signature de l'approbateur
+                            {{ $etapeSignature === 'valider' ? 'Signature du chef magasinier' : 'Signature de l\'approbateur' }}
                         </strong>
 
                         <small>
@@ -2028,7 +2144,7 @@
             >
                 <i class="bx bx-pen"></i>
 
-                Signer et approuver
+                {{ $etapeSignature === 'valider' ? 'Signer et valider' : 'Signer et approuver' }}
             </button>
 
         </div>
@@ -2042,13 +2158,7 @@
     MODALE DE REJET DU BON DE COMMANDE
 ================================================================ --}}
 
-@if(
-    auth()->check()
-    &&
-    auth()->user()->hasPermission('approuver_commandes_fournisseurs')
-    &&
-    $supplierOrder->status === \App\Models\SupplierOrder::STATUS_DRAFT
-)
+@if($peutRejeter)
 
 <div
     id="rejectSupplierOrderModal"

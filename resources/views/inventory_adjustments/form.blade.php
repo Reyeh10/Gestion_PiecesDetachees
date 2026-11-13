@@ -642,18 +642,33 @@
     {{-- RAISON --}}
     {{-- ================================================================== --}}
 
-    <div class="col-12">
+    {{-- V6 : motif choisi dans la liste + remarque libre --}}
+    @if(!$readonly)
+        <div class="col-md-4">
+            <label for="motif" class="form-label fw-semibold">
+                Motif <span class="text-danger">*</span>
+            </label>
+            <select name="motif" id="motif" class="form-select @error('motif') is-invalid @enderror" required>
+                <option value="">— Choisir —</option>
+                @foreach(\App\Models\InventoryAdjustment::MOTIFS as $cleMotif => $libelleMotif)
+                    <option value="{{ $cleMotif }}" @selected(old('motif') === $cleMotif)>{{ $libelleMotif }}</option>
+                @endforeach
+            </select>
+            @error('motif')
+                <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+            <small class="text-muted">L'ajustement sera appliqué au stock après validation du chef magasinier / de l'admin.</small>
+        </div>
+    @endif
+
+    <div class="{{ $readonly ? 'col-12' : 'col-md-8' }}">
 
         <label class="form-label fw-semibold">
 
-            Raison de l'ajustement
+            {{ $readonly ? 'Raison de l\'ajustement' : 'Remarque' }}
 
             @if(!$readonly)
-
-                <span class="text-danger">
-                    *
-                </span>
-
+                <small class="text-muted fw-normal">(obligatoire si « Autre »)</small>
             @endif
 
         </label>
@@ -672,12 +687,11 @@
             <textarea
                 name="reason"
                 id="reason"
-                rows="4"
+                rows="3"
                 maxlength="1000"
                 class="form-control @error('reason') is-invalid @enderror"
-                placeholder="Exemple : différence constatée pendant l'inventaire physique..."
-                required
-            >{{ old('reason', $adjustment?->reason ?? '') }}</textarea>
+                placeholder="Exemple : 2 pièces cassées au déchargement..."
+            >{{ old('reason', '') }}</textarea>
 
             @error('reason')
 

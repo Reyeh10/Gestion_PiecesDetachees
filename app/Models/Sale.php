@@ -28,6 +28,8 @@ class Sale extends Model
         // CLIENT ET VÉHICULE
         'customer_id',
         'vehicle_id',
+        // V6 : immatriculation libre (vente / proforma à une assurance)
+        'immatriculation',
         'user_id',
 
         // INFORMATIONS DE LA VENTE
@@ -37,6 +39,8 @@ class Sale extends Model
 
         // MONTANTS
         'subtotal',
+        // V6 : majoration assurance appliquée (0 = aucune)
+        'taux_majoration',
         'discount',
         'discount_amount',
         'tva',
@@ -151,6 +155,12 @@ class Sale extends Model
     |
     */
 
+    /** Bons de livraison de la facture (V6, facultatifs, partiels possibles). */
+    public function bonsLivraison()
+    {
+        return $this->hasMany(BonLivraison::class)->orderBy('sequence');
+    }
+
     public function avoir()
     {
         return $this->hasOne(
@@ -253,5 +263,11 @@ class Sale extends Model
             ],
             true
         );
+    }
+
+    /** V6 : immatriculation affichée (véhicule rattaché, sinon saisie libre d'une vente à une assurance) */
+    public function getPlaqueAttribute(): ?string
+    {
+        return $this->vehicle?->plate_number ?? $this->immatriculation;
     }
 }

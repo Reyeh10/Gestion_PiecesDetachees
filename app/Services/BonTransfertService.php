@@ -21,7 +21,12 @@ use RuntimeException;
 class BonTransfertService
 {
     /**
-     * @throws RuntimeException si une pièce n'a plus assez de stock dans son dépôt
+     * Crée le PREMIER bon de transfert du BC (V6 : BT partiel).
+     * Seules les pièces prêtes (identifiées, avec dépôt, disponibles) partent ;
+     * les autres restent « en attente » sur le BC et partiront dans un
+     * « BT du reste » (BT-…-R1) quand elles seront réapprovisionnées.
+     *
+     * @throws RuntimeException si aucune pièce n'est prête, ou si le stock manque
      */
     public function creer(ExternalBonCommande $bc): BonTransfert
     {
@@ -35,24 +40,25 @@ class BonTransfertService
 
             $bc->load('lignes.product', 'lignes.depot');
 
+            $pretes = $bc->lignesPretesAEnvoyer();
+
+            if ($pretes->isEmpty()) {
+                throw new RuntimeException("Aucune pièce de {$bc->numero} n'est prête à partir (identifiée, avec un dépôt et disponible).");
+            }
+
             [$annee, $sequence] = $this->prochainNumero($bc);
 
             $bt = BonTransfert::create([
                 'numero'                   => sprintf('BT-%d-%04d', $annee, $sequence),
                 'annee'                    => $annee,
                 'sequence'                 => $sequence,
+                'reste'                    => 0,
                 'external_bon_commande_id' => $bc->id,
                 'user_id'                  => auth()->id(),
                 'total'                    => 0,
             ]);
 
-            $total = 0.0;
-
-            foreach ($bc->lignes->sortBy('position') as $ligne) {
-                $total += $this->transfererLigne($bt, $ligne);
-            }
-
-            $bt->update(['total' => round($total, 2)]);
+            $this->transfererLignes($bt, $pretes);
 
             $bc->update(['bon_transfert_id' => $bt->id]);
 
@@ -61,14 +67,80 @@ class BonTransfertService
     }
 
     /**
-     * Met le BT à jour après une modification du BC (devis modifié côté
-     * Atelier, ou pièce/dépôt changé ici). Le numéro ne change pas et le
-     * stock n'est corrigé que de la différence : quantité en plus -> sortie,
-     * pièce retirée ou quantité en moins -> retour dans le stock du dépôt.
+     * Crée un « BT du reste » : les pièces restées en attente et maintenant
+     * prêtes (réapprovisionnées). Numéro = BT d'origine + « -R1 », « -R2 »…
+     *
+     * @throws RuntimeException s'il n'y a pas de premier BT, ou aucune pièce prête
+     */
+    public function creerReste(ExternalBonCommande $bc): BonTransfert
+    {
+        return DB::transaction(function () use ($bc) {
+            $bc = ExternalBonCommande::query()->lockForUpdate()->findOrFail($bc->id);
+
+            if (! $bc->bon_transfert_id) {
+                throw new RuntimeException("Créez d'abord le bon de transfert de {$bc->numero}.");
+            }
+
+            $bc->load('lignes.product', 'lignes.depot');
+
+            $pretes = $bc->lignesPretesAEnvoyer();
+
+            if ($pretes->isEmpty()) {
+                throw new RuntimeException("Aucune pièce en attente de {$bc->numero} n'est encore prête à partir.");
+            }
+
+            $origine = BonTransfert::query()->lockForUpdate()->findOrFail($bc->bon_transfert_id);
+
+            $reste = (int) BonTransfert::query()
+                ->where('external_bon_commande_id', $bc->id)
+                ->lockForUpdate()
+                ->max('reste') + 1;
+
+            $bt = BonTransfert::create([
+                // toujours à partir de la base BT-AAAA-NNNN (même si le 1er BT a été supprimé)
+                'numero'                   => sprintf('BT-%d-%04d', $origine->annee, $origine->sequence) . '-R' . $reste,
+                'annee'                    => $origine->annee,
+                'sequence'                 => $origine->sequence,
+                'reste'                    => $reste,
+                'parent_id'                => $origine->id,
+                'external_bon_commande_id' => $bc->id,
+                'user_id'                  => auth()->id(),
+                'total'                    => 0,
+            ]);
+
+            $this->transfererLignes($bt, $pretes);
+
+            return $bt;
+        });
+    }
+
+    /** Transfère des pièces du BC dans le BT (sortie de stock) et les y rattache. */
+    private function transfererLignes(BonTransfert $bt, $lignes): void
+    {
+        $total = 0.0;
+
+        foreach ($lignes->sortBy('position') as $ligne) {
+            $total += $this->transfererLigne($bt, $ligne);
+            $ligne->update(['bon_transfert_id' => $bt->id]);
+        }
+
+        $bt->update(['total' => round($total, 2)]);
+    }
+
+    /**
+     * Met les BT à jour après une modification du BC (devis modifié côté
+     * Atelier, ou pièce/dépôt changé ici). V6 : chaque BT (le premier et les
+     * BT du reste) est corrigé pour SES pièces ; les numéros ne changent pas
+     * et le stock n'est corrigé que de la différence :
+     * quantité en plus -> sortie, pièce retirée / quantité en moins -> retour.
+     * Une pièce ajoutée au devis reste en attente (elle partira dans un BT du
+     * reste). Un BT du reste qui n'a plus aucune pièce est supprimé.
+     *
+     * @return BonTransfert[] les BT modifiés (à renvoyer au garage)
      *
      * @throws RuntimeException si le stock manque pour une quantité en plus
      */
-    public function mettreAJour(ExternalBonCommande $bc): BonTransfert
+    public function mettreAJour(ExternalBonCommande $bc): array
     {
         return DB::transaction(function () use ($bc) {
             $bc = ExternalBonCommande::query()->lockForUpdate()->findOrFail($bc->id);
@@ -77,69 +149,89 @@ class BonTransfertService
                 throw new RuntimeException("Aucun bon de transfert à mettre à jour pour {$bc->numero}.");
             }
 
-            $bt = BonTransfert::query()->lockForUpdate()->findOrFail($bc->bon_transfert_id);
-
             $bc->load('lignes.product', 'lignes.depot');
-            $bt->load('lignes');
+            $prixSaisis = $bc->estBtDirect(); // BT direct : prix saisi à l'écran
 
-            foreach ($bc->lignes as $ligne) {
-                if (! $ligne->product_id || ! $ligne->depot_id) {
-                    $designation = $ligne->designation ?: $ligne->reference ?: "ligne #{$ligne->position}";
-
-                    throw new RuntimeException("Pièce ou dépôt manquant pour : {$designation}.");
-                }
-            }
+            $bts = BonTransfert::query()
+                ->where('external_bon_commande_id', $bc->id)
+                ->orderBy('reste')
+                ->lockForUpdate()
+                ->get()
+                ->load('lignes');
 
             $cle = fn ($productId, $depotId) => $productId.':'.$depotId;
+            $modifies = [];
 
-            $avant = $bt->lignes
-                ->groupBy(fn ($l) => $cle($l->product_id, $l->depot_id))
-                ->map(fn ($lignes) => round($lignes->sum(fn ($l) => (float) $l->quantite), 2));
+            foreach ($bts as $bt) {
+                $sesLignes = $bc->lignes->where('bon_transfert_id', $bt->id);
 
-            $apres = $bc->lignes
-                ->groupBy(fn ($l) => $cle($l->product_id, $l->depot_id))
-                ->map(fn ($lignes) => round($lignes->sum(fn ($l) => (float) $l->quantite_demandee), 2));
+                foreach ($sesLignes as $ligne) {
+                    if (! $ligne->product_id || ! $ligne->depot_id) {
+                        $designation = $ligne->designation ?: $ligne->reference ?: "ligne #{$ligne->position}";
 
-            foreach ($avant->keys()->merge($apres->keys())->unique() as $k) {
-                $ecart = round(($apres[$k] ?? 0) - ($avant[$k] ?? 0), 2);
-
-                if (abs($ecart) >= 0.01) {
-                    [$productId, $depotId] = array_map('intval', explode(':', $k));
-                    $this->ajusterStock($bt, $productId, $depotId, $ecart);
+                        throw new RuntimeException("Pièce ou dépôt manquant pour : {$designation} (déjà dans {$bt->numero}).");
+                    }
                 }
+
+                $avant = $bt->lignes
+                    ->groupBy(fn ($l) => $cle($l->product_id, $l->depot_id))
+                    ->map(fn ($l) => round($l->sum(fn ($x) => (float) $x->quantite), 2));
+
+                $apres = $sesLignes
+                    ->groupBy(fn ($l) => $cle($l->product_id, $l->depot_id))
+                    ->map(fn ($l) => round($l->sum(fn ($x) => (float) $x->quantite_demandee), 2));
+
+                $signatureAvant = $bt->lignes->map(fn ($l) => $l->position.'|'.$l->product_id.'|'.$l->depot_id.'|'.round((float) $l->quantite, 2).($prixSaisis ? '|'.round((float) $l->prix_unitaire, 2) : ''))->sort()->values()->all();
+                $signatureApres = $sesLignes->map(fn ($l) => $l->position.'|'.$l->product_id.'|'.$l->depot_id.'|'.round((float) $l->quantite_demandee, 2).($prixSaisis ? '|'.round((float) $l->prix_unitaire, 2) : ''))->sort()->values()->all();
+
+                if ($signatureAvant === $signatureApres) {
+                    continue; // ce BT n'a pas bougé
+                }
+
+                foreach ($avant->keys()->merge($apres->keys())->unique() as $k) {
+                    $ecart = round(($apres[$k] ?? 0) - ($avant[$k] ?? 0), 2);
+
+                    if (abs($ecart) >= 0.01) {
+                        [$productId, $depotId] = array_map('intval', explode(':', $k));
+                        $this->ajusterStock($bt, $productId, $depotId, $ecart);
+                    }
+                }
+
+                // Une pièce déjà transférée garde son prix du BT ; une autre
+                // prend le prix de vente actuel.
+                $prixDuBt = $bt->lignes->groupBy('product_id')->map(fn ($l) => (float) $l->first()->prix_unitaire);
+
+                $bt->lignes()->delete();
+
+                if ($sesLignes->isEmpty() && $bt->estReste()) {
+                    $bt->delete(); // BT du reste vidé par la modification du devis
+                    continue;
+                }
+
+                $total = 0.0;
+
+                foreach ($sesLignes->sortBy('position') as $ligne) {
+                    $quantite = round((float) $ligne->quantite_demandee, 2);
+                    $prix = round($prixSaisis ? (float) $ligne->prix_unitaire : ($prixDuBt[$ligne->product_id] ?? (float) $ligne->product->sale_price), 2);
+                    $totalLigne = round($quantite * $prix, 2);
+                    $total += $totalLigne;
+
+                    $bt->lignes()->create([
+                        'position'           => $ligne->position,
+                        'designation_garage' => $ligne->designation,
+                        'product_id'         => $ligne->product_id,
+                        'depot_id'           => $ligne->depot_id,
+                        'quantite'           => $quantite,
+                        'prix_unitaire'      => $prix,
+                        'total'              => $totalLigne,
+                    ]);
+                }
+
+                $bt->update(['total' => round($total, 2)]);
+                $modifies[] = $bt->fresh('lignes');
             }
 
-            // Une pièce déjà transférée garde son prix du BT ; une nouvelle
-            // pièce prend le prix de vente actuel.
-            $prixDuBt = $bt->lignes->groupBy('product_id')->map(fn ($l) => (float) $l->first()->prix_unitaire);
-
-            $bt->lignes()->delete();
-
-            $total = 0.0;
-
-            foreach ($bc->lignes->sortBy('position') as $ligne) {
-                $quantite = round((float) $ligne->quantite_demandee, 2);
-                $prix = round($prixDuBt[$ligne->product_id] ?? (float) $ligne->product->sale_price, 2);
-                $totalLigne = round($quantite * $prix, 2);
-                $total += $totalLigne;
-
-                $bt->lignes()->create([
-                    'position'           => $ligne->position,
-                    'designation_garage' => $ligne->designation,
-                    'product_id'         => $ligne->product_id,
-                    'depot_id'           => $ligne->depot_id,
-                    'quantite'           => $quantite,
-                    'prix_unitaire'      => $prix,
-                    'total'              => $totalLigne,
-                ]);
-            }
-
-            // Enregistre explicitement le nouveau total du BT.
-            $bt->update([
-                'total' => round($total, 2),
-            ]);
-
-            return $bt->fresh('lignes');
+            return $modifies;
         });
     }
 
@@ -208,9 +300,22 @@ class BonTransfertService
                 }
             }
 
-            ExternalBonCommande::query()
+            // Les pièces de ce BT repassent « en attente » sur le BC.
+            ExternalBonCommandeLigne::query()
                 ->where('bon_transfert_id', $bt->id)
                 ->update(['bon_transfert_id' => null]);
+
+            // Premier BT supprimé alors qu'il existe des BT du reste : le plus
+            // ancien d'entre eux devient le BT principal du BC.
+            $suivant = BonTransfert::query()
+                ->where('external_bon_commande_id', $bt->external_bon_commande_id)
+                ->whereKeyNot($bt->id)
+                ->orderBy('reste')
+                ->first();
+
+            ExternalBonCommande::query()
+                ->where('bon_transfert_id', $bt->id)
+                ->update(['bon_transfert_id' => $suivant?->id]);
 
             $bt->delete();
         });
@@ -294,7 +399,7 @@ class BonTransfertService
             );
         }
 
-        $prix = round((float) $product->sale_price, 2);
+        $prix = round($bt->bonCommande?->estBtDirect() ? (float) $ligne->prix_unitaire : (float) $product->sale_price, 2);
         $totalLigne = round($quantite * $prix, 2);
 
         $bt->lignes()->create([
@@ -316,7 +421,12 @@ class BonTransfertService
             'product_id' => $product->id,
             'type'       => 'out',
             'quantity'   => $quantite,
-            'source'     => 'Transfert garage | Dépôt: '.$depotNom,
+            'source'     => (match (true) {
+                    (bool) $bt->bonCommande?->estBus()          => 'Sortie bus '.$bt->bonCommande->vehicule_immatriculation,
+                    (bool) $bt->bonCommande?->estConsommation() => 'Consommation atelier – '.$bt->bonCommande->equipement,
+                    (bool) $bt->bonCommande?->estInterne()      => $bt->bonCommande->libelleMotif().' – '.$bt->bonCommande->beneficiaire,
+                    default                                     => 'Transfert garage',
+                }).' | Dépôt: '.$depotNom,
             'reference'  => $bt->numero,
             'user_id'    => auth()->id(),
         ]);

@@ -217,8 +217,13 @@
                             </td>
 
                             <td>
+                                @if($commande->equipement)
+                                    <span class="fw-semibold">{{ $commande->equipement }}</span>
+                                    <div class="fc-sub">Consommation atelier</div>
+                                @else
                                 {{ $commande->vehicule_marque }} {{ $commande->vehicule_modele }}
                                 <div class="fc-sub">{{ $commande->vehicule_immatriculation }}</div>
+                                @endif
                             </td>
 
                             <td>
@@ -276,7 +281,56 @@
 
         </div>
 
+        {{-- Pagination + nombre par page (10, 25, 50 ou 100) --}}
+        @if($commandes->total() > 0)
+            <div class="fc-pagination">
+
+                <form method="GET" action="{{ route('fournisseur-commandes.index') }}" class="fc-par-page">
+                    @foreach(request()->except(['par_page', 'page']) as $cle => $valeur)
+                        @if(is_scalar($valeur))
+                            <input type="hidden" name="{{ $cle }}" value="{{ $valeur }}">
+                        @endif
+                    @endforeach
+                    <label for="par_page">Afficher</label>
+                    <select id="par_page" name="par_page" class="form-select form-select-sm" onchange="this.form.submit()">
+                        @foreach(\App\Http\Controllers\FournisseurCommandeController::PAR_PAGE as $nombre)
+                            <option value="{{ $nombre }}" @selected($commandes->perPage() === $nombre)>{{ $nombre }}</option>
+                        @endforeach
+                    </select>
+                    <span>par page</span>
+                </form>
+
+                <div class="fc-par-page-info">
+                    {{ $commandes->firstItem() }}–{{ $commandes->lastItem() }} sur {{ $commandes->total() }} commandes
+                </div>
+
+                @if($commandes->hasPages())
+                    <div class="fc-pagination-liens">{{ $commandes->links() }}</div>
+                @endif
+
+            </div>
+        @endif
+
     </div>
 
 </div>
+
+<style>
+    .fc-pagination {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px 20px;
+        padding: 0 1.5rem 1.5rem;
+    }
+
+    .fc-par-page { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; }
+    .fc-par-page label { margin: 0; }
+    .fc-par-page .form-select { width: auto; min-width: 76px; }
+    .fc-par-page-info { color: var(--stcd-muted, #8a9198); font-size: 14px; }
+    .fc-pagination-liens { margin-left: auto; }
+    .fc-pagination-liens nav p { display: none; }
+    .fc-pagination-liens svg { width: 18px; height: 18px; }
+</style>
 @endsection
