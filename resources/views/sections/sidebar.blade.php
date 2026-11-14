@@ -1144,7 +1144,6 @@
                 {{
 
                     request()->routeIs('vehicles.*')
-
                     || request()->routeIs('vehicle-part-requests.*')
                     || request()->routeIs('demandes.*')
 
@@ -1387,7 +1386,6 @@
                         @endif
 
                         {{-- TOUTES LES PIÈCES --}}
-
                         @if($peut('vehicle-part-requests.index'))
                         <li class="menu-item
 
